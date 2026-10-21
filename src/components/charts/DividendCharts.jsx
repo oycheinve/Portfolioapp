@@ -114,7 +114,7 @@ export function DividendsYearlyChart({ rows }) {
             <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={64} tickFormatter={formatAxisPLN} />
             <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v)} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
             <Bar dataKey="total" name="Suma roczna" fill={bar} radius={[4, 4, 0, 0]} maxBarSize={56} isAnimationActive={false} />
-            <Line dataKey="monthlyAvg" name="Średnia miesięczna" stroke={line} strokeWidth={2} dot={{ r: 4, fill: line, stroke: chrome.surface, strokeWidth: 2 }} isAnimationActive={false} />
+            <Line type="monotone" dataKey="monthlyAvg" name="Średnia miesięczna" stroke={line} strokeWidth={2} dot={{ r: 4, fill: line, stroke: chrome.surface, strokeWidth: 2 }} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

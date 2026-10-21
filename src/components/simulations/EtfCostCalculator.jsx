@@ -174,9 +174,9 @@ export default function EtfCostCalculator() {
               <XAxis dataKey="year" tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={{ stroke: chrome.axis }} minTickGap={16} />
               <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={72} tickFormatter={formatAxisPLN} />
               <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v)} labelFormatter={(l) => `Rok ${l}`} />} />
-              {chartMode === 'VALUE' && <Line dataKey="base" name="Bez kosztów" stroke={chrome.muted} strokeDasharray="5 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />}
+              {chartMode === 'VALUE' && <Line type="monotone" dataKey="base" name="Bez kosztów" stroke={chrome.muted} strokeDasharray="5 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />}
               {result.rows.map((r, i) => (
-                <Line key={r.id} dataKey={r.id} name={r.name} stroke={colors[i]} strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" key={r.id} dataKey={r.id} name={r.name} stroke={colors[i]} strokeWidth={2} dot={false} isAnimationActive={false} />
               ))}
             </LineChart>
           </ResponsiveContainer>

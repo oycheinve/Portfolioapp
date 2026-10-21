@@ -145,6 +145,16 @@ function AccountsSection() {
                 />
               </Field>
             )}
+            {form.type !== 'SAVINGS' && (
+              <div className="sm:col-span-2">
+                <Toggle
+                  checked={!!form.allowNegativeCash}
+                  onChange={(v) => setForm({ ...form, allowNegativeCash: v })}
+                  label="Konto debetowe (dopuszczaj ujemne saldo gotówki)"
+                  description="Domyślnie wyłączone: zakup ponad dostępne środki dopisuje automatyczną wpłatę „Uzupełnienie środków”, więc gotówka nigdy nie jest ujemna."
+                />
+              </div>
+            )}
             {ACCOUNT_TYPES[form.type]?.belkaRate > 0 && (
               <div className="space-y-3 sm:col-span-2">
                 <Toggle

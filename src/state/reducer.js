@@ -64,6 +64,10 @@ export function reducer(state, action) {
       });
     }
 
+    case 'CLEAR_SNAPSHOTS':
+      // Po imporcie zmieniającym historię transakcji zapisane migawki są nieaktualne – wykresy liczą się od nowa z transakcji
+      return touch({ ...state, snapshots: [] });
+
     case 'MERGE_QUOTES':
       // Notowania z zewnętrznego źródła (np. ceny bieżące z raportu XTB) – nadpisywane przy kolejnym odświeżeniu
       return { ...state, prices: { ...state.prices, quotes: { ...(state.prices?.quotes || {}), ...action.payload } } };
@@ -75,10 +79,11 @@ export function reducer(state, action) {
       return touch({ ...state, [collection]: state[collection].filter((x) => !drop.has(x.id)) });
     }
 
-    case 'SYNC_BOND_FUNDING': {
-      // Podmienia automatyczne wpłaty finansujące zakup obligacji na aktualnie wyliczone
+    case 'SYNC_AUTO_FUNDING': {
+      // Podmienia automatyczne wpłaty uzupełniające środki (także dawne „bondfund_”) na aktualnie wyliczone
       const items = action.payload || [];
-      return touch({ ...state, cashflows: [...state.cashflows.filter((c) => !String(c.id).startsWith('bondfund_')), ...items] });
+      const auto = (c) => String(c.id).startsWith('autofund_') || String(c.id).startsWith('bondfund_');
+      return touch({ ...state, cashflows: [...state.cashflows.filter((c) => !auto(c)), ...items] });
     }
 
     case 'CLEAR_HISTORY': {

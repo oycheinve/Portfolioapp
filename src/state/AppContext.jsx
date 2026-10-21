@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { reducer } from './reducer.js';
 import { COLLECTIONS, STATE_VERSION, STORAGE_KEY, migrateState, validateImported } from './schema.js';
 import { createDemoState } from './demoData.js';
-import { BOND_FUNDING_PREFIX, bondFundingCashflows, buildSnapshot, isoDay, livePriceLookup } from '../lib/engine.js';
+import { autoFundingCashflows, buildSnapshot, isAutoFunding, isoDay, livePriceLookup } from '../lib/engine.js';
 import { refreshAllPrices } from '../lib/prices.js';
 import { fetchAllHistory } from '../lib/history.js';
 import { pendingSavingsInterest } from '../lib/savings.js';
@@ -71,17 +71,17 @@ export function AppProvider({ children }) {
     dispatch({ type: 'UPSERT_SNAPSHOT', payload: snap });
   }, [state.accounts, state.trades, state.cashflows, state.income, state.bonds, state.prices, state.settings]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Obligacje kupione bez wpłaty: automatyczna wpłata pokrywająca zakup (bez ujemnej gotówki na koncie obligacyjnym)
+  // Gotówka na rachunkach ≥ 0: zakupy bez pokrycia uzupełniane automatyczną wpłatą (poza kontami debetowymi)
   useEffect(() => {
-    const desired = bondFundingCashflows(state);
-    const current = state.cashflows.filter((c) => String(c.id).startsWith(BOND_FUNDING_PREFIX));
+    const desired = autoFundingCashflows(state);
+    const current = state.cashflows.filter(isAutoFunding);
     const key = (list) =>
       list
         .map((c) => `${c.id}|${c.accountId}|${c.date}|${c.amount}`)
         .sort()
         .join(';');
-    if (key(desired) !== key(current)) dispatch({ type: 'SYNC_BOND_FUNDING', payload: desired });
-  }, [state.accounts, state.bonds, state.cashflows, state.trades, state.income]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (key(desired) !== key(current)) dispatch({ type: 'SYNC_AUTO_FUNDING', payload: desired });
+  }, [state.accounts, state.bonds, state.cashflows, state.trades, state.income, state.instruments]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Etap 3: automatyczne księgowanie odsetek na kontach oszczędnościowych (za zakończone okresy kapitalizacji)
   useEffect(() => {
@@ -182,6 +182,7 @@ export function AppProvider({ children }) {
       remove: (collection, id) => dispatch({ type: 'DELETE', payload: { collection, id } }),
       removeMany: (collection, ids) => dispatch({ type: 'REMOVE_MANY', payload: { collection, ids } }),
       mergeQuotes: (quotes) => dispatch({ type: 'MERGE_QUOTES', payload: quotes }),
+      clearSnapshots: () => dispatch({ type: 'CLEAR_SNAPSHOTS' }),
       deleteAccount: (id) => dispatch({ type: 'DELETE_ACCOUNT', payload: id }),
       loadDemo: () => dispatch({ type: 'LOAD_DEMO' }),
       resetEmpty: () => dispatch({ type: 'RESET_EMPTY' }),

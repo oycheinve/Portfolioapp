@@ -520,7 +520,7 @@ export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash
   // Usuwane: transze z poprzedniego importu, których już nie ma (sprzedane), albo – przy zastąpieniu – wszystkie transakcje i wpłaty konta
   const removeTrades = state.trades.filter((t) => t.accountId === accountId && (replaceAccount ? !newTradeIds.has(t.id) : String(t.id).startsWith(tradePrefix) && !newTradeIds.has(t.id))).map((t) => t.id);
   const removeCashflows = state.cashflows
-    .filter((c) => c.accountId === accountId && (replaceAccount ? !newCashIds.has(c.id) && c.source !== 'AUTO_BOND' : String(c.id).startsWith(fundPrefix) && !newCashIds.has(c.id)))
+    .filter((c) => c.accountId === accountId && (replaceAccount ? !newCashIds.has(c.id) && c.source !== 'AUTO_BOND' && c.source !== 'AUTO_FUND' : String(c.id).startsWith(fundPrefix) && !newCashIds.has(c.id)))
     .map((c) => c.id);
   const existingTrade = new Set(state.trades.map((t) => t.id));
   const existingCash = new Set(state.cashflows.map((c) => c.id));

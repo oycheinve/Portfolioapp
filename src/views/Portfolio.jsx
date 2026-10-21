@@ -113,15 +113,13 @@ const COLS = [
 
 const cell = 'border-l border-stone-200 px-2 py-1 text-right whitespace-nowrap dark:border-white/10';
 
-// Nagłówek sekcji jako jedna linia tekstu: „Akcje GPW (9), wartość: …, zysk: …, wartość zakupu: …, zysk dzienny: …, zwrot: …, zmiana dzienna: …, udział: …”
-function SectionSummary({ g }) {
-  const cost = g.rows.reduce((s, r) => s + (Number(r.cost) || 0), 0);
-  return (
-    <>
-      {g.label} ({g.rows.length}), wartość: {hAmount(g.value)}, zysk: <Colored value={g.gain}>{hAmount(g.gain)}</Colored>, wartość zakupu: {hAmount(cost)}, zysk dzienny: <Colored value={g.dayChange}>{hAmount(g.dayChange)}</Colored>,
-      zwrot: <Colored value={g.gainPct}>{hPctComma(g.gainPct)}</Colored>, zmiana dzienna: <Colored value={g.dayPct}>{hPctDot(g.dayPct)}</Colored>, udział: {hPctDot(g.share)}
-    </>
-  );
+function sectionCost(g) {
+  return g.rows.reduce((sum, r) => sum + (Number(r.cost) || 0), 0);
+}
+
+// Pełny opis sekcji (podpowiedź po najechaniu): „Akcje GPW (9), wartość: …, zysk: …, wartość zakupu: …, zysk dzienny: …, zwrot: …”
+function sectionTitle(g) {
+  return `${g.label} (${g.rows.length}), wartość: ${hAmount(g.value)}, zysk: ${hAmount(g.gain)}, wartość zakupu: ${hAmount(sectionCost(g))}, zysk dzienny: ${hAmount(g.dayChange)}, zwrot: ${hPctComma(g.gainPct)}, zmiana dzienna: ${hPctDot(g.dayPct)}, udział: ${hPctDot(g.share)}`;
 }
 
 export default function PortfolioView({ onNavigate }) {
@@ -294,7 +292,7 @@ export default function PortfolioView({ onNavigate }) {
                   {COLS.map((c) => (
                     <th
                       key={c.key}
-                      className={`border-l border-white/10 px-2 py-2.5 text-center align-top text-[12px] leading-tight font-bold first:border-l-0 ${c.key === 'name' ? 'sticky left-0 z-10 w-[9.5rem] bg-[#0d1b2e] sm:w-[17rem]' : ''}`}
+                      className={`border-l border-white/10 px-2 py-2.5 text-center align-top text-[12px] leading-tight font-bold first:border-l-0 ${c.key === 'name' ? 'sticky left-0 z-10 w-[10.5rem] bg-[#0d1b2e] sm:w-[17rem]' : ''}`}
                     >
                       {c.label}
                     </th>
@@ -340,14 +338,32 @@ export default function PortfolioView({ onNavigate }) {
                 const Toggle = isOpen ? MinusSquare : PlusSquare;
                 return (
                   <tbody key={g.id}>
-                    <tr className="cursor-pointer border-y-2 border-stone-300 bg-white hover:bg-stone-50 dark:border-white/15 dark:bg-neutral-900 dark:hover:bg-white/[0.05]" onClick={() => toggleSection(g.id)}>
-                      <td colSpan={COLS.length} className="px-3 py-2 text-left text-[12px] font-semibold md:text-[15px]">
-                        {/* Na telefonie opis sekcji zostaje widoczny przy przewijaniu tabeli w poziomie */}
-                        <div className="sticky left-3 max-w-[calc(100vw-4rem)] md:max-w-none">
-                          <Toggle size={14} className="mr-1.5 inline-block align-[-2px] text-stone-500" aria-hidden />
-                          <SectionSummary g={g} />
+                    {/* Pas sekcji: jedna linia, podsumowania w kolumnach (wartość, udział, stopa, zysk, zmiana dzienna) */}
+                    <tr
+                      className="cursor-pointer border-y-2 border-stone-300 bg-stone-100 font-semibold hover:bg-stone-200/70 dark:border-white/15 dark:bg-[#232323] dark:hover:bg-[#2a2a2a]"
+                      onClick={() => toggleSection(g.id)}
+                      title={sectionTitle(g)}
+                    >
+                      <td className="sticky left-0 z-10 max-w-[10.5rem] bg-stone-100 py-2 pr-2 pl-3 text-left whitespace-nowrap sm:max-w-[17rem] dark:bg-[#232323]">
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <Toggle size={14} className="shrink-0 text-stone-500" aria-hidden />
+                          <span className="truncate text-[12px] md:text-[14px]">
+                            {g.label} ({g.rows.length})
+                          </span>
                         </div>
                       </td>
+                      <td className={cell} />
+                      <td className={cell} title={`Zysk dzienny: ${fmt2(g.dayChange)} zł`}>
+                        <Arrowed value={g.dayPct} />
+                      </td>
+                      <td className={cell} />
+                      <td className={cell} />
+                      <td className={cell} />
+                      <td className={cell}>{weightedDays(g.rows) ?? '—'}</td>
+                      <td className={cell}>{fmt2(g.value)}</td>
+                      <td className={cell}>{pct2(g.share)}</td>
+                      <td className={cell}>{g.gainPct !== null && g.gainPct !== undefined ? <Arrowed value={g.gainPct} /> : '—'}</td>
+                      <td className={`${cell} ${signClass(g.gain ?? 0)}`}>{fmt2(g.gain ?? 0)}</td>
                     </tr>
                     {isOpen &&
                       g.rows.map((r, idx) => {
@@ -356,7 +372,7 @@ export default function PortfolioView({ onNavigate }) {
                         const stripe = idx % 2 ? 'bg-stone-50 dark:bg-[#1c1c1c]' : 'bg-white dark:bg-neutral-900';
                         return (
                           <tr key={r.id} className={`group border-b border-stone-200 hover:bg-blue-50/60 dark:border-white/5 dark:hover:bg-white/[0.05] ${stripe}`}>
-                            <td className={`sticky left-0 z-10 max-w-[9.5rem] py-1.5 pr-2 pl-0 text-left shadow-[2px_0_0_rgba(0,0,0,0.06)] sm:max-w-[17rem] ${stripe} group-hover:bg-blue-50 dark:group-hover:bg-neutral-800`}>
+                            <td className={`sticky left-0 z-10 max-w-[10.5rem] py-1.5 pr-2 pl-0 text-left shadow-[2px_0_0_rgba(0,0,0,0.06)] sm:max-w-[17rem] ${stripe} group-hover:bg-blue-50 dark:group-hover:bg-neutral-800`}>
                               <div className="flex items-center gap-2">
                                 <span className="h-5 w-[3px] shrink-0" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
                                 <div className="min-w-0 truncate text-[13px] md:text-[14px]" title={`${r.sub || ''}${r.account ? ` · ${r.account.name}` : ''}`}>
@@ -432,10 +448,23 @@ export default function PortfolioView({ onNavigate }) {
               const Toggle = isOpen ? MinusSquare : PlusSquare;
               return (
                 <div key={g.id} className="border-b border-stone-200 last:border-0 dark:border-white/10">
-                  <button type="button" onClick={() => toggleSection(g.id)} className="flex w-full items-start gap-2 bg-stone-100/80 px-4 py-2.5 text-left dark:bg-white/[0.05]">
-                    <Toggle size={15} className="mt-0.5 shrink-0 text-stone-500" />
-                    <div className="min-w-0 flex-1 text-[12px] leading-snug font-medium">
-                      <SectionSummary g={g} />
+                  <button type="button" onClick={() => toggleSection(g.id)} title={sectionTitle(g)} className="block w-full bg-stone-100 px-4 py-2 text-left dark:bg-[#232323]">
+                    <div className="flex items-center gap-2">
+                      <Toggle size={15} className="shrink-0 text-stone-500" />
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                        {g.label} ({g.rows.length})
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold tabular">{formatPLN(g.value)}</span>
+                    </div>
+                    <div className="mt-0.5 flex gap-2.5 overflow-hidden pl-6 text-[11px] whitespace-nowrap tabular">
+                      <span className={signClass(g.gain ?? 0)}>{formatPLN(g.gain ?? 0, { sign: true })}</span>
+                      <span>
+                        zwrot <Colored value={g.gainPct}>{formatPercent(g.gainPct ?? 0, { sign: true })}</Colored>
+                      </span>
+                      <span>
+                        dziś <Colored value={g.dayPct}>{formatPercent(g.dayPct, { sign: true })}</Colored>
+                      </span>
+                      <span className="text-stone-500">udz. {formatPercent(g.share, { digits: 1 })}</span>
                     </div>
                   </button>
                   {isOpen && (

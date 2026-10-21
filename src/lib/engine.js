@@ -188,35 +188,68 @@ export function computeCashBalances(state, asOf, accountIds, incomeEvents) {
   return balances;
 }
 
-// Zakup obligacji bez wcześniejszej wpłaty nie może zostawiać ujemnej gotówki na koncie obligacyjnym/maklerskim:
-// brakująca kwota staje się automatyczną wpłatą „Środki na zakup obligacji” (id `bondfund_<id obligacji>`).
-// Wpłaty liczone od nowa przy każdej zmianie – gdy użytkownik sam wpłaci środki, automatyczna wpłata znika.
-// IKE/IKZE pomijane (wpłaty wliczałyby się do limitu) – tam obowiązuje ręczna wpłata.
-export const BOND_FUNDING_PREFIX = 'bondfund_';
+// Gotówka na rachunkach nigdy nie spada poniżej zera: gdy zakup (akcje, ETF, obligacje) lub inna operacja
+// wydaje więcej, niż jest na koncie, brakująca kwota staje się automatyczną wpłatą „Uzupełnienie środków”
+// (id `autofund_…`, źródło AUTO_FUND). Liczone od nowa przy każdej zmianie danych: wcześniejsza ręczna wpłata
+// pokrywająca zakup sprawia, że automatyczna znika. Konta debetowe (allowNegativeCash) i oszczędnościowe pomijane.
+export const AUTO_FUND_PREFIX = 'autofund_';
+const LEGACY_FUND_PREFIX = 'bondfund_';
 
-export function bondFundingCashflows(state, today = isoDay(new Date())) {
-  const eligible = new Set(state.accounts.filter((a) => !ACCOUNT_TYPES[a.type]?.hasLimit && a.type !== 'SAVINGS').map((a) => a.id));
-  const bonds = state.bonds
-    .filter((b) => eligible.has(b.accountId) && b.purchaseDate)
-    .sort((a, b) => (a.purchaseDate < b.purchaseDate ? -1 : a.purchaseDate > b.purchaseDate ? 1 : String(a.id) < String(b.id) ? -1 : 1));
-  if (bonds.length === 0) return [];
-  const income = [...incomeEventsWithTax(state), ...bondIncomeEvents(state, today)];
-  let working = { ...state, cashflows: state.cashflows.filter((c) => !String(c.id).startsWith(BOND_FUNDING_PREFIX)) };
+export function isAutoFunding(c) {
+  const id = String(c?.id || '');
+  return id.startsWith(AUTO_FUND_PREFIX) || id.startsWith(LEGACY_FUND_PREFIX);
+}
+
+export function autoFundingCashflows(state, today = isoDay(new Date())) {
+  const eligible = state.accounts.filter((a) => a.type !== 'SAVINGS' && !a.allowNegativeCash);
+  if (eligible.length === 0) return [];
+  const ids = new Set(eligible.map((a) => a.id));
+  const instrumentsById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
+  const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  const events = {};
+  const push = (accountId, ev) => {
+    if (!ids.has(accountId) || !ev.date || ev.date > today) return;
+    (events[accountId] ||= []).push(ev);
+  };
+  for (const c of state.cashflows) {
+    if (isAutoFunding(c)) continue;
+    const amt = Number(c.amount) || 0;
+    push(c.accountId, { date: c.date, delta: c.type === 'DEPOSIT' ? amt : -amt, key: `cf_${c.id}`, label: c.note || 'wypłata' });
+  }
+  for (const t of state.trades) {
+    const a = tradeAmounts(t, accountsById[t.accountId], instrumentsById[t.instrumentId]);
+    const ticker = instrumentsById[t.instrumentId]?.ticker || '';
+    push(t.accountId, { date: t.date, delta: t.side === 'BUY' ? -a.buyCost : a.sellProceeds, key: `tr_${t.id}`, label: `${t.side === 'BUY' ? 'zakup' : 'sprzedaż'} ${ticker}` });
+  }
+  for (const i of [...incomeEventsWithTax(state), ...bondIncomeEvents(state, today)]) {
+    push(i.accountId, { date: i.date, delta: Number(i.net) || 0, key: `in_${i.id}`, label: 'dochód' });
+  }
+  for (const b of state.bonds) {
+    push(b.accountId, { date: b.purchaseDate, delta: -(Number(b.quantity) || 0) * 100, key: `bd_${b.id}`, label: `zakup obligacji ${b.series || b.type || ''}`.trim() });
+  }
   const out = [];
-  for (const b of bonds) {
-    const balance = computeCashBalances(working, b.purchaseDate, [b.accountId], income)[b.accountId] || 0;
-    if (balance >= -0.005) continue;
-    const cf = {
-      id: `${BOND_FUNDING_PREFIX}${b.id}`,
-      accountId: b.accountId,
-      date: b.purchaseDate,
-      type: 'DEPOSIT',
-      amount: Math.round(-balance * 100) / 100,
-      note: `Środki na zakup obligacji ${b.series || b.type || ''} (automatycznie)`.replace('  ', ' '),
-      source: 'AUTO_BOND',
-    };
-    out.push(cf);
-    working = { ...working, cashflows: [...working.cashflows, cf] };
+  for (const [accountId, list] of Object.entries(events)) {
+    // W obrębie dnia najpierw wpływy, potem wydatki – wpłata z tego samego dnia pokrywa zakup
+    list.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : y.delta - x.delta));
+    let balance = 0;
+    for (const ev of list) {
+      balance += ev.delta;
+      if (balance < -0.004) {
+        const amount = Math.round(-balance * 100) / 100;
+        if (amount > 0) {
+          out.push({
+            id: `${AUTO_FUND_PREFIX}${accountId}_${ev.key}`,
+            accountId,
+            date: ev.date,
+            type: 'DEPOSIT',
+            amount,
+            note: `Uzupełnienie środków (automatycznie): ${ev.label}`,
+            source: 'AUTO_FUND',
+          });
+        }
+        balance = 0;
+      }
+    }
   }
   return out;
 }

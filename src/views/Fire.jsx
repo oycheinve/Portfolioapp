@@ -230,10 +230,10 @@ export default function FireView({ onNavigate }) {
                     }
                     cursor={{ stroke: chrome.axis }}
                   />
-                  <Line yAxisId="v" dataKey="pess" name="Pesymistyczny" stroke={bandColor} strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                  <Line yAxisId="v" dataKey="opt" name="Optymistyczny" stroke={bandColor} strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                  <Area yAxisId="v" dataKey="value" name="Majątek" stroke={valueColor} strokeWidth={2.5} fill="url(#fireFill)" dot={false} isAnimationActive={false} />
-                  <Line yAxisId="i" dataKey="income" name="Dochód / mies." stroke={incomeColor} strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" yAxisId="v" dataKey="pess" name="Pesymistyczny" stroke={bandColor} strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" yAxisId="v" dataKey="opt" name="Optymistyczny" stroke={bandColor} strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  <Area type="monotone" yAxisId="v" dataKey="value" name="Majątek" stroke={valueColor} strokeWidth={2.5} fill="url(#fireFill)" dot={false} isAnimationActive={false} />
+                  <Line type="monotone" yAxisId="i" dataKey="income" name="Dochód / mies." stroke={incomeColor} strokeWidth={2.5} dot={false} isAnimationActive={false} />
                   {real ? (
                     <>
                       <ReferenceLine yAxisId="v" y={fire.targetNetWorth} stroke={valueColor} strokeDasharray="6 4" label={{ value: 'cel majątku', position: 'insideTopLeft', fill: valueColor, fontSize: 11 }} />
@@ -241,8 +241,8 @@ export default function FireView({ onNavigate }) {
                     </>
                   ) : (
                     <>
-                      <Line yAxisId="v" dataKey="targetValue" name="Cel majątku" stroke={valueColor} strokeDasharray="6 4" strokeWidth={1} dot={false} isAnimationActive={false} />
-                      <Line yAxisId="i" dataKey="targetIncome" name="Cel dochodu" stroke={incomeColor} strokeDasharray="6 4" strokeWidth={1} dot={false} isAnimationActive={false} />
+                      <Line type="monotone" yAxisId="v" dataKey="targetValue" name="Cel majątku" stroke={valueColor} strokeDasharray="6 4" strokeWidth={1} dot={false} isAnimationActive={false} />
+                      <Line type="monotone" yAxisId="i" dataKey="targetIncome" name="Cel dochodu" stroke={incomeColor} strokeDasharray="6 4" strokeWidth={1} dot={false} isAnimationActive={false} />
                     </>
                   )}
                 </ComposedChart>

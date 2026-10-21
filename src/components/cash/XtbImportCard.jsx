@@ -85,6 +85,7 @@ export default function XtbImportCard() {
     if (plan.cashflows.length) actions.addMany('cashflows', plan.cashflows);
     if (plan.trades.length) actions.addMany('trades', plan.trades);
     if (plan.income.length) actions.addMany('income', plan.income);
+    if (plan.trades.length || plan.cashflows.length) actions.clearSnapshots();
     const n = plan.cashflows.length + plan.trades.length + plan.income.length;
     actions.notify(`Zaimportowano z XTB na konto „${account.name}”: ${n} operacji${plan.newInstruments.length ? `, ${plan.newInstruments.length} nowych instrumentów` : ''}`, 'success');
     setAnalysis(null);
@@ -356,6 +357,7 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
     actions.addMany('trades', plan.trades);
     if (plan.cashflows.length) actions.addMany('cashflows', plan.cashflows);
     if (Object.keys(plan.quotes).length) actions.mergeQuotes(plan.quotes);
+    actions.clearSnapshots();
     actions.notify(`Zaimportowano otwarte pozycje XTB na „${account.name}”: ${analysis.groups.length} walorów, ${plan.trades.length} transz`, 'success');
     onDone();
   };

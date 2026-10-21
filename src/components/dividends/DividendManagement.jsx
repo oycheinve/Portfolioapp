@@ -254,7 +254,7 @@ export function ForecastCard() {
                 <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={60} tickFormatter={formatAxisPLN} />
                 <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v)} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
                 <Bar dataKey="selected" name={prefs.drip ? 'Z DRIP' : 'Bez DRIP'} fill={sel} radius={[4, 4, 0, 0]} maxBarSize={40} isAnimationActive={false} />
-                <Line dataKey="alternative" name={prefs.drip ? 'Bez DRIP' : 'Z DRIP'} stroke={alt} strokeWidth={2} dot={{ r: 3, fill: alt, stroke: chrome.surface, strokeWidth: 2 }} isAnimationActive={false} />
+                <Line type="monotone" dataKey="alternative" name={prefs.drip ? 'Bez DRIP' : 'Z DRIP'} stroke={alt} strokeWidth={2} dot={{ r: 3, fill: alt, stroke: chrome.surface, strokeWidth: 2 }} isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>

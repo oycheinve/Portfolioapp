@@ -44,7 +44,7 @@ export function ValueChart({ data, span, benchmarks, compareIds }) {
               <YAxis {...y(formatAxisPLN)} />
               <Tooltip content={<SeriesTooltip />} cursor={{ stroke: chrome.axis }} />
               {compareIds.map((id) => (
-                <Line key={id} dataKey={`i_${id}_value`} name={instById[id]?.ticker} stroke={instColors[id]} strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" key={id} dataKey={`i_${id}_value`} name={instById[id]?.ticker} stroke={instColors[id]} strokeWidth={2} dot={false} isAnimationActive={false} />
               ))}
             </LineChart>
           </ResponsiveContainer>
@@ -75,9 +75,9 @@ export function ValueChart({ data, span, benchmarks, compareIds }) {
             <YAxis {...y(formatAxisPLN)} domain={['auto', 'auto']} />
             <Tooltip content={<SeriesTooltip />} cursor={{ stroke: chrome.axis }} />
             <Area type="monotone" dataKey="value" name="Wartość" stroke={valueColor} strokeWidth={2} fill="url(#valFill)" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
-            <Line type="stepAfter" dataKey="contrib" name="Wkład netto" stroke={chrome.muted} strokeDasharray="4 4" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey="contrib" name="Wkład netto" stroke={chrome.muted} strokeDasharray="4 4" strokeWidth={2} dot={false} isAnimationActive={false} />
             {benchmarks.map((id) => (
-              <Line
+              <Line type="monotone"
                 key={id}
                 dataKey={`b_${id}_value`}
                 name={benchmarkLabel(state.settings, id)}
@@ -136,10 +136,10 @@ export function ProfitChart({ data, span, benchmarks, compareIds, mode, onModeCh
               <ReferenceLine y={0} stroke={chrome.axis} />
               <Tooltip content={<SeriesTooltip kind="pct" />} cursor={{ stroke: chrome.axis }} />
               {lines.map((l) => (
-                <Line key={l.key} dataKey={l.key} name={l.label} stroke={l.color} strokeWidth={l.width || 2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" key={l.key} dataKey={l.key} name={l.label} stroke={l.color} strokeWidth={l.width || 2} dot={false} isAnimationActive={false} />
               ))}
               {benchmarks.map((id) => (
-                <Line
+                <Line type="monotone"
                   key={id}
                   dataKey={`b_${id}_pct`}
                   name={benchmarkLabel(state.settings, id)}
@@ -179,7 +179,7 @@ export function ProfitChart({ data, span, benchmarks, compareIds, mode, onModeCh
             <Tooltip content={<SeriesTooltip />} cursor={{ stroke: chrome.axis }} />
             <Area type="monotone" dataKey="profit" name="Zysk Total" stroke={chrome.primary} strokeWidth={2.5} fill={chrome.primary} fillOpacity={0.06} dot={false} isAnimationActive={false} />
             <Line type="monotone" dataKey="profitPrice" name="Kursowy" stroke={c(PROFIT_COLORS.price)} strokeWidth={2} dot={false} isAnimationActive={false} />
-            <Line type="stepAfter" dataKey="profitDividends" name="Dywidendy" stroke={c(PROFIT_COLORS.dividends)} strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey="profitDividends" name="Dywidendy" stroke={c(PROFIT_COLORS.dividends)} strokeWidth={2} dot={false} isAnimationActive={false} />
             <Line type="monotone" dataKey="profitInterest" name="Odsetki" stroke={c(PROFIT_COLORS.interest)} strokeWidth={2} dot={false} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -217,10 +217,10 @@ export function DrawdownChart({ data, span, benchmarks, compareIds }) {
               <Area type="monotone" dataKey="drawdown" name="Portfel" stroke={ddColor} strokeWidth={2} fill={ddColor} fillOpacity={0.18} dot={false} isAnimationActive={false} />
             )}
             {compareIds.map((id) => (
-              <Line key={id} dataKey={`i_${id}_dd`} name={instById[id]?.ticker} stroke={instColors[id]} strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line type="monotone" key={id} dataKey={`i_${id}_dd`} name={instById[id]?.ticker} stroke={instColors[id]} strokeWidth={2} dot={false} isAnimationActive={false} />
             ))}
             {bench.map((id) => (
-              <Line key={id} dataKey={`b_${id}_dd`} name={benchmarkLabel(state.settings, id)} stroke={benchmarkColor(id, isDark)} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" key={id} dataKey={`b_${id}_dd`} name={benchmarkLabel(state.settings, id)} stroke={benchmarkColor(id, isDark)} strokeWidth={1.5} dot={false} isAnimationActive={false} />
             ))}
           </ComposedChart>
         </ResponsiveContainer>

@@ -113,8 +113,14 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 ## Obligacje bez ujemnej gotówki, import otwartych pozycji XTB
 
-- **Obligacje**: zakup obligacji bez wcześniejszej wpłaty nie tworzy już ujemnej gotówki („Gotówka – … −6000 zł”). Brakująca kwota staje się automatyczną wpłatą „Środki na zakup obligacji” (oznaczenie „auto · obligacje” w rejestrze), przeliczaną przy każdej zmianie; znika, gdy samodzielnie wpiszesz wpłatę. Nie dotyczy IKE/IKZE (limity wpłat).
+- **Gotówka zawsze ≥ 0**: gdy zakup (akcje, ETF, obligacje – także różnica groszowa z zaokrągleń) przekracza gotówkę na koncie, aplikacja dopisuje automatyczną wpłatę „Uzupełnienie środków” na dokładnie brakującą kwotę (oznaczenie „auto · uzupełnienie” w rejestrze). Liczone od nowa przy każdej zmianie; ręczna wpłata przed zakupem sprawia, że automatyczna znika. Wyjątek: konta oznaczone jako „Konto debetowe” w ustawieniach konta.
 - **Import XTB – „Open Positions”**: z raportu .xlsx importowane są wyłącznie otwarte pozycje: każda transza jako kupno (ID pozycji, data i cena otwarcia, koszt w PLN = wartość − zysk netto wg XTB), ceny bieżące z raportu jako notowania (do czasu odświeżenia z Yahoo), opcjonalnie wpłaty pokrywające zakupy i zastąpienie dotychczasowych transakcji konta. Ponowny import aktualizuje transze i usuwa sprzedane. Waluta instrumentu wykrywana z relacji wartość PLN / cena. Pliki CSV bez tego arkusza – historia operacji gotówkowych (obsługa formatu „OPEN BUY LPP.PL 0.0011 @ 25200.00” i kolumny Ticker).
+
+## Pasy sekcji w Portfelu i gładkie wykresy
+
+- **Portfel**: wiersz sekcji to jeden zwarty pas – nazwa i liczba pozycji w kolumnie „Walor”, a zmiana dzienna, okres, wartość, udział, stopa zwrotu i zysk w swoich kolumnach (pełny opis w podpowiedzi). W widoku kart nagłówek sekcji: nazwa + wartość oraz linia z zyskiem, zwrotem, zmianą dzienną i udziałem.
+- **Wykresy**: wszystkie linie i obszary wygładzone (`type="monotone"`).
+- Po imporcie z XTB zapisane migawki historii są czyszczone, aby wykresy liczyły się od nowa z zaimportowanych transakcji.
 
 ## Architektura danych (`src/state/schema.js`)
 

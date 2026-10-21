@@ -196,7 +196,7 @@ export function PriceChartModal({ row, onClose }) {
                 <YAxis domain={['auto', 'auto']} tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={56} />
                 <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v)} labelFormatter={(d) => formatDate(d)} />} />
                 {row.avgPricePLN > 0 && <ReferenceLine y={row.avgPricePLN} stroke={chrome.muted} strokeDasharray="4 4" label={{ value: 'śr. cena zakupu', fill: chrome.muted, fontSize: 10, position: 'insideBottomRight' }} />}
-                <Line dataKey="price" name="Cena (PLN)" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" dataKey="price" name="Cena (PLN)" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
