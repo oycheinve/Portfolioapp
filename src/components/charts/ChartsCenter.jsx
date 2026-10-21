@@ -372,7 +372,7 @@ export default function ChartsCenter({ param }) {
               benchmarks.length
                 ? benchmarks
                     .slice(0, 2)
-                    .map((id) => `${defs[id].label.split(' ')[0]} ${Number.isFinite(sum.benchmarks[id]?.pct) ? formatPercent(sum.benchmarks[id].pct, { sign: true, digits: 1 }) : '—'}`)
+                    .map((id) => `${defs[id].label} ${Number.isFinite(sum.benchmarks[id]?.pct) ? formatPercent(sum.benchmarks[id].pct, { sign: true, digits: 1 }) : '—'}`)
                     .join(' · ')
                 : '—'
             }
@@ -414,7 +414,7 @@ export default function ChartsCenter({ param }) {
               {firstBench ? (
                 <Tile
                   plain
-                  label={`Gdyby wpłaty w ${defs[firstBench].label}`}
+                  label={defs[firstBench].label}
                   value={formatPLN(sum.benchmarks[firstBench]?.value)}
                   sub={`Twój portfel ${formatPLN(sum.value - (sum.benchmarks[firstBench]?.value || 0), { sign: true })}`}
                 />

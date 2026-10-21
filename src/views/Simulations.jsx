@@ -1,5 +1,8 @@
-import { useState } from 'react';
-import { Calculator, Flame, FlaskConical, Zap } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Calculator, Droplets, Flame, FlaskConical, Zap } from 'lucide-react';
+import { useApp } from '../state/AppContext.jsx';
+import { computeAllocation } from '../lib/allocation.js';
+import ContributionCalculator from '../components/allocation/ContributionCalculator.jsx';
 import FireView from './Fire.jsx';
 import StressTestView from './StressTest.jsx';
 import InvestmentCalculator from '../components/simulations/InvestmentCalculator.jsx';
@@ -7,6 +10,7 @@ import InvestmentCalculator from '../components/simulations/InvestmentCalculator
 export const SIMULATIONS = [
   { id: 'fire', label: 'Symulacja FIRE', description: 'Niezależność finansowa – ścieżka majątku i dochodu pasywnego', icon: Flame },
   { id: 'stress', label: 'Stress test / Co jeśli', description: 'Korekta rynków i zmiana kursów walut', icon: Zap },
+  { id: 'topup', label: 'Kalkulator Inteligentnej Dopłaty', description: 'Plan zakupów wyrównujący wagi docelowe (z przewalutowaniem XTB 0,05%)', icon: Droplets },
   { id: 'calculator', label: 'Kalkulator inwestycyjny', description: 'Procent składany, TER i podatki wg konta', icon: Calculator },
 ];
 
@@ -60,7 +64,26 @@ export default function SimulationsView({ param, onNavigate }) {
       </div>
       {type === 'fire' && <FireView onNavigate={onNavigate} />}
       {type === 'stress' && <StressTestView onNavigate={onNavigate} />}
+      {type === 'topup' && <TopUpSimulation onNavigate={onNavigate} />}
       {type === 'calculator' && <InvestmentCalculator />}
+    </div>
+  );
+}
+
+// Kalkulator dopłat korzysta z wag docelowych ustawionych w zakładce Alokacja
+function TopUpSimulation({ onNavigate }) {
+  const { state } = useApp();
+  const analysis = useMemo(() => computeAllocation(state), [state]);
+  return (
+    <div className="space-y-3">
+      <ContributionCalculator analysis={analysis} />
+      <p className="text-xs text-stone-500 dark:text-stone-400">
+        Wagi docelowe instrumentów ustawisz w zakładce{' '}
+        <button type="button" className="font-medium text-blue-600 hover:underline dark:text-blue-400" onClick={() => onNavigate?.('allocation')}>
+          Alokacja i Dopłaty
+        </button>
+        .
+      </p>
     </div>
   );
 }

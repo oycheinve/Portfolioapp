@@ -241,13 +241,57 @@ export function ChartTooltip({ active, payload, label, formatter, labelFormatter
 }
 
 // Etap 4: suwak z etykietą, wartością i opcjonalnym polem liczbowym (wygodny na ekranach dotykowych)
-export function Slider({ label, value, onChange, min = 0, max = 100, step = 1, format = (v) => v, hint, accent = '#2a78d6' }) {
+// Suwak z edytowalną wartością: kliknięcie w liczbę pozwala wpisać dokładną wartość z klawiatury (jednostka zostaje obok)
+export function Slider({ label, value, onChange, min = 0, max = 100, step = 1, format = (v) => v, hint, accent = '#2a78d6', unit }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
   const pct = ((Number(value) - min) / (max - min)) * 100;
+  const shown = String(format(Number(value)));
+  // Jednostka: jawna albo to, co zostaje po liczbie w sformatowanej etykiecie („zł”, „%”, „lat”, „% / rok”)
+  const unitText = unit ?? shown.replace(/^[+\-−]?[\d\s\u00a0.,]+/, '').trim();
+  const decimals = String(step).includes('.') ? String(step).split('.')[1].length : 0;
+  const start = () => {
+    setDraft(String(Number(value).toFixed(decimals)).replace('.', ','));
+    setEditing(true);
+  };
+  const commit = () => {
+    const n = Number(String(draft).replace(/\s/g, '').replace(',', '.'));
+    if (draft.trim() !== '' && Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
+    setEditing(false);
+  };
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-xs font-medium text-stone-600 dark:text-stone-400">{label}</span>
-        <span className="text-sm font-semibold tabular">{format(Number(value))}</span>
+        {editing ? (
+          <span className="flex items-baseline gap-1">
+            <input
+              type="text"
+              inputMode="decimal"
+              autoFocus
+              value={draft}
+              aria-label={`${label} – wpisz wartość`}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commit();
+                if (e.key === 'Escape') setEditing(false);
+              }}
+              onFocus={(e) => e.target.select()}
+              className="h-7 w-24 rounded-md border border-blue-400 bg-white px-2 text-right text-sm font-semibold tabular outline-none focus:ring-2 focus:ring-blue-500/30 dark:bg-neutral-800"
+            />
+            {unitText && <span className="text-sm font-semibold text-stone-500">{unitText}</span>}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={start}
+            title="Kliknij, aby wpisać dokładną wartość"
+            className="rounded-md border-b border-dashed border-stone-400 px-1 text-sm font-semibold tabular hover:bg-stone-100 dark:border-stone-500 dark:hover:bg-white/5"
+          >
+            {shown}
+          </button>
+        )}
       </div>
       <input
         type="range"

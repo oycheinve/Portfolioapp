@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Bell, CalendarDays, CalendarPlus, CheckCircle2, Clock, Download, Megaphone, Sparkles, Wallet } from 'lucide-react';
+import { CalendarDays, CalendarPlus, CheckCircle2, Clock, Download, Megaphone, Sparkles, Wallet } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { STATUS_META, buildCalendar, dividendKpis, upcomingReminders } from '../../lib/dividends.js';
+import { STATUS_META, buildCalendar, dividendKpis } from '../../lib/dividends.js';
 import { downloadIcs, googleCalendarUrl } from '../../lib/calendarExport.js';
-import { formatDate, formatPLN, formatPercent, todayISO } from '../../lib/format.js';
-import { Badge, Card, EmptyState, Select } from '../ui.jsx';
+import { formatDate, formatPLN, formatPercent } from '../../lib/format.js';
+import { Badge, Card, Select } from '../ui.jsx';
 
 const MONTH_NAMES = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 
@@ -122,77 +122,6 @@ export function DividendCalendar() {
           );
         })}
       </div>
-    </Card>
-  );
-}
-
-export function RemindersCard() {
-  const { state, actions } = useApp();
-  const days = state.settings.dividendPrefs?.reminderDays || 30;
-  const reminders = useMemo(() => upcomingReminders(state, days), [state, days]);
-  const toEvent = (r) => ({ uid: r.id, date: r.date, title: r.title, details: r.detail });
-
-  return (
-    <Card
-      title="Przypomnienia"
-      subtitle={`Dni dywidendy i wypłaty w ciągu ${days} dni`}
-      icon={Bell}
-      actions={
-        <>
-          <Select
-            value={days}
-            onChange={(e) => actions.updateSettings({ dividendPrefs: { ...state.settings.dividendPrefs, reminderDays: Number(e.target.value) } })}
-            className="h-8 w-auto text-xs"
-            aria-label="Horyzont przypomnień"
-          >
-            {[7, 14, 30, 60, 90].map((d) => (
-              <option key={d} value={d}>
-                {d} dni
-              </option>
-            ))}
-          </Select>
-          <button
-            type="button"
-            disabled={reminders.length === 0}
-            onClick={() => downloadIcs(reminders.map(toEvent), `przypomnienia-dywidendy-${todayISO()}.ics`)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-stone-200 px-2.5 text-xs font-medium hover:bg-stone-50 disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5"
-          >
-            <Download size={14} /> Wszystkie (.ics)
-          </button>
-        </>
-      }
-      bodyClassName="p-0 sm:p-0"
-    >
-      {reminders.length === 0 ? (
-        <EmptyState icon={Bell} title="Brak nadchodzących terminów" description="Synchronizacja dywidend uzupełni terminy automatycznie." />
-      ) : (
-        <ul className="divide-y divide-stone-100 dark:divide-white/5">
-          {reminders.map((r) => (
-            <li key={r.id} className="flex items-start gap-3 px-4 py-3 sm:px-5">
-              <div
-                className={`flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg text-center ${
-                  r.inDays <= 3 ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-stone-100 text-stone-700 dark:bg-white/5 dark:text-stone-300'
-                }`}
-              >
-                <span className="text-sm leading-none font-bold tabular">{r.inDays === 0 ? 'dziś' : r.inDays}</span>
-                {r.inDays > 0 && <span className="text-[9px] leading-tight">{r.inDays === 1 ? 'dzień' : 'dni'}</span>}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-sm font-medium">{r.title}</span>
-                  {r.kind === 'EX' && <Badge tone="red">Ex-Date</Badge>}
-                </div>
-                <div className="text-xs text-stone-500 dark:text-stone-400">
-                  {formatDate(r.date)} · {r.detail}
-                </div>
-                <div className="mt-1.5">
-                  <CalendarButtons event={toEvent(r)} />
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
     </Card>
   );
 }

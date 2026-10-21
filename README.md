@@ -86,6 +86,17 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Przewalutowanie XTB 0,05%**: domyślnie dla IKE i rachunków w XTB (gdy pole konta jest puste), doliczane przy kupnie i potrącane przy sprzedaży; widoczne w Analizie TER (zapłacone + szacunek przy sprzedaży) i w kalkulatorze dopłat.
 - **Porządki**: zakładka „Poduszka finansowa” (dawniej „Kapitał bezpieczny”); Dziennik ukryty w menu; OKI usunięte (migracja: puste konto znika, z historią → maklerskie); typ konta „Obligacje skarbowe”; przełącznik „Wliczaj podatek Belki (19%)” dla kont oszczędnościowych i obligacji; wybór banku (Revolut → podatek odroczony, rozliczenie w PIT); limity IKE/IKZE tylko dla bieżącego roku (ręcznie lub automatycznie po Nowym Roku).
 
+## Import XTB, rejestr operacji, Portfel w układzie tabelarycznym
+
+- **Import z XTB** (Rejestr Wpłat/Wypłat): plik .xlsx lub CSV z „Historii operacji gotówkowych”. Rozpoznawane: wpłaty (także IKE/IKZE), wypłaty, zakupy i sprzedaże (ilość i cena z komentarza „OPEN BUY 10 @ 66.88”), dywidendy, odsetki od wolnych środków i podatki (dopinane do dywidend/odsetek). Podgląd z mapowaniem symboli na instrumenty; ID operacji XTB chroni przed duplikatami. Excel czytany wbudowanym czytnikiem (`src/lib/xlsx.js`) – bez zewnętrznych bibliotek.
+- **Dodaj operację**: dla kont maklerskich/IKE/IKZE wybór aktywa (opcjonalny przy wpłacie, wymagany przy kupnie/sprzedaży, z możliwością dodania nowego instrumentu); dla konta oszczędnościowego tryb „Ustal saldo” – różnica do podanej wartości jako wpłata lub odsetki.
+- **Suwaki**: kliknięcie w wartość pozwala wpisać dokładną liczbę (jednostka zostaje obok).
+- **Cele FIRE** w Ustawieniach; **Kalkulator Inteligentnej Dopłaty** w Symulacjach.
+- **Benchmarki**: czyste nazwy (S&P 500, WIG20TR, MSCI World, Inflacja CPI, własne).
+- **Dywidendy**: bez sekcji przypomnień; zwijane sekcje Kalendarz / Rejestr wypłat / Prognoza DGR.
+- **Raport na X**: tydzień i miesiąc dosłownie wg szablonów („📊 Raport portfela | Tydzień N…”, „📊 Podsumowanie miesiąca:…”).
+- **Portfel**: ciemny nagłówek, wiersz „Cały Portfel”, sekcje z opisem w jednej linii (wartość, zysk, wartość zakupu, zysk dzienny, zwrot, zmiana dzienna, udział), ikony operacji (kup, sprzedaj, historia, notowania), strzałki zmian, stopka „Razem (N)”.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

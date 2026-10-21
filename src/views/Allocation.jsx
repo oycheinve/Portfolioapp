@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { AlertTriangle, BellRing, Calculator, Layers, ListChecks, Percent, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, BellRing, Layers, ListChecks, Percent, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { computeAllocation, unitPricePLN } from '../lib/allocation.js';
 import { assetClassColor } from '../lib/colors.js';
@@ -8,7 +8,6 @@ import { Accordion, Card, Field, Input } from '../components/ui.jsx';
 import { AccountFilterSelect } from '../components/dashboard/PortfolioStatsCard.jsx';
 import AllocationDonut, { instrumentColorMap } from '../components/allocation/AllocationDonut.jsx';
 import DeviationList, { formatDeviation } from '../components/allocation/DeviationList.jsx';
-import ContributionCalculator from '../components/allocation/ContributionCalculator.jsx';
 import TerAnalysis from '../components/allocation/TerAnalysis.jsx';
 
 // Skaluje wagi do sumy 100% (2 miejsca po przecinku, reszta z zaokrągleń trafia do największej wagi)
@@ -142,13 +141,6 @@ export default function AllocationView() {
                 emptyText="Brak instrumentów – dodaj transakcje lub instrumenty."
               />
             ),
-          },
-          {
-            id: 'calculator',
-            title: 'Kalkulator Inteligentnej Dopłaty',
-            subtitle: 'Plan zakupów wyrównujący wagi (z przewalutowaniem XTB 0,05%)',
-            icon: Calculator,
-            render: () => <ContributionCalculator analysis={analysis} />,
           },
           {
             id: 'ter',

@@ -1,17 +1,17 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, CASHFLOW_TYPES } from '../lib/constants.js';
-import { computeCashBalances, incomeEventsWithTax, bondIncomeEvents, isoDay } from '../lib/engine.js';
+import { isoDay, tradeAmounts } from '../lib/engine.js';
 import { limitForAccount } from '../lib/tax.js';
-import { formatAxisPLN, formatDate, formatPLN, todayISO } from '../lib/format.js';
+import { formatAxisPLN, formatDate, formatMoney, formatNumber, formatPLN } from '../lib/format.js';
 import { chartChrome, seriesColor } from '../lib/colors.js';
-import { Badge, Button, Card, ChartTooltip, EmptyState, Field, IconButton, Input, Modal, Segmented, Select, Stat } from '../components/ui.jsx';
+import { Badge, Button, Card, ChartTooltip, EmptyState, IconButton, Input, Modal, Segmented, Select } from '../components/ui.jsx';
+import OperationFormModal, { emptyOperation, operationFromCashflow, operationFromTrade } from '../components/cash/OperationFormModal.jsx';
+import XtbImportCard from '../components/cash/XtbImportCard.jsx';
 
 const MONTHS = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
-
-const emptyForm = (accountId) => ({ id: null, date: todayISO(), accountId: accountId || '', type: 'DEPOSIT', amount: '', note: '' });
 
 export default function CashRegister() {
   const { state, actions, isDark } = useApp();
@@ -70,8 +70,9 @@ export default function CashRegister() {
     });
   }, [state.accounts, state.cashflows]);
 
-  const openNew = () => setForm(emptyForm(accountFilter !== 'ALL' ? accountFilter : state.accounts[0]?.id));
-  const openEdit = (c) => setForm({ ...c, amount: String(c.amount) });
+  const openNew = () => setForm(emptyOperation(accountFilter !== 'ALL' ? accountFilter : state.accounts[0]?.id));
+  const openEdit = (c) => setForm(operationFromCashflow(c));
+  const instById = useMemo(() => Object.fromEntries(state.instruments.map((i) => [i.id, i])), [state.instruments]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -130,8 +131,8 @@ export default function CashRegister() {
       </div>
 
       <Card
-        title="Rejestr transakcji gotówkowych"
-        subtitle="Wpłaty i wypłaty własne – podstawa wyliczenia wkładu netto i Zysku Total"
+        title="Rejestr wpłat i wypłat"
+        subtitle="Wpłaty i wypłaty własne – podstawa wyliczenia wkładu netto i Zysku Total · kupno/sprzedaż i saldo oszczędności w „Dodaj operację”"
         icon={Receipt}
         actions={
           <Button variant="primary" icon={Plus} onClick={openNew} disabled={state.accounts.length === 0}>
@@ -211,7 +212,9 @@ export default function CashRegister() {
                           {isDep ? '+' : '−'}
                           {formatPLN(Number(c.amount))}
                         </td>
-                        <td className="max-w-[16rem] truncate px-3 py-2 text-stone-500 dark:text-stone-400">{c.note}</td>
+                        <td className="max-w-[16rem] truncate px-3 py-2 text-stone-500 dark:text-stone-400">
+                          {c.instrumentId && instById[c.instrumentId] && <Badge tone="blue">{instById[c.instrumentId].ticker}</Badge>} {c.note}
+                        </td>
                         <td className="px-5 py-1 text-right whitespace-nowrap">
                           <IconButton icon={Pencil} label="Edytuj" onClick={() => openEdit(c)} />
                           <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} className="hover:text-red-600" />
@@ -252,7 +255,20 @@ export default function CashRegister() {
         )}
       </Card>
 
-      <CashflowFormModal form={form} setForm={setForm} onSave={(item) => { actions.upsert('cashflows', item); actions.notify(item.id ? 'Zapisano operację' : 'Dodano operację', 'success'); setForm(null); }} />
+      <TradesCard accountFilter={accountFilter} yearFilter={yearFilter} onEdit={(t) => setForm(operationFromTrade(t))} />
+
+      <XtbImportCard />
+
+      <OperationFormModal
+        form={form}
+        setForm={setForm}
+        onSave={({ writes, instruments }) => {
+          if (instruments.length) actions.addMany('instruments', instruments);
+          for (const w of writes) actions.upsert(w.collection, w.item);
+          actions.notify(form?.id ? 'Zapisano operację' : 'Dodano operację', 'success');
+          setForm(null);
+        }}
+      />
 
       <Modal
         open={!!confirmDelete}
@@ -297,121 +313,79 @@ function SummaryTile({ label, value, icon: Icon, tone = '' }) {
   );
 }
 
-function CashflowFormModal({ form, setForm, onSave }) {
-  const { state } = useApp();
-  const open = !!form;
-  const f = form || emptyForm();
-  const account = state.accounts.find((a) => a.id === f.accountId);
-  const amount = Number(String(f.amount).replace(',', '.')) || 0;
-  const year = Number((f.date || todayISO()).slice(0, 4));
-
-  // Limit roczny dla IKE/IKZE (z pominięciem edytowanej operacji)
-  const limit = account ? limitForAccount(account, state.settings, year) : 0;
-  const yearDeposits = state.cashflows
-    .filter((c) => c.accountId === f.accountId && c.type === 'DEPOSIT' && c.date.startsWith(String(year)) && c.id !== f.id)
-    .reduce((s, c) => s + Number(c.amount), 0);
-  const remaining = Math.max(0, limit - yearDeposits);
-
-  // Dostępna gotówka na koncie na dzień operacji (dla wypłat)
-  const available = useMemo(() => {
-    if (!account || !open) return 0;
-    const others = { ...state, cashflows: state.cashflows.filter((c) => c.id !== f.id) };
-    const income = [...incomeEventsWithTax(others), ...bondIncomeEvents(others, f.date || todayISO())];
-    return computeCashBalances(others, f.date || todayISO(), [account.id], income)[account.id] || 0;
-  }, [state, account, f.id, f.date, open]);
-
-  const errors = [];
-  if (!f.accountId) errors.push('Wybierz konto.');
-  if (!(amount > 0)) errors.push('Kwota musi być większa od zera.');
-  if (!f.date) errors.push('Podaj datę.');
-  const warnings = [];
-  if (f.type === 'DEPOSIT' && limit > 0 && amount > remaining) {
-    warnings.push(`Wpłata przekracza roczny limit ${ACCOUNT_TYPES[account.type].label} ${year} o ${formatPLN(amount - remaining)} (pozostało ${formatPLN(remaining)}).`);
-  }
-  if (f.type === 'WITHDRAWAL' && amount > available + 0.005) {
-    warnings.push(`Wypłata przekracza dostępną gotówkę na koncie (${formatPLN(available)}). Najpierw zarejestruj sprzedaż aktywów.`);
-  }
-  if (f.type === 'WITHDRAWAL' && account && (account.type === 'IKE' || account.type === 'IKZE')) {
-    warnings.push(`Wypłata z ${ACCOUNT_TYPES[account.type].label} przed osiągnięciem wieku emerytalnego oznacza zwrot – utratę preferencji podatkowych.`);
-  }
-
-  const set = (patch) => setForm({ ...f, ...patch });
-
+// Transakcje kupna/sprzedaży (ręczne i zaimportowane z XTB)
+function TradesCard({ accountFilter, yearFilter, onEdit }) {
+  const { state, actions } = useApp();
+  const [toDelete, setToDelete] = useState(null);
+  const [limit, setLimit] = useState(15);
+  const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
+  const list = state.trades
+    .filter((t) => accountFilter === 'ALL' || t.accountId === accountFilter)
+    .filter((t) => yearFilter === 'ALL' || t.date.startsWith(yearFilter))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   return (
-    <Modal
-      open={open}
-      onClose={() => setForm(null)}
-      title={f.id ? 'Edytuj operację' : 'Nowa wpłata / wypłata'}
-      footer={
+    <Card title="Transakcje kupna i sprzedaży" subtitle={`${list.length} transakcji · koszt zawiera prowizje i przewalutowanie`} icon={ArrowLeftRight} bodyClassName="p-0 sm:p-0">
+      {list.length === 0 ? (
+        <EmptyState icon={ArrowLeftRight} title="Brak transakcji" description="Dodaj kupno przez „Dodaj operację” albo zaimportuj historię z XTB." />
+      ) : (
         <>
-          <Button onClick={() => setForm(null)}>Anuluj</Button>
-          <Button
-            variant="primary"
-            disabled={errors.length > 0}
-            onClick={() =>
-              onSave({
-                ...(f.id ? { id: f.id } : {}),
-                date: f.date,
-                accountId: f.accountId,
-                type: f.type,
-                amount: Math.round(amount * 100) / 100,
-                note: f.note.trim(),
-              })
-            }
-          >
-            Zapisz
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <Segmented
-          options={[
-            { value: 'DEPOSIT', label: 'Wpłata' },
-            { value: 'WITHDRAWAL', label: 'Wypłata' },
-          ]}
-          value={f.type}
-          onChange={(type) => set({ type })}
-          ariaLabel="Typ operacji"
-        />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Konto">
-            <Select value={f.accountId} onChange={(e) => set({ accountId: e.target.value })}>
-              <option value="" disabled>
-                Wybierz konto…
-              </option>
-              {state.accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({ACCOUNT_TYPES[a.type].label})
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Data">
-            <Input type="date" value={f.date} max={todayISO()} onChange={(e) => set({ date: e.target.value })} />
-          </Field>
-          <Field label="Kwota (PLN)" hint={f.type === 'DEPOSIT' && limit > 0 ? `Pozostały limit ${year}: ${formatPLN(remaining)}` : f.type === 'WITHDRAWAL' && account ? `Dostępna gotówka: ${formatPLN(available)}` : undefined}>
-            <Input type="number" min="0" step="0.01" inputMode="decimal" value={f.amount} onChange={(e) => set({ amount: e.target.value })} placeholder="0,00" autoFocus />
-          </Field>
-          <Field label="Opis (opcjonalnie)">
-            <Input value={f.note} onChange={(e) => set({ note: e.target.value })} placeholder="np. Wpłata miesięczna" />
-          </Field>
-        </div>
-        {warnings.length > 0 && (
-          <ul className="space-y-1.5">
-            {warnings.map((w) => (
-              <li key={w} className="flex gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-300">
-                <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {w}
-              </li>
-            ))}
+          <ul className="divide-y divide-stone-100 dark:divide-white/5">
+            {list.slice(0, limit).map((t) => {
+              const inst = instById[t.instrumentId];
+              const acc = accountsById[t.accountId];
+              const amt = tradeAmounts(t, acc, inst);
+              const buy = t.side === 'BUY';
+              return (
+                <li key={t.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                  <Badge tone={buy ? 'blue' : 'amber'}>{buy ? 'Kupno' : 'Sprzedaż'}</Badge>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onEdit(t)}>
+                    <div className="truncate text-sm font-medium">
+                      {inst?.ticker || '?'} <span className="font-normal text-stone-500">· {formatNumber(Number(t.quantity), 4)} × {formatMoney(Number(t.price), t.currency || inst?.currency || 'PLN')}</span>
+                    </div>
+                    <div className="truncate text-xs text-stone-500 dark:text-stone-400">
+                      {formatDate(t.date)} · {acc?.name || 'Usunięte konto'}
+                      {t.source === 'XTB' ? ' · import XTB' : ''}
+                      {amt.fxFee > 0 ? ` · FX ${formatPLN(amt.fxFee)}` : ''}
+                    </div>
+                  </button>
+                  <div className={`text-sm font-semibold tabular ${buy ? '' : 'text-emerald-700 dark:text-emerald-400'}`}>{formatPLN(buy ? -amt.buyCost : amt.sellProceeds, { sign: true })}</div>
+                  <IconButton icon={Pencil} label="Edytuj transakcję" onClick={() => onEdit(t)} />
+                  <IconButton icon={Trash2} label="Usuń transakcję" onClick={() => setToDelete(t)} className="hover:text-red-600" />
+                </li>
+              );
+            })}
           </ul>
-        )}
-        {account?.type === 'IKZE' && f.type === 'DEPOSIT' && amount > 0 && (
-          <p className="text-xs text-stone-500 dark:text-stone-400">
-            Wpłata obniży podstawę opodatkowania w PIT za {year}. Szacunek zwrotu zobaczysz na Pulpicie w karcie limitów.
-          </p>
-        )}
-      </div>
-    </Modal>
+          {list.length > limit && (
+            <button type="button" onClick={() => setLimit((l) => l + 30)} className="w-full border-t border-stone-100 py-2.5 text-sm font-medium text-blue-600 hover:bg-stone-50 dark:border-white/5 dark:text-blue-400 dark:hover:bg-white/[0.03]">
+              Pokaż więcej ({list.length - limit})
+            </button>
+          )}
+        </>
+      )}
+      <Modal
+        open={!!toDelete}
+        onClose={() => setToDelete(null)}
+        title="Usunąć transakcję?"
+        footer={
+          <>
+            <Button onClick={() => setToDelete(null)}>Anuluj</Button>
+            <Button
+              variant="danger"
+              icon={Trash2}
+              onClick={() => {
+                actions.remove('trades', toDelete.id);
+                actions.notify('Usunięto transakcję', 'info');
+                setToDelete(null);
+              }}
+            >
+              Usuń
+            </Button>
+          </>
+        }
+      >
+        {toDelete && <p className="text-sm text-stone-600 dark:text-stone-300">Transakcja zostanie usunięta – zmieni to pozycje, gotówkę i statystyki portfela.</p>}
+      </Modal>
+    </Card>
   );
 }

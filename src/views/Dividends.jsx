@@ -1,5 +1,5 @@
 import { CalendarDays, ListChecks, TrendingUp } from 'lucide-react';
-import { DividendCalendar, DividendKpis, RemindersCard } from '../components/dividends/DividendWidgets.jsx';
+import { DividendCalendar, DividendKpis } from '../components/dividends/DividendWidgets.jsx';
 import { ForecastCard, ScheduleCard } from '../components/dividends/DividendManagement.jsx';
 import DividendSyncCard from '../components/dividends/DividendSyncCard.jsx';
 import { Accordion } from '../components/ui.jsx';
@@ -8,15 +8,10 @@ import { Accordion } from '../components/ui.jsx';
 const ITEMS = [
   {
     id: 'calendar',
-    title: 'Kalendarz i przypomnienia',
-    subtitle: '12 miesięcy wypłat oraz najbliższe daty odcięcia',
+    title: 'Kalendarz',
+    subtitle: '12 miesięcy wypłat dywidend',
     icon: CalendarDays,
-    render: () => (
-      <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <DividendCalendar />
-        <RemindersCard />
-      </div>
-    ),
+    render: () => <DividendCalendar />,
   },
   { id: 'register', title: 'Rejestr wypłat', subtitle: 'Harmonogram dywidend, statusy i księgowanie wypłat', icon: ListChecks, render: () => <ScheduleCard /> },
   { id: 'forecast', title: 'Prognoza DGR', subtitle: 'Wzrost dywidend i reinwestycja (DRIP)', icon: TrendingUp, render: () => <ForecastCard /> },

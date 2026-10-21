@@ -8,6 +8,7 @@ import { formatDateTime, formatPLN, todayISO } from '../lib/format.js';
 import { Badge, Button, Card, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
 import LimitsCard from '../components/settings/LimitsCard.jsx';
 import BackupCard from '../components/settings/BackupCard.jsx';
+import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 
 export default function SettingsView() {
   return (
@@ -18,6 +19,7 @@ export default function SettingsView() {
         <PricesSection />
       </div>
       <LimitsCard />
+      <FireGoalsCard />
       <OtherAssetsSection />
       <BackupCard />
     </div>

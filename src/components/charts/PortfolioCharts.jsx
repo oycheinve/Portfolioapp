@@ -1,4 +1,4 @@
-import { Area, AreaChart, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '../../state/AppContext.jsx';
 import { benchmarkLabel, isCustomBenchmark } from '../../lib/constants.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
@@ -56,7 +56,7 @@ export function ValueChart({ data, span, benchmarks, compareIds }) {
   const legend = [
     { key: 'v', label: 'Wartość portfela', color: valueColor },
     { key: 'c', label: 'Wkład własny netto', color: chrome.muted, dashed: true },
-    ...benchmarks.map((id) => ({ key: id, label: id === 'CPI' ? 'Wpłaty waloryzowane inflacją' : `Gdyby wpłaty w ${benchmarkLabel(state.settings, id)}`, color: benchmarkColor(id, isDark), dashed: id === 'CPI' || isCustomBenchmark(id) })),
+    ...benchmarks.map((id) => ({ key: id, label: benchmarkLabel(state.settings, id), color: benchmarkColor(id, isDark), dashed: id === 'CPI' || isCustomBenchmark(id) })),
   ];
   return (
     <>
@@ -80,7 +80,7 @@ export function ValueChart({ data, span, benchmarks, compareIds }) {
               <Line
                 key={id}
                 dataKey={`b_${id}_value`}
-                name={id === 'CPI' ? 'Wpłaty + inflacja' : benchmarkLabel(state.settings, id)}
+                name={benchmarkLabel(state.settings, id)}
                 stroke={benchmarkColor(id, isDark)}
                 strokeWidth={1.5}
                 strokeDasharray={id === 'CPI' || isCustomBenchmark(id) ? '5 4' : undefined}

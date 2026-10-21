@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, ChevronDown, ChevronRight, Coins, ListOrdered, SlidersHorizontal, Table2, TrendingDown } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronUp, CircleDollarSign, Coins, History, LineChart, MinusSquare, PlusSquare, ShoppingBasket, SlidersHorizontal, Table2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { PORTFOLIO_CATEGORIES, buildPortfolioRows, groupRows } from '../lib/portfolioTable.js';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
 import { formatDate, formatMoney, formatNumber, formatPLN, formatPercent, signClass } from '../lib/format.js';
 import { Card, Dropdown, EmptyState, Modal } from '../components/ui.jsx';
+import OperationFormModal, { emptyOperation } from '../components/cash/OperationFormModal.jsx';
 
 const PREFS_KEY = 'wealth-app-portfolio-filters';
 
-// Kwoty w tabeli zawsze z dwoma miejscami po przecinku
+// Liczby w tabeli: dwa miejsca po przecinku, spacja tysięcy także dla liczb 4-cyfrowych (jednostka w nagłówku kolumny)
 const fmt2Formatter = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmt2 = (v) => (Number.isFinite(v) ? fmt2Formatter.format(v) : '—');
+const fmt2 = (v) => (Number.isFinite(v) ? fmt2Formatter.format(v).replace(/^(-?\d)(\d{3}),/, '$1 $2,') : '—');
+const pct2 = (v) => (Number.isFinite(v) ? fmt2(v * 100) : '—');
+const units = (v) => (Number.isFinite(v) ? formatNumber(v, v % 1 === 0 ? 0 : 4) : '—');
 
 function readPrefs() {
   try {
@@ -29,25 +32,17 @@ export function holdingDays(since, today = new Date()) {
   return Math.max(0, Math.round((end - start) / 86400000));
 }
 
-function daysLabel(since) {
-  const days = holdingDays(since);
-  return days === null ? '—' : days.toLocaleString('pl-PL');
-}
-
-// Ikony operacji przy walorze: dywidendy/kupony/odsetki, przewalutowanie, sprzedaże
-function OpIcons({ row }) {
-  const ops = row.ops || [];
-  const income = ops.some((o) => /Dywidenda|Kupon|Odsetki/.test(o.type));
-  const sold = ops.some((o) => o.type === 'Sprzedaż');
-  const fx = (row.fxFees || 0) > 0;
-  if (!income && !sold && !fx) return null;
-  return (
-    <span className="inline-flex shrink-0 items-center gap-0.5 text-stone-400">
-      {income && <Coins size={11} aria-label="Wypłaty dochodu" />}
-      {sold && <TrendingDown size={11} aria-label="Częściowa sprzedaż" />}
-      {fx && <ArrowLeftRight size={11} aria-label={`Przewalutowanie ${fmt2(row.fxFees)} zł`} />}
-    </span>
-  );
+// Średni okres inwestycji ważony wartością pozycji
+function weightedDays(rows) {
+  let w = 0;
+  let s = 0;
+  for (const r of rows) {
+    const d = holdingDays(r.since);
+    if (d === null || !(r.value > 0)) continue;
+    w += r.value;
+    s += r.value * d;
+  }
+  return w > 0 ? Math.round(s / w) : null;
 }
 
 function CheckRow({ checked, onChange, label, color, count }) {
@@ -66,59 +61,61 @@ function Signed({ value, kind = 'pln', digits = 2 }) {
   return <span className={signClass(value)}>{kind === 'pct' ? formatPercent(value, { sign: true, digits }) : formatPLN(value, { sign: true })}</span>;
 }
 
-const COLS = [
-  { key: 'name', label: 'Walor', align: 'left' },
-  { key: 'ops', label: 'Operacje', align: 'center' },
-  { key: 'day', label: 'Zmiana dzienna [%]', align: 'right' },
-  { key: 'qty', label: 'Liczba jednostek', align: 'right' },
-  { key: 'avg', label: 'Śr. cena zakupu [PLN]', align: 'right' },
-  { key: 'price', label: 'Cena aktualna [PLN]', align: 'right' },
-  { key: 'period', label: 'Okres inwestycji [dni]', align: 'right' },
-  { key: 'value', label: 'Wartość waloru [PLN]', align: 'right' },
-  { key: 'share', label: 'Udział w wartości portfela [%]', align: 'right' },
-  { key: 'rate', label: 'Stopa zwrotu [%]', align: 'right' },
-  { key: 'gain', label: 'Zysk [PLN]', align: 'right' },
-];
-
-// Wiersz „Cały portfel” – na górze (pod nagłówkiem) i na dole tabeli
-function TotalRow({ data, position }) {
-  const top = position === 'top';
-  const bg = top ? 'bg-blue-50 dark:bg-[#16233a]' : 'bg-white dark:bg-neutral-900';
+// Wartość z kolorem i strzałką (jak w tabeli wzorcowej): ^ 1,99 / v -7,72
+function Arrowed({ value }) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return <span className="text-stone-400">—</span>;
+  const Icon = value > 0 ? ChevronUp : value < 0 ? ChevronDown : null;
   return (
-    <tr className={`font-semibold tabular text-[13px] text-stone-900 dark:text-stone-100 ${top ? 'border-b border-stone-200 dark:border-white/10' : 'border-t-2 border-stone-300 dark:border-white/15'} ${bg}`}>
-      <td className={`sticky left-0 z-10 py-2.5 pl-4 text-left ${bg}`}>Cały portfel</td>
-      <td className="px-2.5 py-2.5 text-center text-[11px] font-normal text-stone-500">{data.count} poz.</td>
-      <td className="px-2.5 py-2.5 text-right">
-        <div>
-          <Signed value={data.dayPct} kind="pct" />
-        </div>
-        <div className="text-[11px] font-normal">
-          <Signed value={data.dayChange} />
-        </div>
-      </td>
-      <td colSpan={4} />
-      <td className="px-2.5 py-2.5 text-right">{fmt2(data.total)}</td>
-      <td className="px-2.5 py-2.5 text-right">100,00%</td>
-      <td className="px-2.5 py-2.5 text-right">
-        <Signed value={data.gainPct} kind="pct" />
-      </td>
-      <td className="px-2.5 py-2.5 text-right">
-        <Signed value={data.gain} />
-      </td>
-    </tr>
+    <span className={`inline-flex w-full items-center justify-between gap-1 ${signClass(value)}`}>
+      <span className="w-3">{Icon && <Icon size={13} strokeWidth={2.5} />}</span>
+      <span>{pct2(value)}</span>
+    </span>
   );
 }
 
-export default function PortfolioView() {
-  const { state } = useApp();
+// Kolorowa liczba w nagłówku sekcji
+function Colored({ value, children }) {
+  return <span className={value > 0 ? 'text-emerald-600 dark:text-emerald-400' : value < 0 ? 'text-red-600 dark:text-red-400' : ''}>{children}</span>;
+}
+
+const COLS = [
+  { key: 'name', label: 'Walor' },
+  { key: 'ops', label: 'Operacje' },
+  { key: 'day', label: 'Zmiana dzienna* [%]' },
+  { key: 'qty', label: 'Liczba jednostek' },
+  { key: 'avg', label: 'Śr. cena zakupu [PLN]' },
+  { key: 'price', label: 'Cena aktualna [PLN]' },
+  { key: 'period', label: 'Okres inwestycji' },
+  { key: 'value', label: 'Wartość waloru [PLN]' },
+  { key: 'share', label: 'Udział w wartości portfela [%]' },
+  { key: 'rate', label: 'Stopa zwrotu [%]' },
+  { key: 'gain', label: 'Zysk [PLN]' },
+];
+
+const cell = 'border-l border-stone-200 px-2 py-1.5 text-right dark:border-white/10';
+
+// Nagłówek sekcji jako jedna linia tekstu: „Akcje GPW (9), wartość: …, zysk: …, wartość zakupu: …, zysk dzienny: …, zwrot: …, zmiana dzienna: …, udział: …”
+function SectionSummary({ g }) {
+  const cost = g.rows.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+  return (
+    <>
+      {g.label} ({g.rows.length}), wartość: {fmt2(g.value)}, zysk: <Colored value={g.gain}>{fmt2(g.gain ?? 0)}</Colored>, wartość zakupu: {fmt2(cost)}, zysk dzienny: <Colored value={g.dayChange}>{fmt2(g.dayChange)}</Colored>, zwrot:{' '}
+      <Colored value={g.gainPct}>{pct2(g.gainPct ?? 0)}%</Colored>, zmiana dzienna: <Colored value={g.dayPct}>{pct2(g.dayPct)}%</Colored>, udział: {pct2(g.share)}%
+    </>
+  );
+}
+
+export default function PortfolioView({ onNavigate }) {
+  const { state, actions } = useApp();
   const rows = useMemo(() => buildPortfolioRows(state), [state]);
   const saved = useMemo(readPrefs, []);
   const allCats = PORTFOLIO_CATEGORIES.map((c) => c.id);
   const allAccs = state.accounts.map((a) => a.id);
   const [categories, setCategories] = useState(() => (saved?.categories || allCats).filter((c) => allCats.includes(c)));
   const [hiddenAccounts, setHiddenAccounts] = useState(() => saved?.hiddenAccounts || []);
-  const [collapsed, setCollapsed] = useState({});
+  const [collapsed, setCollapsed] = useState(() => saved?.collapsed || {});
   const [opsFor, setOpsFor] = useState(null);
+  const [opForm, setOpForm] = useState(null);
 
   const accounts = allAccs.filter((id) => !hiddenAccounts.includes(id));
   const data = useMemo(() => groupRows(rows, { categories, accounts }), [rows, categories, accounts]);
@@ -126,10 +123,13 @@ export default function PortfolioView() {
   const counts = Object.fromEntries(PORTFOLIO_CATEGORIES.map((c) => [c.id, rows.filter((r) => r.category === c.id).length]));
   const presentCats = PORTFOLIO_CATEGORIES.filter((c) => present.has(c.id));
   const activeFilters = presentCats.filter((c) => !categories.includes(c.id)).length + hiddenAccounts.length;
+  const visibleRows = data.groups.flatMap((g) => g.rows);
+  const totalUnits = visibleRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  const totalDays = weightedDays(visibleRows);
 
-  const persist = (cats, hidden) => {
+  const persist = (patch) => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ categories: cats, hiddenAccounts: hidden }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ categories, hiddenAccounts, collapsed, ...patch }));
     } catch {
       // brak localStorage – filtr nie zostanie zapamiętany
     }
@@ -137,14 +137,26 @@ export default function PortfolioView() {
   const apply = (cats, hidden) => {
     setCategories(cats);
     setHiddenAccounts(hidden);
-    persist(cats, hidden);
+    persist({ categories: cats, hiddenAccounts: hidden });
   };
   const toggleCat = (id, on) => apply(on ? [...new Set([...categories, id])] : categories.filter((c) => c !== id), hiddenAccounts);
   const toggleAcc = (id, on) => apply(categories, on ? hiddenAccounts.filter((x) => x !== id) : [...hiddenAccounts, id]);
   const allOn = activeFilters === 0;
 
-  const toggleSection = (id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
+  const setCollapsedAll = (next) => {
+    setCollapsed(next);
+    persist({ collapsed: next });
+  };
+  const toggleSection = (id) => setCollapsedAll({ ...collapsed, [id]: !collapsed[id] });
   const allCollapsed = data.groups.length > 0 && data.groups.every((g) => collapsed[g.id]);
+
+  const trade = (r, mode) => setOpForm({ ...emptyOperation(r.accountId), mode, instrumentId: r.instrumentId });
+  const saveOperation = ({ writes, instruments }) => {
+    if (instruments.length) actions.addMany('instruments', instruments);
+    for (const w of writes) actions.upsert(w.collection, w.item);
+    actions.notify('Zapisano transakcję', 'success');
+    setOpForm(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -189,7 +201,7 @@ export default function PortfolioView() {
         </Dropdown>
         <button
           type="button"
-          onClick={() => setCollapsed(allCollapsed ? {} : Object.fromEntries(data.groups.map((g) => [g.id, true])))}
+          onClick={() => setCollapsedAll(allCollapsed ? {} : Object.fromEntries(data.groups.map((g) => [g.id, true])))}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5"
         >
           {allCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />} {allCollapsed ? 'Rozwiń sekcje' : 'Zwiń sekcje'}
@@ -205,12 +217,6 @@ export default function PortfolioView() {
               {formatPLN(data.gain, { sign: true })} ({formatPercent(data.gainPct, { sign: true })})
             </strong>
           </span>
-          <span>
-            <span className="text-xs text-stone-500">Dziś </span>
-            <strong className={signClass(data.dayChange)}>
-              {formatPLN(data.dayChange, { sign: true })} ({formatPercent(data.dayPct, { sign: true })})
-            </strong>
-          </span>
         </div>
       </div>
 
@@ -219,144 +225,144 @@ export default function PortfolioView() {
           <EmptyState icon={Table2} title="Nic nie zaznaczono" description="Otwórz „Filtruj portfel” i zaznacz kategorie lub konta." />
         </Card>
       ) : (
-        <section className="min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900">
-          {/* Tabela – desktop */}
+        <section className="min-w-0 overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900">
+          {/* Tabela – desktop (układ wzorowany na profesjonalnym widoku portfela) */}
           <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[1080px] text-[13px]">
+            <table className="w-full min-w-[1120px] border-collapse text-[13px] tabular">
               <thead>
-                <tr className="border-b border-stone-200 bg-stone-50 text-[11px] text-stone-500 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-400">
+                <tr className="bg-[#0d1b2e] text-white">
                   {COLS.map((c) => (
                     <th
                       key={c.key}
-                      className={`px-2.5 py-2.5 leading-tight font-medium ${c.key === 'name' ? 'sticky left-0 z-10 bg-stone-50 pl-4 dark:bg-neutral-800' : ''} ${
-                        c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'
-                      }`}
+                      className={`border-l border-white/10 px-2 py-2.5 text-center align-top text-[12px] leading-tight font-bold first:border-l-0 ${c.key === 'name' ? 'sticky left-0 z-10 w-[17rem] bg-[#0d1b2e]' : ''}`}
                     >
                       {c.label}
                     </th>
                   ))}
                 </tr>
-                <TotalRow data={data} position="top" />
               </thead>
+              <tbody>
+                {/* Cały Portfel */}
+                <tr className="border-b-2 border-stone-300 bg-stone-200 text-[14px] font-semibold dark:border-white/15 dark:bg-neutral-800">
+                  <td className="sticky left-0 z-10 bg-stone-200 px-3 py-2 text-left dark:bg-neutral-800">Cały Portfel</td>
+                  <td className={cell} />
+                  <td className={cell}>
+                    <Arrowed value={data.dayPct} />
+                  </td>
+                  <td className={cell} title="Suma jednostek wszystkich walorów">
+                    {units(totalUnits)}
+                  </td>
+                  <td className={cell} />
+                  <td className={cell} />
+                  <td className={cell} title="Średni okres ważony wartością pozycji (dni)">
+                    {totalDays ?? '—'}
+                  </td>
+                  <td className={cell}>{fmt2(data.total)}</td>
+                  <td className={cell}>100</td>
+                  <td className={cell}>
+                    <Arrowed value={data.gainPct} />
+                  </td>
+                  <td className={`${cell} ${signClass(data.gain)}`}>{fmt2(data.gain)}</td>
+                </tr>
+              </tbody>
               {data.groups.map((g) => {
                 const isOpen = !collapsed[g.id];
+                const Toggle = isOpen ? MinusSquare : PlusSquare;
                 return (
-                  <tbody key={g.id} className="tabular">
-                    <tr className="cursor-pointer border-b border-stone-200 bg-stone-100 font-semibold dark:border-white/10 dark:bg-neutral-800" onClick={() => toggleSection(g.id)}>
-                      <td className="sticky left-0 z-10 bg-stone-100 py-2 pr-2.5 pl-4 dark:bg-neutral-800">
-                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                          {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                          {g.label} <span className="font-normal text-stone-500">({g.rows.length})</span>
-                        </span>
-                      </td>
-                      <td />
-                      <td className="px-2.5 py-2 text-right">
-                        <Signed value={g.dayPct} kind="pct" />
-                      </td>
-                      <td colSpan={4} />
-                      <td className="px-2.5 py-2 text-right">{fmt2(g.value)}</td>
-                      <td className="px-2.5 py-2 text-right">{formatPercent(g.share, { digits: 2 })}</td>
-                      <td className="px-2.5 py-2 text-right">
-                        <Signed value={g.gainPct} kind="pct" />
-                      </td>
-                      <td className="px-2.5 py-2 text-right">
-                        <Signed value={g.gain} />
+                  <tbody key={g.id}>
+                    <tr className="cursor-pointer border-y-2 border-stone-300 bg-stone-50 hover:bg-stone-100 dark:border-white/15 dark:bg-white/[0.04] dark:hover:bg-white/[0.07]" onClick={() => toggleSection(g.id)}>
+                      <td colSpan={COLS.length} className="px-3 py-2 text-left text-[14px] font-semibold">
+                        <Toggle size={14} className="mr-1.5 inline-block align-[-2px] text-stone-500" aria-hidden />
+                        <SectionSummary g={g} />
                       </td>
                     </tr>
                     {isOpen &&
-                      g.rows.map((r) => (
-                        <tr key={r.id} className="group border-b border-stone-100 last:border-0 dark:border-white/5">
-                          <td className="sticky left-0 z-10 max-w-[15rem] bg-white py-2 pr-2.5 pl-4 group-hover:bg-stone-50 dark:bg-neutral-900 dark:group-hover:bg-neutral-800">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate font-medium">{r.name}</span>
-                              <OpIcons row={r} />
-                            </div>
-                            <div className="flex items-center gap-1 truncate text-[11px] text-stone-500 dark:text-stone-400">
-                              {r.account && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: ACCOUNT_TYPES[r.account.type]?.color }} />}
-                              <span className="truncate">{r.account ? r.account.name : r.sub}</span>
-                            </div>
-                          </td>
-                          <td className="px-2.5 py-2 text-center group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
-                            {r.ops?.length ? (
-                              <button
-                                type="button"
-                                onClick={() => setOpsFor(r)}
-                                className="inline-flex items-center gap-1 rounded-md border border-stone-200 px-2 py-0.5 text-[11px] font-medium hover:bg-stone-100 dark:border-white/10 dark:hover:bg-white/5"
-                                title="Historia operacji"
-                              >
-                                <ListOrdered size={12} /> {r.ops.length}
-                              </button>
-                            ) : (
-                              <span className="text-stone-400">—</span>
-                            )}
-                          </td>
-                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
-                            <div>
-                              <Signed value={r.dayPct} kind="pct" />
-                            </div>
-                            <div className="text-[11px]">
-                              <Signed value={r.dayChange || 0} />
-                            </div>
-                          </td>
-                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">{r.quantity ? formatNumber(r.quantity, 4) : '—'}</td>
-                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">{r.avgPricePLN ? fmt2(r.avgPricePLN) : '—'}</td>
-                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
-                            <div>{r.currentPricePLN ? fmt2(r.currentPricePLN) : '—'}</div>
-                            {r.currency && r.currency !== 'PLN' && r.price ? <div className="text-[11px] text-stone-500">{formatMoney(r.price, r.currency)}</div> : null}
-                          </td>
-                          <td className="px-2.5 py-2 text-right whitespace-nowrap text-stone-600 group-hover:bg-stone-50 dark:text-stone-300 dark:group-hover:bg-white/[0.02]">{daysLabel(r.since)}</td>
-                          <td className="px-2.5 py-2 text-right font-semibold group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">{fmt2(r.value)}</td>
-                          <td className="px-2.5 py-2 text-right text-stone-600 group-hover:bg-stone-50 dark:text-stone-300 dark:group-hover:bg-white/[0.02]">{formatPercent(r.share, { digits: 2 })}</td>
-                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
-                            <Signed value={r.gainPct} kind="pct" />
-                          </td>
-                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
-                            <Signed value={r.gain} />
-                          </td>
-                        </tr>
-                      ))}
+                      g.rows.map((r, idx) => {
+                        const days = holdingDays(r.since);
+                        const isSecurity = !!r.instrumentId;
+                        const stripe = idx % 2 ? 'bg-stone-50 dark:bg-[#1c1c1c]' : 'bg-white dark:bg-neutral-900';
+                        return (
+                          <tr key={r.id} className={`group border-b border-stone-200 hover:bg-blue-50/60 dark:border-white/5 dark:hover:bg-white/[0.05] ${stripe}`}>
+                            <td className={`sticky left-0 z-10 max-w-[17rem] py-1.5 pr-2 pl-0 text-left ${stripe} group-hover:bg-blue-50 dark:group-hover:bg-neutral-800`}>
+                              <div className="flex items-center gap-2">
+                                <span className="h-6 w-1 shrink-0 rounded-r" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
+                                <div className="min-w-0">
+                                  <div className="truncate" title={r.sub}>
+                                    {isSecurity && r.sub && r.sub.toUpperCase() !== r.name.toUpperCase() ? `${r.sub} (${r.name})` : r.name}
+                                  </div>
+                                  <div className="truncate text-[10px] text-stone-500 dark:text-stone-400">{r.account ? r.account.name : r.sub}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="border-l border-stone-200 px-1.5 py-1 dark:border-white/10">
+                              <RowActions
+                                row={r}
+                                onBuy={isSecurity ? () => trade(r, 'BUY') : null}
+                                onSell={isSecurity ? () => trade(r, 'SELL') : null}
+                                onHistory={r.ops?.length ? () => setOpsFor(r) : null}
+                                onChart={isSecurity && onNavigate ? () => onNavigate('charts/quotes') : null}
+                              />
+                            </td>
+                            <td className={cell}>
+                              <Arrowed value={r.dayPct} />
+                            </td>
+                            <td className={cell}>{r.quantity ? units(r.quantity) : '—'}</td>
+                            <td className={cell}>{r.avgPricePLN ? fmt2(r.avgPricePLN) : '—'}</td>
+                            <td className={cell} title={r.currency && r.currency !== 'PLN' && r.price ? formatMoney(r.price, r.currency) : undefined}>
+                              {r.currentPricePLN ? fmt2(r.currentPricePLN) : '—'}
+                            </td>
+                            <td className={cell}>{days ?? '—'}</td>
+                            <td className={cell}>{fmt2(r.value)}</td>
+                            <td className={cell}>{pct2(r.share)}</td>
+                            <td className={cell}>{r.gainPct !== null && r.gainPct !== undefined ? <Arrowed value={r.gainPct} /> : <span className="text-stone-400">—</span>}</td>
+                            <td className={`${cell} ${r.gain !== null && r.gain !== undefined ? signClass(r.gain) : ''}`}>{r.gain !== null && r.gain !== undefined ? fmt2(r.gain) : '—'}</td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 );
               })}
               <tfoot>
-                <TotalRow data={data} position="bottom" />
+                <tr className="border-t-2 border-stone-300 bg-stone-100 text-[14px] font-semibold italic dark:border-white/15 dark:bg-neutral-800">
+                  <td className="sticky left-0 z-10 bg-stone-100 px-3 py-2 text-left dark:bg-neutral-800">Razem ({data.count})</td>
+                  <td className={cell} />
+                  <td className={`${cell} ${signClass(data.dayPct)}`}>{pct2(data.dayPct)}</td>
+                  <td className={cell}>---</td>
+                  <td className={cell}>---</td>
+                  <td className={cell}>---</td>
+                  <td className={cell}>{totalDays ?? '---'}</td>
+                  <td className={cell}>{fmt2(data.total)}</td>
+                  <td className={cell}>---</td>
+                  <td className={`${cell} ${signClass(data.gainPct)}`}>{pct2(data.gainPct)}</td>
+                  <td className={`${cell} ${signClass(data.gain)}`}>{fmt2(data.gain)}</td>
+                </tr>
               </tfoot>
             </table>
           </div>
 
           {/* Lista – mobile */}
           <div className="md:hidden">
-            <div className="flex items-start justify-between gap-3 border-b border-stone-200 bg-blue-50/60 px-4 py-3 dark:border-white/10 dark:bg-blue-500/10">
+            <div className="flex items-start justify-between gap-3 bg-[#0d1b2e] px-4 py-3 text-white">
               <div>
-                <div className="text-sm font-semibold">Cały portfel</div>
-                <div className="text-[11px] tabular">
-                  dziś <Signed value={data.dayPct} kind="pct" /> · zysk <Signed value={data.gainPct} kind="pct" />
+                <div className="text-sm font-semibold">Cały Portfel</div>
+                <div className="text-[11px] text-white/70 tabular">
+                  dziś {formatPercent(data.dayPct, { sign: true })} · zwrot {formatPercent(data.gainPct, { sign: true })} · {totalDays ?? '—'} dni
                 </div>
               </div>
               <div className="text-right tabular">
                 <div className="text-sm font-semibold">{formatPLN(data.total)}</div>
-                <div className="text-[11px]">
-                  <Signed value={data.gain} />
-                </div>
+                <div className="text-[11px] text-white/80">{formatPLN(data.gain, { sign: true })}</div>
               </div>
             </div>
             {data.groups.map((g) => {
               const isOpen = !collapsed[g.id];
+              const Toggle = isOpen ? MinusSquare : PlusSquare;
               return (
                 <div key={g.id} className="border-b border-stone-200 last:border-0 dark:border-white/10">
                   <button type="button" onClick={() => toggleSection(g.id)} className="flex w-full items-start gap-2 bg-stone-100/80 px-4 py-2.5 text-left dark:bg-white/[0.05]">
-                    {isOpen ? <ChevronDown size={16} className="mt-0.5 shrink-0" /> : <ChevronRight size={16} className="mt-0.5 shrink-0" />}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold">
-                        {g.label} <span className="font-normal text-stone-500">({g.rows.length})</span>
-                      </div>
-                      <div className="text-[11px] tabular">
-                        <Signed value={g.gain} /> · <Signed value={g.gainPct} kind="pct" /> · dziś <Signed value={g.dayPct} kind="pct" />
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold tabular">{formatPLN(g.value)}</div>
-                      <div className="text-[11px] text-stone-500 tabular">{formatPercent(g.share, { digits: 1 })}</div>
+                    <Toggle size={15} className="mt-0.5 shrink-0 text-stone-500" />
+                    <div className="min-w-0 flex-1 text-[12px] leading-snug font-medium">
+                      <SectionSummary g={g} />
                     </div>
                   </button>
                   {isOpen && (
@@ -364,15 +370,12 @@ export default function PortfolioView() {
                       {g.rows.map((r) => (
                         <li key={r.id}>
                           <button type="button" onClick={() => r.ops?.length && setOpsFor(r)} className="flex w-full items-start gap-3 px-4 py-2.5 text-left">
-                            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
+                            <span className="mt-0.5 h-8 w-1 shrink-0 rounded" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="truncate text-sm font-medium">{r.name}</span>
-                                <OpIcons row={r} />
-                              </div>
+                              <div className="truncate text-sm font-medium">{r.name}</div>
                               <div className="truncate text-[11px] text-stone-500">
-                                {r.quantity && r.avgPricePLN ? `${formatNumber(r.quantity, 4)} szt. · ${fmt2(r.avgPricePLN)} → ${fmt2(r.currentPricePLN)} zł · ` : ''}
-                                {holdingDays(r.since) === null ? '' : `${daysLabel(r.since)} dni`}
+                                {r.quantity && r.avgPricePLN ? `${units(r.quantity)} szt. · ${fmt2(r.avgPricePLN)} → ${fmt2(r.currentPricePLN)} zł · ` : ''}
+                                {holdingDays(r.since) === null ? '' : `${holdingDays(r.since)} dni`}
                               </div>
                             </div>
                             <div className="text-right tabular">
@@ -389,16 +392,16 @@ export default function PortfolioView() {
                 </div>
               );
             })}
-            <div className="flex justify-between px-4 py-3 text-sm font-semibold tabular">
-              <span>Cały portfel</span>
+            <div className="flex justify-between bg-stone-100 px-4 py-3 text-sm font-semibold italic tabular dark:bg-neutral-800">
+              <span>Razem ({data.count})</span>
               <span>{formatPLN(data.total)}</span>
             </div>
           </div>
         </section>
       )}
       <p className="text-[11px] text-stone-500 dark:text-stone-500">
-        Ceny w PLN po bieżącym kursie walut. Śr. cena zakupu zawiera prowizje i przewalutowanie. Stopa zwrotu i zysk: akcje/ETF – wartość − koszt zakupu; obligacje – odsetki narosłe i wypłacone netto; konta oszczędnościowe – odsetki ponad wpłaty. Zmiana dzienna w % (pod spodem w zł); dla obligacji i
-        oszczędności = odsetki za 1 dzień. Okres inwestycji liczony w dniach od pierwszego zakupu lub wpłaty. Ikony przy walorze: wypłaty dochodu, sprzedaż, przewalutowanie. Kliknij liczbę operacji, aby zobaczyć historię.
+        * Zmiana dzienna względem poprzedniego zamknięcia; dla obligacji i oszczędności – odsetki za 1 dzień. Ceny w PLN po bieżącym kursie walut; śr. cena zakupu zawiera prowizje i przewalutowanie. Okres inwestycji w dniach od
+        pierwszego zakupu lub wpłaty. Operacje: kup, sprzedaj, historia operacji, notowania; ikony monet i strzałek oznaczają wypłacony dochód i przewalutowanie.
       </p>
 
       <Modal open={!!opsFor} onClose={() => setOpsFor(null)} title={`Operacje: ${opsFor?.name || ''}`}>
@@ -426,6 +429,47 @@ export default function PortfolioView() {
           </div>
         )}
       </Modal>
+
+      <OperationFormModal form={opForm} setForm={setOpForm} onSave={saveOperation} />
+    </div>
+  );
+}
+
+// Pasek ikon operacji przy walorze (kup, sprzedaj, historia, notowania) + wskaźniki dochodu i przewalutowania
+function RowActions({ row, onBuy, onSell, onHistory, onChart }) {
+  const ops = row.ops || [];
+  const income = ops.some((o) => /Dywidenda|Kupon|Odsetki/.test(o.type));
+  const fx = (row.fxFees || 0) > 0;
+  const btn = 'rounded p-1 text-stone-600 hover:bg-stone-200 hover:text-blue-700 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-blue-300';
+  return (
+    <div className="flex items-center gap-0.5">
+      {onBuy && (
+        <button type="button" className={btn} onClick={onBuy} title="Kup" aria-label={`Kup ${row.name}`}>
+          <ShoppingBasket size={15} />
+        </button>
+      )}
+      {onSell && (
+        <button type="button" className={btn} onClick={onSell} title="Sprzedaj" aria-label={`Sprzedaj ${row.name}`}>
+          <CircleDollarSign size={15} />
+        </button>
+      )}
+      {onHistory && (
+        <button type="button" className={`${btn} inline-flex items-center gap-0.5`} onClick={onHistory} title="Historia operacji" aria-label={`Historia operacji ${row.name}`}>
+          <History size={15} />
+          <span className="text-[10px] tabular">{ops.length}</span>
+        </button>
+      )}
+      {onChart && (
+        <button type="button" className={btn} onClick={onChart} title="Notowania" aria-label={`Notowania ${row.name}`}>
+          <LineChart size={15} />
+        </button>
+      )}
+      {(income || fx) && (
+        <span className="ml-1 inline-flex items-center gap-0.5 text-stone-400">
+          {income && <Coins size={12} aria-label="Wypłaty dochodu" />}
+          {fx && <ArrowLeftRight size={12} aria-label={`Przewalutowanie ${fmt2(row.fxFees)} zł`} />}
+        </span>
+      )}
     </div>
   );
 }

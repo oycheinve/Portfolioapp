@@ -187,10 +187,10 @@ export const CPI_PL_YOY = Object.fromEntries(
 
 // Benchmarki: symbol Yahoo + waluta; proxy = symbol instrumentu z portfela użyty offline do rekonstrukcji
 export const BENCHMARKS = {
-  SP500: { id: 'SP500', label: 'S&P 500 (PLN)', yahooSymbol: '^GSPC', currency: 'USD', proxySymbols: ['CSPX.L', 'SXR8.DE', 'VUAA.DE'] },
+  SP500: { id: 'SP500', label: 'S&P 500', yahooSymbol: '^GSPC', currency: 'USD', proxySymbols: ['CSPX.L', 'SXR8.DE', 'VUAA.DE'] },
   WIG20TR: { id: 'WIG20TR', label: 'WIG20TR', yahooSymbol: 'ETFBW20TR.WA', currency: 'PLN', proxySymbols: ['ETFBW20TR.WA'] },
   WIG: { id: 'WIG', label: 'WIG', yahooSymbol: 'WIG.WA', currency: 'PLN', proxySymbols: ['ETFBW20TR.WA'] },
-  MSCI_WORLD: { id: 'MSCI_WORLD', label: 'MSCI World (PLN)', yahooSymbol: 'IWDA.AS', currency: 'EUR', proxySymbols: ['IWDA.AS', 'VWCE.DE', 'SWDA.L'] },
+  MSCI_WORLD: { id: 'MSCI_WORLD', label: 'MSCI World', yahooSymbol: 'IWDA.AS', currency: 'EUR', proxySymbols: ['IWDA.AS', 'VWCE.DE', 'SWDA.L'] },
   CPI: { id: 'CPI', label: 'Inflacja CPI', yahooSymbol: null, currency: 'PLN', proxySymbols: [] },
 };
 

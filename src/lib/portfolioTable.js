@@ -85,6 +85,7 @@ export function buildPortfolioRows(state) {
     const buys = trades.filter((t) => t.side === 'BUY').map((t) => t.date).sort();
     rows.push({
       id: p.key,
+      instrumentId: p.instrumentId,
       ops,
       since: buys[0] || firstDate(ops),
       avgPricePLN: p.quantity > 0 ? p.costPLN / p.quantity : null,

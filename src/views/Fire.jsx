@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CalendarCheck, Flag, Flame, Gauge, Settings2, SlidersHorizontal, Target } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
@@ -10,7 +10,7 @@ import { isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../li
 import { bondBelkaRate } from '../lib/tax.js';
 import { chartChrome, seriesColor } from '../lib/colors.js';
 import { formatAxisPLN, formatNumber, formatPLN, formatPercent } from '../lib/format.js';
-import { Button, Card, Field, Input, Segmented, Slider, Toggle } from '../components/ui.jsx';
+import { Button, Card, Segmented, Slider, Toggle } from '../components/ui.jsx';
 import { Legend } from '../components/charts/chartUtils.jsx';
 import { PassiveIncomeCard } from '../components/bonds/SavingsSection.jsx';
 
@@ -36,10 +36,9 @@ function currentPassiveIncome(state) {
   return { total: div + bonds + savings, dividends: div, bonds, savings };
 }
 
-export default function FireView() {
+export default function FireView({ onNavigate }) {
   const { state, actions, isDark } = useApp();
   const fire = state.settings.fire;
-  const [showGoals, setShowGoals] = useState(false);
   const setFire = (patch) => actions.updateSettings({ fire: { ...fire, ...patch } });
   const chrome = chartChrome(isDark);
 
@@ -106,47 +105,14 @@ export default function FireView() {
         subtitle={`Cel: ${formatPLN(fire.targetMonthlyIncome)} / mies. i ${formatPLN(fire.targetNetWorth, { compact: true })} majątku do ${fire.targetYear} (w dzisiejszych zł)`}
         icon={SlidersHorizontal}
         actions={
-          <Button size="sm" variant={showGoals ? 'primary' : 'secondary'} icon={Settings2} onClick={() => setShowGoals((v) => !v)} aria-expanded={showGoals}>
-            {showGoals ? 'Ukryj opcje celu' : 'Opcje celu'}
-          </Button>
+          onNavigate && (
+            <Button size="sm" icon={Settings2} onClick={() => onNavigate('settings')} title="Cele FIRE ustawisz w zakładce Ustawienia">
+              Cele w ustawieniach
+            </Button>
+          )
         }
       >
-        {showGoals && (
-          <div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 p-4 dark:border-white/10 dark:bg-white/[0.03]">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <Target size={16} /> Cel FIRE <span className="font-normal text-stone-500">· kwoty w dzisiejszej sile nabywczej</span>
-            </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Rok docelowy">
-                  <Input type="number" min={new Date().getFullYear() + 1} max="2100" value={fire.targetYear} onChange={(e) => setFire({ targetYear: Math.max(new Date().getFullYear() + 1, Math.min(2100, Number(e.target.value) || 2055)) })} />
-                </Field>
-                <Field label="Dochód pasywny / mies.">
-                  <Input type="number" min="0" step="500" value={fire.targetMonthlyIncome} onChange={(e) => setFire({ targetMonthlyIncome: Number(e.target.value) || 0 })} />
-                </Field>
-                <Field label="Docelowy majątek całkowity" className="col-span-2">
-                  <Input type="number" min="0" step="50000" value={fire.targetNetWorth} onChange={(e) => setFire({ targetNetWorth: Number(e.target.value) || 0 })} />
-                </Field>
-              </div>
-              <div className="space-y-1.5">
-                <div className="text-xs font-medium text-stone-600 dark:text-stone-400">FIRE osiągnięte, gdy</div>
-                <Segmented
-                  size="sm"
-                  value={fire.criterion}
-                  onChange={(v) => setFire({ criterion: v })}
-                  ariaLabel="Kryterium FIRE"
-                  options={[
-                    { value: 'BOTH', label: 'Oba cele' },
-                    { value: 'INCOME', label: 'Dochód' },
-                    { value: 'NETWORTH', label: 'Majątek' },
-                  ]}
-                />
-              </div>
-              <Toggle checked={!!fire.includeOtherAssets} onChange={(v) => setFire({ includeOtherAssets: v })} label="Wliczaj nieruchomości i inne aktywa" />
-            </div>
-          </div>
-        )}
-            <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
               <Slider
                 label="Miesięczna wpłata własna"
                 value={fire.monthlyContribution}

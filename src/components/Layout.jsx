@@ -3,7 +3,6 @@ import { ArrowLeftRight, BarChart3, Coins, FileText, FlaskConical, LayoutDashboa
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
-import { upcomingReminders } from '../lib/dividends.js';
 
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 export const NAV_ITEMS = [
@@ -58,9 +57,6 @@ export function Layout({ view, onNavigate, children }) {
     const out = {};
     const count = computeAllocation(state).alerts.length;
     if (count > 0) out.allocation = count;
-    // Etap 4: terminy dywidendowe w najbliższym tygodniu
-    const soon = upcomingReminders(state, 7).length;
-    if (soon > 0) out.dividends = soon;
     return out;
   }, [state]);
 

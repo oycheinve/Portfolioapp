@@ -1,7 +1,7 @@
 // Silnik obliczeń portfela: księga zdarzeń kont, pozycje, wycena, Prawdziwy Zysk Total, TWR, CAGR.
 import { ACCOUNT_TYPES, XTB_FX_FEE_PCT } from './constants.js';
 import { getCpiTable, valueBond } from './bonds.js';
-import { belkaRateForAccount, bondBelkaRate, computeIncomeTax, limitForAccount } from './tax.js';
+import { bondBelkaRate, computeIncomeTax, limitForAccount } from './tax.js';
 
 const DAY = 86400000;
 

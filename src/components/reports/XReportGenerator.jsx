@@ -56,8 +56,8 @@ export default function XReportGenerator() {
   const [periodIdx, setPeriodIdx] = useState(0);
   const [options, setOptions] = useState({
     hideAmounts: !!saved.hideAmounts,
-    topN: saved.topN || 2,
-    hashtags: saved.hashtags ?? '#inwestowanie #dywidendy #FIRE',
+    topN: saved.topN || 1,
+    hashtags: saved.hashtags ?? '',
     handle: saved.handle || '',
   });
   const [size, setSize] = useState(saved.size || 'WIDE');
@@ -220,7 +220,7 @@ export default function XReportGenerator() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Liczba spółek w topie">
+              <Field label="Liczba ruchów (wzrost / spadek)">
                 <Select value={options.topN} onChange={(e) => setOpt({ topN: Number(e.target.value) })}>
                   {[1, 2, 3].map((n) => (
                     <option key={n} value={n}>
