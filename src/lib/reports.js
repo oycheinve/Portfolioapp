@@ -1,6 +1,6 @@
 // Etap 5: raporty okresowe – tydzień ISO, miesiąc i rok kalendarzowy (1.01–31.12).
 // Wynik okresu = wartość na koniec − wartość na początek − wpłaty netto; stopa metodą Modified Dietz.
-import { computeHoldings, isoDay, livePriceLookup, netFlows, valuePortfolio, incomeEventsWithTax, bondIncomeEvents } from './engine.js';
+import { bondIncomeEvents, computeHoldings, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -140,10 +140,7 @@ function instrumentResults(state, start, end, resolver, income) {
     if (!Number.isFinite(pStart) || !Number.isFinite(pEnd) || pStart <= 0) continue;
     const netBuys = state.trades
       .filter((t) => t.instrumentId === id && t.date > start && t.date <= end)
-      .reduce((s, t) => {
-        const amt = (Number(t.quantity) || 0) * (Number(t.price) || 0) * (Number(t.fxRate) || 1);
-        return s + (t.side === 'BUY' ? amt + (Number(t.fee) || 0) : -(amt - (Number(t.fee) || 0)));
-      }, 0);
+      .reduce((s, t) => s - tradeCashDelta(state, t), 0);
     const dividends = income.filter((i) => i.type === 'DIVIDEND' && i.instrumentId === id).reduce((s, i) => s + i.net, 0);
     const result = qEnd * pEnd - qStart * pStart - netBuys + dividends;
     out.push({

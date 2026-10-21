@@ -45,6 +45,7 @@ function AccountsSection() {
       }
       bodyClassName="p-0 sm:p-0"
     >
+      <XtbIkeToggle />
       <ul className="divide-y divide-stone-100 dark:divide-white/5">
         {state.accounts.length === 0 && <li className="px-5 py-6 text-center text-sm text-stone-500">Brak kont.</li>}
         {state.accounts.map((a) => {
@@ -58,6 +59,7 @@ function AccountsSection() {
                   <span className="truncate text-sm font-medium">{a.name}</span>
                   <Badge>{t?.label}</Badge>
                   <Badge tone={t?.belkaRate === 0 ? 'green' : 'amber'}>Belka {t?.belkaRate === 0 ? '0%' : '19%'}</Badge>
+                  {Number(a.fxConversionPct) > 0 && <Badge tone="violet">przewalutowanie {String(a.fxConversionPct).replace('.', ',')}%</Badge>}
                 </div>
                 <div className="truncate text-xs text-stone-500 dark:text-stone-400">
                   {a.institution || '—'} · {c.flows} wpłat/wypłat · {c.trades} transakcji{c.bonds ? ` · ${c.bonds} obligacji` : ''}
@@ -82,7 +84,7 @@ function AccountsSection() {
               variant="primary"
               disabled={!form?.name?.trim()}
               onClick={() => {
-                const item = { ...form, name: form.name.trim(), interestRate: Number(form.interestRate) || 0 };
+                const item = { ...form, name: form.name.trim(), interestRate: Number(form.interestRate) || 0, fxConversionPct: Number(form.fxConversionPct) || 0 };
                 actions.upsert('accounts', item);
                 actions.notify('Zapisano konto', 'success');
                 setForm(null);
@@ -113,6 +115,15 @@ function AccountsSection() {
             <Field label="Data otwarcia">
               <Input type="date" value={form.openedAt || ''} onChange={(e) => setForm({ ...form, openedAt: e.target.value })} />
             </Field>
+            {form.type !== 'SAVINGS' && (
+              <Field
+                label="Przewalutowanie przy zakupie (%)"
+                hint="Konto w PLN, a instrument w USD/EUR – prowizja doliczana do kosztu zakupu (XTB IKE: 0,05%)"
+                className="sm:col-span-2"
+              >
+                <Input type="number" step="0.01" min="0" max="5" value={form.fxConversionPct ?? ''} placeholder="0" onChange={(e) => setForm({ ...form, fxConversionPct: e.target.value })} />
+              </Field>
+            )}
             {form.type === 'SAVINGS' && (
               <>
                 <Field label="Oprocentowanie (% w skali roku)">
@@ -161,6 +172,28 @@ function AccountsSection() {
         )}
       </Modal>
     </Card>
+  );
+}
+
+// Szybkie ustawienie: zakupy na IKE w XTB rozliczane w PLN z prowizją 0,05% za przewalutowanie
+function XtbIkeToggle() {
+  const { state, actions } = useApp();
+  const ike = state.accounts.filter((a) => a.type === 'IKE');
+  if (ike.length === 0) return null;
+  const on = ike.every((a) => Number(a.fxConversionPct) === 0.05);
+  const set = (v) => {
+    for (const a of ike) actions.upsert('accounts', { ...a, fxConversionPct: v ? 0.05 : 0 });
+    actions.notify(v ? 'IKE: zakupy w PLN z przewalutowaniem 0,05% wliczanym w koszt' : 'IKE: wyłączono prowizję za przewalutowanie', 'info');
+  };
+  return (
+    <div className="border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
+      <Toggle
+        checked={on}
+        onChange={set}
+        label="IKE w XTB: zakupy w złotówkach (przewalutowanie 0,05%)"
+        description="Zagraniczne ETF-y (USD/EUR) kupowane z rachunku PLN – prowizja 0,05% doliczana do ceny zakupu i bazy kosztowej. Wartość dla każdego konta można zmienić w jego edycji."
+      />
+    </div>
   );
 }
 

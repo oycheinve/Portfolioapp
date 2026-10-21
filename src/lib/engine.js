@@ -82,9 +82,34 @@ export function incomeEventsWithTax(state) {
   });
 }
 
+// Koszty transakcji w PLN: wartość, prowizja oraz prowizja za przewalutowanie (np. XTB IKE 0,05%) –
+// naliczana, gdy konto rozlicza się w PLN, a instrument notowany jest w walucie obcej.
+export function fxConversionPct(account, instrument, trade) {
+  if (trade && trade.fxFeePct !== undefined && trade.fxFeePct !== null && trade.fxFeePct !== '') return (Number(trade.fxFeePct) || 0) / 100;
+  const pct = Number(account?.fxConversionPct) || 0;
+  const ccy = trade?.currency || instrument?.currency || 'PLN';
+  return pct > 0 && ccy !== 'PLN' ? pct / 100 : 0;
+}
+
+export function tradeAmounts(trade, account, instrument) {
+  const gross = (Number(trade.quantity) || 0) * (Number(trade.price) || 0) * (Number(trade.fxRate) || 1);
+  const fee = Number(trade.fee) || 0;
+  const fxFee = gross * fxConversionPct(account, instrument, trade);
+  return { gross, fee, fxFee, buyCost: gross + fee + fxFee, sellProceeds: gross - fee - fxFee };
+}
+
+// Wpływ transakcji na gotówkę konta (kupno ujemny, sprzedaż dodatni) – z prowizjami i przewalutowaniem
+export function tradeCashDelta(state, trade) {
+  const account = state.accounts.find((a) => a.id === trade.accountId);
+  const instrument = state.instruments.find((i) => i.id === trade.instrumentId);
+  const a = tradeAmounts(trade, account, instrument);
+  return trade.side === 'BUY' ? -a.buyCost : a.sellProceeds;
+}
+
 // Pozycje (akcje/ETF) wyliczane z transakcji metodą średniego kosztu.
 export function computeHoldings(state, asOf, accountIds) {
   const instrumentsById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
+  const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const map = new Map();
   const trades = [...state.trades]
     .filter((t) => t.date <= asOf && inFilter(accountIds, t.accountId))
@@ -105,17 +130,17 @@ export function computeHoldings(state, asOf, accountIds) {
     }
     const h = map.get(key);
     const qty = Number(t.quantity) || 0;
-    const valuePLN = qty * (Number(t.price) || 0) * (Number(t.fxRate) || 1);
-    const fee = Number(t.fee) || 0;
-    h.feesPLN += fee;
+    const amt = tradeAmounts(t, accountsById[t.accountId], instrumentsById[t.instrumentId]);
+    h.feesPLN += amt.fee + amt.fxFee;
+    h.fxFeesPLN = (h.fxFeesPLN || 0) + amt.fxFee;
     if (t.side === 'BUY') {
       h.quantity += qty;
-      h.costPLN += valuePLN + fee;
+      h.costPLN += amt.buyCost;
     } else if (t.side === 'SELL' && h.quantity > 0) {
       const sellQty = Math.min(qty, h.quantity);
       const avg = h.costPLN / h.quantity;
       const costOut = avg * sellQty;
-      h.realizedPLN += valuePLN - fee - costOut;
+      h.realizedPLN += amt.sellProceeds - costOut;
       h.quantity -= sellQty;
       h.costPLN -= costOut;
       if (h.quantity < 1e-9) {
@@ -142,9 +167,7 @@ export function computeCashBalances(state, asOf, accountIds, incomeEvents) {
   }
   for (const t of state.trades) {
     if (t.date > asOf) continue;
-    const v = (Number(t.quantity) || 0) * (Number(t.price) || 0) * (Number(t.fxRate) || 1);
-    const fee = Number(t.fee) || 0;
-    add(t.accountId, t.side === 'BUY' ? -(v + fee) : v - fee);
+    add(t.accountId, tradeCashDelta(state, t));
   }
   for (const i of incomeEvents) {
     if (i.date > asOf) continue;

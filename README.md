@@ -59,6 +59,16 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Cele roczne**: kategorie Finansowe / Rozwój / Inne, cele ręczne (+/−) lub automatyczne z danych portfela, % każdego celu i zbiorczy wskaźnik kołowy (`src/lib/goals.js`).
 - **Zamknięcie roku i przenoszenie celów**: przy pierwszym uruchomieniu w nowym roku ekran podsumowania poprzedniego roku (Sukces / Niezrealizowane) i kreator: „Przerzuć na nowy rok” (postęp od zera, edytowalny cel) lub „Archiwizuj” (wynik zamrożony w historii roku). Cele limitów IKE/IKZE dostają nowe limity z Ustawień. Ręcznie: przycisk „Zamknij rok”, cofnięcie: „Otwórz ponownie” (`src/lib/goalsRollover.js`).
 
+## Porządkowanie interfejsu (po Etapie 6)
+
+- **Przewalutowanie (XTB IKE 0,05%)**: pole konta `fxConversionPct` – przy zakupie instrumentu w walucie obcej z konta w PLN prowizja doliczana jest do kosztu zakupu i bazy kosztowej (sprzedaż: odejmowana od wpływu). Szybki przełącznik „IKE w XTB” w Ustawieniach; kalkulator dopłat używa ceny z prowizją. Silnik: `tradeAmounts` / `tradeCashDelta` w `src/lib/engine.js`.
+- **Pulpit (minimalny)**: Majątek Całkowity z dużym wykresem kołowym struktury, kluczowe wskaźniki (zysk total, YTD, CAGR, dywidendy, limit IKE), konta i szybki dostęp.
+- **Portfel** (nowa zakładka, dolny pasek): tabela pozycji w kategoriach (konta gotówkowe, akcje GPW/zagraniczne, ETF-y polskie/zagraniczne, obligacje, nieruchomości) z podsumowaniem sekcji (wartość, zysk, zmiana dzienna, udział) i filtrem checkboxów kategorii i kont (`src/lib/portfolioTable.js`).
+- **Statystyki** (nowa): Prawdziwy Zysk i wskaźniki + podsumowania miesięczne i roczne.
+- **Wykresy**: centrum wykresów z benchmarkami i mapa cieplna dnia.
+- **Kapitał bezpieczny** (nowa): obligacje, konta oszczędnościowe i gotówka na rachunkach w jednym module + odczyty CPI.
+- **Notowania** (nowa): kursy, waluty i przelicznik. **FIRE** zawiera kartę dochodu pasywnego. **Raport na X** – sam generator.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

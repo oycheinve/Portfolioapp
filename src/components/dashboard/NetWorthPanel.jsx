@@ -13,7 +13,7 @@ const RANGES = [
   { value: 'ALL', label: 'Max' },
 ];
 
-export default function NetWorthPanel({ valuation }) {
+export default function NetWorthPanel({ valuation, compact = false }) {
   const { state, actions, isDark } = useApp();
   const [range, setRange] = useState('1Y');
   const chrome = chartChrome(isDark);
@@ -50,6 +50,55 @@ export default function NetWorthPanel({ valuation }) {
   }, [state.snapshots, state.accounts, range]);
 
   const valueColor = seriesColor(0, isDark);
+
+  // Wykres kołowy struktury majątku (duży w trybie kompaktowym Pulpitu)
+  const pieBlock = (big) => (
+          <div className={big ? 'flex flex-col items-center gap-5' : 'flex flex-col gap-4 sm:flex-row sm:items-center'}>
+            <div className={`relative shrink-0 self-center ${big ? 'h-56 w-56 sm:h-64 sm:w-64' : 'h-36 w-36'}`}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={segments}
+                    dataKey="value"
+                    nameKey="label"
+                    innerRadius="64%"
+                    outerRadius="100%"
+                    paddingAngle={segments.length > 1 ? 2 : 0}
+                    stroke="none"
+                    isAnimationActive={false}
+                  >
+                    {segments.map((s) => (
+                      <Cell key={s.key} fill={assetClassColor(s.key, isDark)} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={
+                      <ChartTooltip
+                        formatter={(v) => `${formatPLN(v)} (${formatPercent(netWorth > 0 ? v / netWorth : 0, { digits: 1 })})`}
+                      />
+                    }
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-[10px] text-stone-500 dark:text-stone-400">Klasy</span>
+                <span className={big ? 'text-lg font-semibold' : 'text-sm font-semibold'}>{segments.length}</span>
+              </div>
+            </div>
+            <ul className={big ? 'grid w-full grid-cols-1 gap-1.5 text-sm' : 'grid flex-1 grid-cols-1 gap-1.5 text-sm'}>
+              {segments.map((s) => (
+                <li key={s.key} className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: assetClassColor(s.key, isDark) }} />
+                  <span className="truncate text-stone-600 dark:text-stone-300">{s.label}</span>
+                  <span className="ml-auto tabular font-medium">{formatPLN(s.value)}</span>
+                  <span className="w-14 text-right tabular text-xs text-stone-500 dark:text-stone-400">
+                    {formatPercent(netWorth > 0 ? s.value / netWorth : 0, { digits: 1 })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+  );
   const contribColor = chrome.muted;
 
   return (
@@ -86,51 +135,7 @@ export default function NetWorthPanel({ valuation }) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="relative h-36 w-36 shrink-0 self-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={segments}
-                    dataKey="value"
-                    nameKey="label"
-                    innerRadius="64%"
-                    outerRadius="100%"
-                    paddingAngle={segments.length > 1 ? 2 : 0}
-                    stroke="none"
-                    isAnimationActive={false}
-                  >
-                    {segments.map((s) => (
-                      <Cell key={s.key} fill={assetClassColor(s.key, isDark)} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    content={
-                      <ChartTooltip
-                        formatter={(v) => `${formatPLN(v)} (${formatPercent(netWorth > 0 ? v / netWorth : 0, { digits: 1 })})`}
-                      />
-                    }
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-[10px] text-stone-500 dark:text-stone-400">Klasy</span>
-                <span className="text-sm font-semibold">{segments.length}</span>
-              </div>
-            </div>
-            <ul className="grid flex-1 grid-cols-1 gap-1.5 text-sm">
-              {segments.map((s) => (
-                <li key={s.key} className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: assetClassColor(s.key, isDark) }} />
-                  <span className="truncate text-stone-600 dark:text-stone-300">{s.label}</span>
-                  <span className="ml-auto tabular font-medium">{formatPLN(s.value)}</span>
-                  <span className="w-14 text-right tabular text-xs text-stone-500 dark:text-stone-400">
-                    {formatPercent(netWorth > 0 ? s.value / netWorth : 0, { digits: 1 })}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {!compact && pieBlock(false)}
 
           <Toggle
             checked={!!state.settings.includeOtherAssets}
@@ -140,6 +145,12 @@ export default function NetWorthPanel({ valuation }) {
           />
         </div>
 
+        {compact ? (
+          <div className="flex min-w-0 flex-col justify-center">
+            <div className="mb-3 text-sm font-semibold">Struktura majątku</div>
+            {pieBlock(true)}
+          </div>
+        ) : (
         <div className="flex min-w-0 flex-col">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
@@ -195,6 +206,7 @@ export default function NetWorthPanel({ valuation }) {
             )}
           </div>
         </div>
+        )}
       </div>
     </section>
   );

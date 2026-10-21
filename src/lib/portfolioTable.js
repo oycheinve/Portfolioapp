@@ -1,0 +1,157 @@
+// Tabela „Portfel”: wszystkie pozycje majątku pogrupowane w kategorie z podsumowaniami
+import { getCpiTable, valueBond } from './bonds.js';
+import { fxToPLN, isoDay, livePriceLookup, netFlows, valuePortfolio } from './engine.js';
+import { belkaRateForAccount } from './tax.js';
+import { OTHER_ASSET_CATEGORIES } from './constants.js';
+
+export const PORTFOLIO_CATEGORIES = [
+  { id: 'CASH', label: 'Konta gotówkowe', short: 'Gotówka' },
+  { id: 'STOCK_PL', label: 'Akcje GPW', short: 'Akcje GPW' },
+  { id: 'STOCK_FOREIGN', label: 'Akcje zagraniczne', short: 'Akcje zagr.' },
+  { id: 'ETF_PL', label: 'ETF-y polskie', short: 'ETF PL' },
+  { id: 'ETF_FOREIGN', label: 'ETF-y zagraniczne', short: 'ETF zagr.' },
+  { id: 'BONDS', label: 'Obligacje skarbowe', short: 'Obligacje' },
+  { id: 'OTHER', label: 'Nieruchomości i inne', short: 'Nieruchomości' },
+];
+
+export function buildPortfolioRows(state) {
+  const today = isoDay(new Date());
+  const v = valuePortfolio(state, { asOf: today, accountIds: null, priceLookup: livePriceLookup(state) });
+  const quotes = state.prices?.quotes || {};
+  const fx = state.prices?.fx;
+  const rows = [];
+
+  // Konta gotówkowe: konta oszczędnościowe oraz wolna gotówka na rachunkach maklerskich
+  for (const a of state.accounts) {
+    const cash = v.byAccount[a.id]?.cash || 0;
+    if (Math.abs(cash) < 0.5) continue;
+    const savings = a.type === 'SAVINGS';
+    const contrib = savings ? netFlows(state, [a.id], null, today) : null;
+    const belka = belkaRateForAccount(a, state.settings);
+    const dayChange = savings ? cash * ((Number(a.interestRate) || 0) / 100 / 365) * (1 - belka) : 0;
+    rows.push({
+      id: `cash_${a.id}`,
+      category: 'CASH',
+      name: savings ? a.name : `Gotówka – ${a.name}`,
+      sub: savings ? `${Number(a.interestRate) || 0}% · kapitalizacja` : 'wolne środki',
+      accountId: a.id,
+      account: a,
+      value: cash,
+      cost: savings ? contrib : cash,
+      gain: savings ? cash - contrib : null,
+      dayChange,
+    });
+  }
+
+  // Akcje i ETF – pozycje per konto
+  for (const p of v.positions) {
+    const inst = p.instrument;
+    if (!inst) continue;
+    const q = quotes[p.instrumentId];
+    const ccy = q?.currency || inst.currency || 'PLN';
+    const foreign = ccy !== 'PLN';
+    const category = inst.kind === 'ETF' ? (foreign ? 'ETF_FOREIGN' : 'ETF_PL') : foreign ? 'STOCK_FOREIGN' : 'STOCK_PL';
+    const dayPct = q && q.prevClose ? q.price / q.prevClose - 1 : 0;
+    rows.push({
+      id: p.key,
+      category,
+      name: inst.ticker,
+      sub: inst.name,
+      accountId: p.accountId,
+      account: p.account,
+      quantity: p.quantity,
+      price: q?.price ?? p.pricePLN / fxToPLN(fx, ccy),
+      currency: ccy,
+      value: p.value,
+      cost: p.costPLN,
+      gain: p.value - p.costPLN,
+      dayChange: dayPct ? p.value - p.value / (1 + dayPct) : 0,
+      fxFees: p.fxFeesPLN || 0,
+      ter: inst.kind === 'ETF' ? inst.ter : null,
+    });
+  }
+
+  // Obligacje – per transza
+  const cpi = getCpiTable(state.settings);
+  for (const b of v.bonds) {
+    const belka = belkaRateForAccount(b.account, state.settings);
+    const val = valueBond(b, today, belka, cpi);
+    const coupons = val.coupons.reduce((s, c) => s + c.gross, 0) * (1 - belka);
+    rows.push({
+      id: `bond_${b.id}`,
+      category: 'BONDS',
+      name: b.series,
+      sub: `${b.type} · ${(val.currentRate * 100).toFixed(2)}% · wykup ${val.maturityDate}`,
+      accountId: b.accountId,
+      account: b.account,
+      quantity: Number(b.quantity) || 0,
+      price: (Number(b.quantity) || 0) > 0 ? val.netValue / Number(b.quantity) : 100,
+      currency: 'PLN',
+      value: val.netValue,
+      cost: val.nominal,
+      gain: val.accruedNet + coupons,
+      dayChange: val.matured ? 0 : (val.nominal * val.currentRate * (1 - belka)) / 365,
+    });
+  }
+
+  // Nieruchomości / inne – jeśli uwzględniane w majątku
+  if (state.settings.includeOtherAssets) {
+    for (const o of state.otherAssets || []) {
+      if (!o.includeInNetWorth) continue;
+      rows.push({
+        id: `other_${o.id}`,
+        category: 'OTHER',
+        name: o.name,
+        sub: `${OTHER_ASSET_CATEGORIES[o.category] || 'Inne'}${Number(o.liabilities) > 0 ? ` · zobowiązania ${Math.round(o.liabilities).toLocaleString('pl-PL')} zł` : ''}`,
+        accountId: null,
+        value: (Number(o.value) || 0) - (Number(o.liabilities) || 0),
+        cost: null,
+        gain: null,
+        dayChange: 0,
+      });
+    }
+  }
+  return rows;
+}
+
+// Grupy po filtrach: udział liczony względem widocznej sumy
+export function groupRows(rows, { categories, accounts }) {
+  const visible = rows.filter((r) => categories.includes(r.category) && (r.accountId === null || accounts.includes(r.accountId)));
+  const total = visible.reduce((s, r) => s + r.value, 0);
+  const groups = PORTFOLIO_CATEGORIES.map((c) => {
+    const list = visible.filter((r) => r.category === c.id).sort((a, b) => b.value - a.value);
+    const value = list.reduce((s, r) => s + r.value, 0);
+    const withGain = list.filter((r) => r.gain !== null && r.gain !== undefined);
+    const gain = withGain.reduce((s, r) => s + r.gain, 0);
+    const costBase = withGain.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+    const dayChange = list.reduce((s, r) => s + (r.dayChange || 0), 0);
+    return {
+      ...c,
+      rows: list.map((r) => ({
+        ...r,
+        share: total > 0 ? r.value / total : 0,
+        gainPct: r.gain !== null && r.cost ? r.gain / r.cost : null,
+        dayPct: r.value - r.dayChange > 0 ? r.dayChange / (r.value - r.dayChange) : 0,
+      })),
+      value,
+      gain: withGain.length ? gain : null,
+      gainPct: withGain.length && costBase > 0 ? gain / costBase : null,
+      dayChange,
+      dayPct: value - dayChange > 0 ? dayChange / (value - dayChange) : 0,
+      share: total > 0 ? value / total : 0,
+    };
+  }).filter((g) => g.rows.length > 0);
+  const gainRows = visible.filter((r) => r.gain !== null && r.gain !== undefined);
+  const gain = gainRows.reduce((s, r) => s + r.gain, 0);
+  const costBase = gainRows.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+  const dayChange = visible.reduce((s, r) => s + (r.dayChange || 0), 0);
+  return {
+    groups,
+    total,
+    gain,
+    gainPct: costBase > 0 ? gain / costBase : 0,
+    dayChange,
+    dayPct: total - dayChange > 0 ? dayChange / (total - dayChange) : 0,
+    count: visible.length,
+  };
+}

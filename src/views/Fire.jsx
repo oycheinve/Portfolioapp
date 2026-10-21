@@ -12,6 +12,7 @@ import { chartChrome, seriesColor } from '../lib/colors.js';
 import { formatAxisPLN, formatNumber, formatPLN, formatPercent } from '../lib/format.js';
 import { Card, Field, Input, Segmented, Slider, Toggle } from '../components/ui.jsx';
 import { Legend } from '../components/charts/chartUtils.jsx';
+import { PassiveIncomeCard } from '../components/bonds/SavingsSection.jsx';
 
 const MONTHS = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
 
@@ -374,6 +375,9 @@ export default function FireView() {
           </Card>
         </div>
       </div>
+
+      {/* Dochód pasywny – bieżąca baza dla celu FIRE */}
+      <PassiveIncomeCard />
     </div>
   );
 }

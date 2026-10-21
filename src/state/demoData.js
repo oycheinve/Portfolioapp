@@ -27,7 +27,7 @@ const INSTRUMENTS = [
 const FX = { PLN: 1, USD: 3.64, EUR: 4.24, GBP: 4.86, CHF: 4.56 };
 
 const ACCOUNTS = [
-  { id: 'acc_ike', name: 'IKE – XTB', type: 'IKE', institution: 'XTB', currency: 'PLN', openedAt: '2024-01-02' },
+  { id: 'acc_ike', name: 'IKE – XTB', type: 'IKE', institution: 'XTB', currency: 'PLN', openedAt: '2024-01-02', fxConversionPct: 0.05 },
   { id: 'acc_ikze', name: 'IKZE – XTB', type: 'IKZE', institution: 'XTB', currency: 'PLN', openedAt: '2024-01-02' },
   { id: 'acc_brok', name: 'Konto maklerskie – mBank', type: 'BROKERAGE', institution: 'mBank eMakler', currency: 'PLN', openedAt: '2024-02-01' },
   { id: 'acc_bonds', name: 'Obligacje skarbowe – PKO BP', type: 'BROKERAGE', institution: 'PKO BP', currency: 'PLN', openedAt: '2024-03-01' },
@@ -90,7 +90,8 @@ export function createDemoState(today = new Date()) {
     const qty = Math.floor((budget - fee) / (price * fx));
     if (qty <= 0) return;
     state.trades.push({ id: id('tr'), accountId, instrumentId: instId, date, side: 'BUY', quantity: qty, price, fxRate: fx, fee });
-    cash[accountId] = (cash[accountId] || 0) - qty * price * fx - fee;
+    const fxPct = inst.currency !== 'PLN' ? (ACCOUNTS.find((a) => a.id === accountId)?.fxConversionPct || 0) / 100 : 0;
+    cash[accountId] = (cash[accountId] || 0) - qty * price * fx * (1 + fxPct) - fee;
   };
   const sell = (accountId, instId, date, qty, fee = 0) => {
     if (date > todayIso) return;

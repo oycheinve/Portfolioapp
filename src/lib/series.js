@@ -1,7 +1,7 @@
 // Etap 3: szeregi czasowe dla Centrum Wykresów – wycena historyczna wybranego wycinka portfela,
 // wkład własny, rozbicie zysku, TWR, drawdown, benchmarki oraz dywidendy miesięczne/roczne.
 import { BENCHMARKS } from './constants.js';
-import { isoDay, netFlows, resolveAccountIds, valuePortfolio } from './engine.js';
+import { isoDay, netFlows, resolveAccountIds, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
 
@@ -102,13 +102,7 @@ function pointFor(state, sel, accountIds, date, resolver) {
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
   const inAcc = (x) => accountIds.includes(x.accountId) && x.date <= date;
   const tradeNet = (filterFn) =>
-    state.trades
-      .filter((t) => inAcc(t) && filterFn(instById[t.instrumentId]))
-      .reduce((s, t) => {
-        const amt = (Number(t.quantity) || 0) * (Number(t.price) || 0) * (Number(t.fxRate) || 1);
-        const fee = Number(t.fee) || 0;
-        return s + (t.side === 'BUY' ? amt + fee : -(amt - fee));
-      }, 0);
+    state.trades.filter((t) => inAcc(t) && filterFn(instById[t.instrumentId])).reduce((s, t) => s - tradeCashDelta(state, t), 0);
   const income = v.income.filter(inAcc);
   const divNet = (filterFn) => income.filter((i) => i.type === 'DIVIDEND' && filterFn(instById[i.instrumentId])).reduce((s, i) => s + i.net, 0);
   const couponsNet = income.filter((i) => i.source === 'BOND').reduce((s, i) => s + i.net, 0);

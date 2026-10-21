@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, BookOpen, Coins, FileText, Flame, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Target, Wallet, X, Zap } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, BookOpen, Coins, FileText, Flame, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, Radio, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X, Zap } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -8,12 +8,16 @@ import { upcomingReminders } from '../lib/dividends.js';
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard, mobile: true },
-  { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
-  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i Obligacje', icon: LineChart, mobile: true },
+  { id: 'portfolio', label: 'Portfel', longLabel: 'Portfel', icon: Table2, mobile: true },
+  { id: 'stats', label: 'Statystyki', longLabel: 'Statystyki', icon: BarChart3 },
+  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy', icon: LineChart, mobile: true },
   { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins, mobile: true },
+  { id: 'safe', label: 'Bezpieczne', longLabel: 'Kapitał bezpieczny', icon: Shield },
+  { id: 'quotes', label: 'Notowania', longLabel: 'Notowania', icon: Radio },
+  { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
   { id: 'fire', label: 'FIRE', longLabel: 'FIRE 2055', icon: Flame, mobile: true },
-  { id: 'reports', label: 'Raporty', longLabel: 'Raporty i podsumowania', icon: FileText },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
+  { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText },
   { id: 'journal', label: 'Dziennik', longLabel: 'Dziennik decyzji', icon: BookOpen },
   { id: 'stress', label: 'Co jeśli', longLabel: 'Symulator „Co jeśli”', icon: Zap },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
@@ -67,7 +71,7 @@ export function Layout({ view, onNavigate, children }) {
     <div className="flex min-h-screen">
       {/* Nawigacja boczna – desktop */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-stone-200 bg-white px-3 py-5 md:flex dark:border-white/10 dark:bg-neutral-900">
-        <div className="mb-6 flex items-center gap-2.5 px-2">
+        <div className="mb-4 flex shrink-0 items-center gap-2.5 px-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white dark:bg-blue-500">
             <Wallet size={18} />
           </span>
@@ -76,7 +80,7 @@ export function Layout({ view, onNavigate, children }) {
             <div className="text-[11px] text-stone-500 dark:text-stone-400">Portfel i cele</div>
           </div>
         </div>
-        <nav className="flex flex-col gap-1" aria-label="Główna nawigacja">
+        <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1" aria-label="Główna nawigacja">
           {NAV_ITEMS.map((item) => {
             const active = item.id === view;
             const Icon = item.icon;
@@ -86,7 +90,7 @@ export function Layout({ view, onNavigate, children }) {
                 type="button"
                 onClick={() => onNavigate(item.id)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+                className={`flex shrink-0 items-center gap-3 rounded-lg px-3 py-1.5 text-left text-sm font-medium transition-colors ${
                   active
                     ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
                     : 'text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5'
@@ -106,7 +110,7 @@ export function Layout({ view, onNavigate, children }) {
             );
           })}
         </nav>
-        <div className="mt-auto space-y-2 px-2 text-[11px] text-stone-500 dark:text-stone-500">
+        <div className="mt-3 shrink-0 space-y-2 px-2 text-[11px] text-stone-500 dark:text-stone-500">
           {state.meta.demo && (
             <div className="rounded-lg bg-amber-50 px-2.5 py-2 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
               Tryb demonstracyjny – dane przykładowe. Wyczyść je w ustawieniach.
@@ -184,7 +188,7 @@ export function Layout({ view, onNavigate, children }) {
                 <X size={18} />
               </button>
             </div>
-            <div className="grid gap-1">
+            <div className="grid max-h-[65vh] grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
               {NAV_ITEMS.filter((n) => !n.mobile).map((item) => {
                 const Icon = item.icon;
                 const active = item.id === view;
@@ -196,7 +200,7 @@ export function Layout({ view, onNavigate, children }) {
                       setMoreOpen(false);
                       onNavigate(item.id);
                     }}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium ${
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
                       active ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : 'hover:bg-stone-100 dark:hover:bg-white/5'
                     }`}
                   >
@@ -221,7 +225,7 @@ function BottomTab({ item, active, badge, onClick }) {
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${active ? 'text-blue-600 dark:text-blue-400' : 'text-stone-500 dark:text-stone-400'}`}
+      className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium sm:text-[11px] ${active ? 'text-blue-600 dark:text-blue-400' : 'text-stone-500 dark:text-stone-400'}`}
     >
       <span className="relative">
         <Icon size={20} />

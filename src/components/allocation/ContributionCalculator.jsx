@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, Calculator, Check, ClipboardCopy, Droplets, Info } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { planContribution } from '../../lib/allocation.js';
-import { computeLimitUsage, isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
+import { computeLimitUsage, fxConversionPct, isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
 import { ACCOUNT_TYPES } from '../../lib/constants.js';
 import { formatDate, formatMoney, formatNumber, formatPLN, formatPercent, todayISO } from '../../lib/format.js';
 import { Badge, Button, Card, Field, Input, Select, Toggle } from '../ui.jsx';
@@ -91,9 +91,13 @@ export default function ContributionCalculator({ analysis }) {
   }, [state.instruments, state.prices.quotes]);
 
   const plan = useMemo(() => {
-    const items = analysis.instruments.map((r) => ({ id: r.key, value: r.value, target: r.target, pricePLN: r.price.pricePLN }));
+    // Cena efektywna: kurs × (1 + przewalutowanie konta), gdy instrument jest w walucie obcej
+    const items = analysis.instruments.map((r) => {
+      const fxPct = fxConversionPct(account, r.instrument);
+      return { id: r.key, value: r.value, target: r.target, pricePLN: Number.isFinite(r.price.pricePLN) ? r.price.pricePLN * (1 + fxPct) : r.price.pricePLN };
+    });
     return planContribution({ items, amount: investable, minOrder: Number(calc.minOrder) || 0, fractional: !!calc.fractional });
-  }, [analysis.instruments, investable, calc.minOrder, calc.fractional]);
+  }, [analysis.instruments, investable, calc.minOrder, calc.fractional, account]);
 
   const rowsById = Object.fromEntries(plan.rows.map((r) => [r.id, r]));
   const limitExceeded = limitInfo && limitInfo.limit > 0 && deposit > limitInfo.remaining + 0.005;
@@ -265,7 +269,8 @@ export default function ContributionCalculator({ analysis }) {
               </ul>
             )}
             <p className="text-[11px] text-stone-500 dark:text-stone-500">
-              Kursy z modułu notowań ({state.prices.status === 'live' ? 'na żywo' : 'symulowane/ostatnie znane'}). Plan nie uwzględnia prowizji maklerskich. Wagi liczone w części akcje + ETF
+              Kursy z modułu notowań ({state.prices.status === 'live' ? 'na żywo' : 'symulowane/ostatnie znane'})
+              {Number(account?.fxConversionPct) > 0 ? `, z przewalutowaniem ${String(account.fxConversionPct).replace('.', ',')}% dla instrumentów w walutach obcych` : ''}. Plan nie uwzględnia prowizji maklerskich. Wagi liczone w części akcje + ETF
               wybranego zakresu kont.
             </p>
           </div>
