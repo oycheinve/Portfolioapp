@@ -1,9 +1,12 @@
-import { ArrowLeftRight, LayoutDashboard, Monitor, Moon, RefreshCw, Settings, Sun, Wallet } from 'lucide-react';
+import { useMemo } from 'react';
+import { ArrowLeftRight, LayoutDashboard, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
+import { computeAllocation } from '../lib/allocation.js';
 
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard },
+  { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
@@ -38,6 +41,12 @@ export function Layout({ view, onNavigate, children }) {
   const theme = state.settings.theme;
   const ThemeIcon = THEME_ICON[theme] || Monitor;
   const current = NAV_ITEMS.find((n) => n.id === view);
+  // Liczba pozycji przekraczających próg odchylenia – znaczek przy zakładce alokacji
+  const badges = useMemo(() => {
+    if (state.accounts.length === 0) return {};
+    const count = computeAllocation(state).alerts.length;
+    return count > 0 ? { allocation: count } : {};
+  }, [state]);
 
   return (
     <div className="flex min-h-screen">
@@ -70,6 +79,14 @@ export function Layout({ view, onNavigate, children }) {
               >
                 <Icon size={18} />
                 {item.longLabel}
+                {badges[item.id] && (
+                  <span
+                    className="ml-auto rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white"
+                    title={`${badges[item.id]} pozycji poza progiem odchylenia`}
+                  >
+                    {badges[item.id]}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -138,7 +155,14 @@ export function Layout({ view, onNavigate, children }) {
                 active ? 'text-blue-600 dark:text-blue-400' : 'text-stone-500 dark:text-stone-400'
               }`}
             >
-              <Icon size={20} />
+              <span className="relative">
+                <Icon size={20} />
+                {badges[item.id] && (
+                  <span className="absolute -top-1 -right-2 min-w-4 rounded-full bg-red-600 px-1 text-[9px] leading-4 font-semibold text-white">
+                    {badges[item.id]}
+                  </span>
+                )}
+              </span>
               {item.label}
             </button>
           );

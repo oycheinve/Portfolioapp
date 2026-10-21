@@ -3,10 +3,12 @@ import { AppProvider } from './state/AppContext.jsx';
 import { Layout, NAV_ITEMS, Toast } from './components/Layout.jsx';
 import Dashboard from './views/Dashboard.jsx';
 import CashRegister from './views/CashRegister.jsx';
+import AllocationView from './views/Allocation.jsx';
 import SettingsView from './views/Settings.jsx';
 
 const VIEWS = {
   dashboard: Dashboard,
+  allocation: AllocationView,
   cash: CashRegister,
   settings: SettingsView,
 };

@@ -218,6 +218,24 @@ export function createDemoState(today = new Date()) {
     log: [{ level: 'info', message: 'Załadowano dane demonstracyjne' }],
   };
 
+  // Wagi docelowe (Etap 2)
+  state.settings.allocation = {
+    ...state.settings.allocation,
+    classTargets: { STOCKS: 15, ETF: 55, BONDS: 15, CASH: 15 },
+    instrumentTargets: {
+      inst_vwce: 40,
+      inst_cspx: 15,
+      inst_eimi: 8,
+      inst_wig20tr: 10,
+      inst_pko: 7,
+      inst_cdr: 5,
+      inst_pzu: 5,
+      inst_dnp: 4,
+      inst_pkn: 6,
+    },
+    calculator: { ...state.settings.allocation.calculator, accountId: 'acc_ike' },
+  };
+
   // Pozostałe aktywa
   state.otherAssets = [
     { id: 'oth_flat', name: 'Mieszkanie – Kraków', category: 'REAL_ESTATE', value: 780000, liabilities: 310000, includeInNetWorth: true, note: 'Wartość szacunkowa, hipoteka jako zobowiązanie' },

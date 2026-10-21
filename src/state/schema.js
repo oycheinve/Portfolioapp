@@ -16,6 +16,22 @@ export const COLLECTIONS = [
   'snapshots', // dzienne migawki wartości kont (historia, TWR)
 ];
 
+// Etap 2: wagi docelowe i ustawienia kalkulatora dopłat
+export function defaultAllocation() {
+  return {
+    scope: 'ALL', // filtr kont, jak w statystykach: 'ALL' | 'TYPE:IKE' | id konta
+    classTargets: { STOCKS: 0, ETF: 0, BONDS: 0, CASH: 0 }, // % całego portfela (bez nieruchomości)
+    instrumentTargets: {}, // { [instrumentId]: % } – wagi w części akcje + ETF, suma 100%
+    driftThreshold: 5, // próg alertu w punktach procentowych
+    calculator: {
+      accountId: null,
+      minOrder: 0,
+      fractional: false,
+      includeCash: false,
+    },
+  };
+}
+
 export function defaultSettings() {
   return {
     theme: 'system', // 'light' | 'dark' | 'system'
@@ -30,6 +46,7 @@ export function defaultSettings() {
       annualLimit: 0,
       note: 'Parametry OKI do uzupełnienia po wejściu w życie ustawy.',
     },
+    allocation: defaultAllocation(),
     priceMode: 'auto', // 'auto' | 'mock'
     corsProxy: 'https://corsproxy.io/?url=',
     autoRefreshMinutes: 0,
@@ -76,6 +93,13 @@ export function migrateState(raw) {
     ...(raw.settings || {}),
     contributionLimits: { ...base.settings.contributionLimits, ...(raw.settings?.contributionLimits || {}) },
     oki: { ...base.settings.oki, ...(raw.settings?.oki || {}) },
+    allocation: {
+      ...base.settings.allocation,
+      ...(raw.settings?.allocation || {}),
+      classTargets: { ...base.settings.allocation.classTargets, ...(raw.settings?.allocation?.classTargets || {}) },
+      instrumentTargets: { ...(raw.settings?.allocation?.instrumentTargets || {}) },
+      calculator: { ...base.settings.allocation.calculator, ...(raw.settings?.allocation?.calculator || {}) },
+    },
   };
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
   out.prices = {
