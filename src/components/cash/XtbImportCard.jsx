@@ -4,7 +4,7 @@ import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES } from '../../lib/constants.js';
 import { accountFxPct } from '../../lib/engine.js';
 import { readSpreadsheet } from '../../lib/xlsx.js';
-import { KIND_LABELS, analyzeXtb, buildXtbImport } from '../../lib/xtbImport.js';
+import { KIND_LABELS, analyzeXtb, analyzeXtbOpenPositions, buildXtbImport, buildXtbOpenImport, findOpenPositionsSheet } from '../../lib/xtbImport.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
 import { Badge, Button, Card, Input, Select } from '../ui.jsx';
 
@@ -45,9 +45,16 @@ export default function XtbImportCard() {
     setFileName(file.name);
     try {
       const sheets = await readSpreadsheet(file);
-      const a = analyzeXtb(sheets, { state, accountId });
-      setAnalysis(a);
-      setMapping(Object.fromEntries(Object.entries(a.symbols).map(([sym, s]) => [sym, { ...s, name: s.ticker }])));
+      // Raport XTB z arkuszem „Open Positions” → import wyłącznie otwartych pozycji; inaczej historia operacji gotówkowych
+      if (findOpenPositionsSheet(sheets)) {
+        const a = analyzeXtbOpenPositions(sheets, { state });
+        setAnalysis(a);
+        setMapping(a.symbols);
+      } else {
+        const a = analyzeXtb(sheets, { state, accountId });
+        setAnalysis(a);
+        setMapping(Object.fromEntries(Object.entries(a.symbols).map(([sym, s]) => [sym, { ...s, name: s.ticker }])));
+      }
     } catch (e) {
       setError(e.message || 'Nie udało się odczytać pliku.');
     } finally {
@@ -66,7 +73,7 @@ export default function XtbImportCard() {
 
   // Konto można zmienić także po wczytaniu pliku – podgląd przelicza się dla nowego konta
   const plan = useMemo(() => {
-    if (!analysis || !account) return null;
+    if (!analysis || !account || analysis.mode === 'OPEN') return null;
     return buildXtbImport(analysis, mapping, { state, account, fxPct: accountFxPct(account) });
   }, [analysis, mapping, state, account]);
 
@@ -85,7 +92,7 @@ export default function XtbImportCard() {
   };
 
   const sum = (list, f = (x) => x.amount) => list.reduce((s, x) => s + (Number(f(x)) || 0), 0);
-  const kindCounts = analysis ? analysis.ops.reduce((acc, o) => ({ ...acc, [o.kind]: (acc[o.kind] || 0) + 1 }), {}) : {};
+  const kindCounts = analysis?.ops ? analysis.ops.reduce((acc, o) => ({ ...acc, [o.kind]: (acc[o.kind] || 0) + 1 }), {}) : {};
   const stats = plan && [
     { label: 'Wpłaty', count: plan.cashflows.filter((c) => c.type === 'DEPOSIT').length, value: sum(plan.cashflows.filter((c) => c.type === 'DEPOSIT')) },
     { label: 'Wypłaty', count: plan.cashflows.filter((c) => c.type === 'WITHDRAWAL').length, value: sum(plan.cashflows.filter((c) => c.type === 'WITHDRAWAL')) },
@@ -170,9 +177,22 @@ export default function XtbImportCard() {
         {fileName && <span className="text-xs text-stone-500">{fileName}</span>}
       </div>
       <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">
-        W xStation: Historia konta → Operacje gotówkowe → Eksportuj (Excel). Obsługiwane eksporty po polsku i angielsku. Ponowny import tego samego pliku nie tworzy duplikatów (rozpoznawanie po ID operacji XTB).
+        Raport z xStation (Historia konta → Eksportuj, Excel): importowane są wyłącznie otwarte pozycje z arkusza „Open Positions” – każda transza z ceną i datą otwarcia, koszt w PLN wg XTB. Plik CSV bez tego arkusza = historia operacji gotówkowych. Ponowny import tego samego pliku nie tworzy duplikatów (rozpoznawanie po ID operacji XTB).
       </p>
       {error && <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
+
+      {analysis?.mode === 'OPEN' && account && (
+        <OpenPositionsPreview
+          analysis={analysis}
+          mapping={mapping}
+          setMap={setMap}
+          account={account}
+          onDone={() => {
+            setAnalysis(null);
+            setFileName('');
+          }}
+        />
+      )}
 
       {/* Krok 3: podgląd */}
       {plan && (
@@ -317,5 +337,137 @@ export default function XtbImportCard() {
         </div>
       )}
     </Card>
+  );
+}
+
+// Podgląd i import otwartych pozycji (arkusz „Open Positions”)
+function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
+  const { state, actions } = useApp();
+  const hasOther = state.trades.some((t) => t.accountId === account.id && !String(t.id).startsWith(`xtbpos_${account.id}_`));
+  const [fundCash, setFundCash] = useState(true);
+  const [replaceAccount, setReplaceAccount] = useState(hasOther);
+  const plan = useMemo(() => buildXtbOpenImport(analysis, mapping, { state, account, fundCash, replaceAccount }), [analysis, mapping, state, account, fundCash, replaceAccount]);
+  const t = analysis.totals;
+
+  const run = () => {
+    if (plan.newInstruments.length) actions.addMany('instruments', plan.newInstruments);
+    actions.removeMany('trades', [...plan.removeTrades, ...plan.trades.map((x) => x.id)]);
+    actions.removeMany('cashflows', [...plan.removeCashflows, ...plan.cashflows.map((x) => x.id)]);
+    actions.addMany('trades', plan.trades);
+    if (plan.cashflows.length) actions.addMany('cashflows', plan.cashflows);
+    if (Object.keys(plan.quotes).length) actions.mergeQuotes(plan.quotes);
+    actions.notify(`Zaimportowano otwarte pozycje XTB na „${account.name}”: ${analysis.groups.length} walorów, ${plan.trades.length} transz`, 'success');
+    onDone();
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="text-xs font-semibold text-stone-500 uppercase">3. Otwarte pozycje („{analysis.sheetName}”) → konto „{account.name}”</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          ['Walory / transze', `${analysis.groups.length} / ${t.lots}`],
+          ['Koszt zakupu (PLN)', formatPLN(t.cost)],
+          ['Wartość wg XTB', formatPLN(t.value)],
+          ['Zysk netto wg XTB', formatPLN(t.profit, { sign: true })],
+        ].map(([label, value]) => (
+          <div key={label} className="min-w-0 rounded-lg bg-stone-50 px-3 py-2 dark:bg-white/[0.03]">
+            <div className="truncate text-[11px] text-stone-500">{label}</div>
+            <div className="truncate text-sm font-semibold tabular">{value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-white/10">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead>
+            <tr className="border-b border-stone-100 text-left text-xs text-stone-500 dark:border-white/5">
+              <th className="px-3 py-2 font-medium">Ticker</th>
+              <th className="px-3 py-2 font-medium">Instrument w aplikacji</th>
+              <th className="px-3 py-2 font-medium">Rodzaj</th>
+              <th className="px-3 py-2 font-medium">Waluta</th>
+              <th className="px-3 py-2 text-right font-medium">Liczba jednostek</th>
+              <th className="px-3 py-2 text-right font-medium">Śr. cena zakupu</th>
+              <th className="px-3 py-2 text-right font-medium">Cena bieżąca</th>
+              <th className="px-3 py-2 text-right font-medium">Wartość (PLN)</th>
+              <th className="px-3 py-2 text-right font-medium">Zysk (PLN)</th>
+            </tr>
+          </thead>
+          <tbody className="tabular">
+            {analysis.groups.map((g) => {
+              const m = mapping[g.ticker];
+              const avg = g.lots.reduce((s, l) => s + l.quantity * l.openPrice, 0) / g.lots.reduce((s, l) => s + l.quantity, 0);
+              return (
+                <tr key={g.ticker} className="border-b border-stone-100 last:border-0 dark:border-white/5">
+                  <td className="px-3 py-1.5">
+                    <div className="font-medium">{g.ticker}</div>
+                    <div className="text-[11px] text-stone-500">
+                      {g.name} · {g.lots.length} transz
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <Select value={m.instrumentId || ''} onChange={(e) => setMap(g.ticker, { instrumentId: e.target.value || null })} className="h-8 w-auto text-xs" aria-label={`Instrument dla ${g.ticker}`}>
+                      <option value="">+ Nowy: {m.ticker}</option>
+                      {state.instruments.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.ticker} – {i.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {!m.instrumentId && (
+                      <Select value={m.kind} onChange={(e) => setMap(g.ticker, { kind: e.target.value })} className="h-8 w-auto text-xs" aria-label={`Rodzaj ${g.ticker}`}>
+                        {KIND_OPTIONS.map((k) => (
+                          <option key={k.value} value={k.value}>
+                            {k.label}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {!m.instrumentId ? (
+                      <Select value={m.currency} onChange={(e) => setMap(g.ticker, { currency: e.target.value })} className="h-8 w-auto text-xs" aria-label={`Waluta ${g.ticker}`}>
+                        {CURRENCIES.map((c) => (
+                          <option key={c}>{c}</option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <span className="text-xs text-stone-500">istniejący</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-right">{g.volume.toLocaleString('pl-PL', { maximumFractionDigits: 6 })}</td>
+                  <td className="px-3 py-1.5 text-right">{avg.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td className="px-3 py-1.5 text-right">{(g.currentPrice || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td className="px-3 py-1.5 text-right">{formatPLN(g.value)}</td>
+                  <td className={`px-3 py-1.5 text-right ${g.profit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatPLN(g.profit, { sign: true })}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="space-y-2 text-sm">
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={fundCash} onChange={(e) => setFundCash(e.target.checked)} />
+          <span>
+            Dodaj wpłaty pokrywające koszt zakupu każdej transzy <span className="text-stone-500">(gotówka konta = 0 zł, wkład = koszt pozycji – bez ujemnego salda)</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={replaceAccount} onChange={(e) => setReplaceAccount(e.target.checked)} />
+          <span>
+            Zastąp dotychczasowe transakcje i wpłaty konta „{account.name}” <span className="text-stone-500">(zalecane – konto będzie odzwierciedlać dokładnie otwarte pozycje z XTB{plan.otherTrades ? `; usunie ${plan.otherTrades} innych transakcji` : ''})</span>
+          </span>
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="primary" icon={CheckCircle2} onClick={run}>
+          Importuj {plan.trades.length} transz na „{account.name}”
+        </Button>
+        <Button onClick={onDone}>Anuluj</Button>
+        {plan.updated > 0 && <Badge>{plan.updated} transz już było – zostaną zaktualizowane</Badge>}
+        {plan.removeTrades.length > 0 && <Badge tone="amber">usuniętych transakcji: {plan.removeTrades.length}</Badge>}
+      </div>
+    </div>
   );
 }

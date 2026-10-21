@@ -111,6 +111,11 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Wagi instrumentów**: tylko aktywa obecne w portfelu (wartość > 0 zł) – w Alokacji, kalkulatorze dopłat i liście aktywów w Wykresach.
 - **Kalkulator opłacalności ETF** (Symulacje): porównanie do 5 ETF-ów – TER, przewalutowanie XTB 0,05% (kupno i sprzedaż), podatek wg konta; wykres utraconego wyniku lub wartości, tabela z kosztem TER/FX, stopą netto i różnicą do najtańszego; pod spodem analiza TER ETF-ów z portfela.
 
+## Obligacje bez ujemnej gotówki, import otwartych pozycji XTB
+
+- **Obligacje**: zakup obligacji bez wcześniejszej wpłaty nie tworzy już ujemnej gotówki („Gotówka – … −6000 zł”). Brakująca kwota staje się automatyczną wpłatą „Środki na zakup obligacji” (oznaczenie „auto · obligacje” w rejestrze), przeliczaną przy każdej zmianie; znika, gdy samodzielnie wpiszesz wpłatę. Nie dotyczy IKE/IKZE (limity wpłat).
+- **Import XTB – „Open Positions”**: z raportu .xlsx importowane są wyłącznie otwarte pozycje: każda transza jako kupno (ID pozycji, data i cena otwarcia, koszt w PLN = wartość − zysk netto wg XTB), ceny bieżące z raportu jako notowania (do czasu odświeżenia z Yahoo), opcjonalnie wpłaty pokrywające zakupy i zastąpienie dotychczasowych transakcji konta. Ponowny import aktualizuje transze i usuwa sprzedane. Waluta instrumentu wykrywana z relacji wartość PLN / cena. Pliki CSV bez tego arkusza – historia operacji gotówkowych (obsługa formatu „OPEN BUY LPP.PL 0.0011 @ 25200.00” i kolumny Ticker).
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

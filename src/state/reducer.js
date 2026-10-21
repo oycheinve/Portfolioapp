@@ -64,6 +64,23 @@ export function reducer(state, action) {
       });
     }
 
+    case 'MERGE_QUOTES':
+      // Notowania z zewnętrznego źródła (np. ceny bieżące z raportu XTB) – nadpisywane przy kolejnym odświeżeniu
+      return { ...state, prices: { ...state.prices, quotes: { ...(state.prices?.quotes || {}), ...action.payload } } };
+
+    case 'REMOVE_MANY': {
+      const { collection, ids } = action.payload;
+      if (!COLLECTIONS.includes(collection) || !ids?.length) return state;
+      const drop = new Set(ids);
+      return touch({ ...state, [collection]: state[collection].filter((x) => !drop.has(x.id)) });
+    }
+
+    case 'SYNC_BOND_FUNDING': {
+      // Podmienia automatyczne wpłaty finansujące zakup obligacji na aktualnie wyliczone
+      const items = action.payload || [];
+      return touch({ ...state, cashflows: [...state.cashflows.filter((c) => !String(c.id).startsWith('bondfund_')), ...items] });
+    }
+
     case 'CLEAR_HISTORY': {
       // Usuwa całą historię operacji (transakcje, wpłaty/wypłaty, dywidendy/odsetki, harmonogram dywidend, migawki).
       // Konta, ustawienia i cele zostają; obligacje i instrumenty – opcjonalnie.

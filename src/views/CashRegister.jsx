@@ -217,8 +217,16 @@ export default function CashRegister() {
                           {c.instrumentId && instById[c.instrumentId] && <Badge tone="blue">{instById[c.instrumentId].ticker}</Badge>} {c.note}
                         </td>
                         <td className="px-5 py-1 text-right whitespace-nowrap">
-                          <IconButton icon={Pencil} label="Edytuj" onClick={() => openEdit(c)} />
-                          <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} className="hover:text-red-600" />
+                          {c.source === 'AUTO_BOND' ? (
+                            <span title="Wpłata dodana automatycznie przy zakupie obligacji bez środków – zmienia się razem z obligacją">
+                              <Badge>auto · obligacje</Badge>
+                            </span>
+                          ) : (
+                            <>
+                              <IconButton icon={Pencil} label="Edytuj" onClick={() => openEdit(c)} />
+                              <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} className="hover:text-red-600" />
+                            </>
+                          )}
                         </td>
                       </tr>
                     );
@@ -236,7 +244,7 @@ export default function CashRegister() {
                     <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isDep ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}>
                       {isDep ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
                     </span>
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openEdit(c)}>
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => c.source !== 'AUTO_BOND' && openEdit(c)}>
                       <div className="truncate text-sm font-medium">{acc?.name || 'Usunięte konto'}</div>
                       <div className="truncate text-xs text-stone-500 dark:text-stone-400">
                         {formatDate(c.date)}
@@ -247,7 +255,7 @@ export default function CashRegister() {
                       {isDep ? '+' : '−'}
                       {formatPLN(Number(c.amount))}
                     </div>
-                    <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} />
+                    {c.source === 'AUTO_BOND' ? <Badge>auto</Badge> : <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} />}
                   </li>
                 );
               })}

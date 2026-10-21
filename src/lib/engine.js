@@ -188,6 +188,39 @@ export function computeCashBalances(state, asOf, accountIds, incomeEvents) {
   return balances;
 }
 
+// Zakup obligacji bez wcześniejszej wpłaty nie może zostawiać ujemnej gotówki na koncie obligacyjnym/maklerskim:
+// brakująca kwota staje się automatyczną wpłatą „Środki na zakup obligacji” (id `bondfund_<id obligacji>`).
+// Wpłaty liczone od nowa przy każdej zmianie – gdy użytkownik sam wpłaci środki, automatyczna wpłata znika.
+// IKE/IKZE pomijane (wpłaty wliczałyby się do limitu) – tam obowiązuje ręczna wpłata.
+export const BOND_FUNDING_PREFIX = 'bondfund_';
+
+export function bondFundingCashflows(state, today = isoDay(new Date())) {
+  const eligible = new Set(state.accounts.filter((a) => !ACCOUNT_TYPES[a.type]?.hasLimit && a.type !== 'SAVINGS').map((a) => a.id));
+  const bonds = state.bonds
+    .filter((b) => eligible.has(b.accountId) && b.purchaseDate)
+    .sort((a, b) => (a.purchaseDate < b.purchaseDate ? -1 : a.purchaseDate > b.purchaseDate ? 1 : String(a.id) < String(b.id) ? -1 : 1));
+  if (bonds.length === 0) return [];
+  const income = [...incomeEventsWithTax(state), ...bondIncomeEvents(state, today)];
+  let working = { ...state, cashflows: state.cashflows.filter((c) => !String(c.id).startsWith(BOND_FUNDING_PREFIX)) };
+  const out = [];
+  for (const b of bonds) {
+    const balance = computeCashBalances(working, b.purchaseDate, [b.accountId], income)[b.accountId] || 0;
+    if (balance >= -0.005) continue;
+    const cf = {
+      id: `${BOND_FUNDING_PREFIX}${b.id}`,
+      accountId: b.accountId,
+      date: b.purchaseDate,
+      type: 'DEPOSIT',
+      amount: Math.round(-balance * 100) / 100,
+      note: `Środki na zakup obligacji ${b.series || b.type || ''} (automatycznie)`.replace('  ', ' '),
+      source: 'AUTO_BOND',
+    };
+    out.push(cf);
+    working = { ...working, cashflows: [...working.cashflows, cf] };
+  }
+  return out;
+}
+
 // Wycena kont na dzień `asOf` przy zadanej funkcji cen (instrument -> cena PLN)
 export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
   const day = asOf || isoDay(new Date());

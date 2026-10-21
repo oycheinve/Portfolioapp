@@ -1,4 +1,5 @@
-// Import historii operacji gotówkowych z XTB (eksport „Cash operations” / „Historia operacji gotówkowych” – .xlsx lub CSV).
+// Import z XTB. Plik .xlsx z arkuszem „Open Positions” → import wyłącznie otwartych pozycji (każda transza osobno).
+// Bez tego arkusza (np. CSV) → historia operacji gotówkowych („Cash Operations” / „Historia operacji gotówkowych”).
 // Rozpoznaje wpłaty, wypłaty, zakupy i sprzedaże akcji/ETF, dywidendy, odsetki oraz podatki (dopinane do dywidend/odsetek).
 // Identyfikatory wpisów oparte na ID operacji XTB – ponowny import tego samego pliku nie tworzy duplikatów.
 
@@ -7,7 +8,7 @@ const HEADER_ALIASES = {
   type: ['type', 'typ', 'rodzaj'],
   time: ['time', 'czas', 'data', 'date', 'data operacji'],
   comment: ['comment', 'komentarz', 'opis'],
-  symbol: ['symbol', 'instrument'],
+  symbol: ['ticker', 'symbol', 'instrument'],
   amount: ['amount', 'kwota', 'wartość', 'wartosc'],
 };
 
@@ -30,7 +31,8 @@ const EXCHANGES = {
   FI: { currency: 'EUR', yahoo: (b) => `${b}.HE` },
   IE: { currency: 'EUR', yahoo: (b) => `${b}.IR` },
   US: { currency: 'USD', yahoo: (b) => b },
-  UK: { currency: 'GBP', yahoo: (b) => `${b}.L` },
+  // ETF-y UCITS z Londynu w XTB notowane zwykle w USD (CSPX, VWRA, EIMI) – walutę można zmienić w podglądzie
+  UK: { currency: 'USD', yahoo: (b) => `${b}.L` },
   CH: { currency: 'CHF', yahoo: (b) => `${b}.SW` },
 };
 
@@ -76,9 +78,15 @@ function findHeader(rows) {
   for (let i = 0; i < Math.min(rows.length, 60); i += 1) {
     const cells = rows[i].map(norm);
     const col = {};
+    // Priorytet aliasów wg kolejności (np. „Ticker” przed „Instrument”)
     for (const [key, aliases] of Object.entries(HEADER_ALIASES)) {
-      const idx = cells.findIndex((c) => aliases.includes(c));
-      if (idx >= 0) col[key] = idx;
+      for (const alias of aliases) {
+        const idx = cells.indexOf(alias);
+        if (idx >= 0) {
+          col[key] = idx;
+          break;
+        }
+      }
     }
     if (col.type !== undefined && col.amount !== undefined && col.time !== undefined) return { index: i, col };
   }
@@ -116,7 +124,8 @@ export function classifyOperation(type, comment, amount) {
 
 // „OPEN BUY 2/3 @ 66.88” → ilość 2, cena 66,88
 export function parseTradeComment(comment) {
-  const m = /(?:OPEN|CLOSE)\s+(?:BUY|SELL)\s+([\d.,\s]+?)(?:\/[\d.,\s]+)?\s*@\s*([\d.,\s]+)/i.exec(String(comment || ''));
+  // Formaty: „OPEN BUY 10 @ 66.88”, „OPEN BUY 2/3 @ 66.88”, „OPEN BUY LPP.PL 0.0011 @ 25200.00”, „CLOSE BUY KRU.PL 0.1393/1 @ 382.70”
+  const m = /(?:OPEN|CLOSE)\s+(?:BUY|SELL)\s+(?:[A-Z0-9_-]+\.[A-Z]{2}\s+)?([\d.,]+)(?:\/[\d.,]+)?\s*@\s*([\d.,\s]+)/i.exec(String(comment || ''));
   if (!m) return null;
   const quantity = parseNumber(m[1]);
   const price = parseNumber(m[2]);
@@ -286,5 +295,247 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
     ...fresh,
     duplicates: cashflows.length + trades.length + income.length - fresh.cashflows.length - fresh.trades.length - fresh.income.length,
     skipped,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Otwarte pozycje („Open Positions”): wiersz zbiorczy instrumentu + wiersze transz (ID pozycji, BUY, wolumen,
+// wartość w PLN, cena bieżąca, cena otwarcia, data otwarcia, zysk netto w PLN).
+
+const OPEN_ALIASES = {
+  product: ['product', 'produkt'],
+  position: ['instrument/position', 'instrument/pozycja', 'instrument', 'pozycja'],
+  ticker: ['ticker', 'symbol'],
+  category: ['category', 'kategoria'],
+  type: ['type', 'typ'],
+  volume: ['volume', 'wolumen', 'liczba'],
+  value: ['value', 'wartość', 'wartosc'],
+  currentPrice: ['current price', 'cena bieżąca', 'cena biezaca', 'aktualna cena'],
+  openPrice: ['open price', 'cena otwarcia'],
+  openTime: ['open time (utc)', 'open time', 'czas otwarcia (utc)', 'czas otwarcia', 'data otwarcia'],
+  profit: ['net profit', 'zysk netto', 'profit', 'zysk'],
+};
+
+function findOpenHeader(rows) {
+  for (let i = 0; i < Math.min(rows.length, 60); i += 1) {
+    const cells = rows[i].map(norm);
+    const col = {};
+    for (const [key, aliases] of Object.entries(OPEN_ALIASES)) {
+      for (const alias of aliases) {
+        const idx = cells.indexOf(alias);
+        if (idx >= 0) {
+          col[key] = idx;
+          break;
+        }
+      }
+    }
+    if (col.ticker !== undefined && col.volume !== undefined && col.openPrice !== undefined && col.value !== undefined) return { index: i, col };
+  }
+  return null;
+}
+
+// Arkusz otwartych pozycji (po nazwie albo po nagłówku z kolumnami Volume / Open price / Value)
+export function findOpenPositionsSheet(sheets) {
+  const named = sheets.filter((s) => /open\s*position|otwarte\s*pozycje/i.test(s.name));
+  for (const sheet of [...named, ...sheets.filter((s) => !named.includes(s))]) {
+    const header = findOpenHeader(sheet.rows);
+    if (header && (named.includes(sheet) || sheets.length === 1)) return { sheet, header };
+  }
+  return null;
+}
+
+// Waluta notowań z relacji wartość PLN / (wolumen × cena bieżąca) – najbliższy kurs z tabeli NBP/aplikacji
+function inferCurrency(ticker, valuePLN, volume, currentPrice, fxRates) {
+  const fallback = describeSymbol(ticker).currency;
+  if (/\.PL$/i.test(ticker)) return 'PLN';
+  const local = volume * currentPrice;
+  if (!(local > 0) || !(valuePLN > 0)) return fallback;
+  const ratio = valuePLN / local;
+  const candidates = Object.entries({ PLN: 1, ...fxRates }).filter(([, r]) => Number(r) > 0);
+  let best = fallback;
+  let bestErr = Infinity;
+  for (const [ccy, rate] of candidates) {
+    const err = Math.abs(Math.log(ratio / Number(rate)));
+    if (err < bestErr) {
+      bestErr = err;
+      best = ccy;
+    }
+  }
+  return bestErr < 0.15 ? best : fallback;
+}
+
+export function analyzeXtbOpenPositions(sheets, { state }) {
+  const found = findOpenPositionsSheet(sheets);
+  if (!found) throw new Error('W pliku nie ma arkusza „Open Positions” (Otwarte pozycje) z kolumnami Ticker, Volume, Value i Open price.');
+  const { sheet, header } = found;
+  const { col } = header;
+  const fxRates = state.prices?.fx?.rates || {};
+  const groups = [];
+  let current = null;
+  const cell = (row, key) => (col[key] === undefined ? '' : row[col[key]]);
+  for (let r = header.index + 1; r < sheet.rows.length; r += 1) {
+    const row = sheet.rows[r];
+    const ticker = String(cell(row, 'ticker') ?? '').trim().toUpperCase();
+    if (!ticker) continue;
+    const type = norm(cell(row, 'type'));
+    const volume = parseNumber(cell(row, 'volume'));
+    const value = parseNumber(cell(row, 'value'));
+    if (!type) {
+      // Wiersz zbiorczy instrumentu: nazwa w kolumnie Instrument/Position, kategoria STOCK/ETF
+      current = {
+        ticker,
+        name: String(cell(row, 'position') ?? '').trim() || ticker,
+        category: String(cell(row, 'category') ?? '').trim().toUpperCase(),
+        volume: Number.isFinite(volume) ? volume : 0,
+        value: Number.isFinite(value) ? value : 0,
+        profit: parseNumber(cell(row, 'profit')) || 0,
+        lots: [],
+      };
+      groups.push(current);
+      continue;
+    }
+    if (type !== 'buy' && type !== 'kupno') continue;
+    if (!current || current.ticker !== ticker) {
+      current = { ticker, name: ticker, category: '', volume: 0, value: 0, profit: 0, lots: [], synthetic: true };
+      groups.push(current);
+    }
+    const lot = {
+      positionId: String(cell(row, 'position') ?? '').trim() || `${ticker}_${r}`,
+      quantity: volume,
+      value,
+      currentPrice: parseNumber(cell(row, 'currentPrice')),
+      openPrice: parseNumber(cell(row, 'openPrice')),
+      date: parseDate(cell(row, 'openTime')),
+      profit: parseNumber(cell(row, 'profit')) || 0,
+      row: r + 1,
+    };
+    if (!(lot.quantity > 0) || !(lot.openPrice >= 0) || !lot.date) continue;
+    current.lots.push(lot);
+  }
+  const valid = groups.filter((g) => g.lots.length > 0);
+  for (const g of valid) {
+    if (g.synthetic) {
+      g.volume = g.lots.reduce((s, l) => s + l.quantity, 0);
+      g.value = g.lots.reduce((s, l) => s + (l.value || 0), 0);
+      g.profit = g.lots.reduce((s, l) => s + l.profit, 0);
+    }
+    const ref = g.lots.find((l) => l.currentPrice > 0) || g.lots[0];
+    g.currentPrice = ref.currentPrice;
+    g.currency = inferCurrency(g.ticker, ref.value, ref.quantity, ref.currentPrice, fxRates);
+    g.cost = g.lots.reduce((s, l) => s + (l.value - l.profit), 0);
+  }
+  const symbols = {};
+  for (const g of valid) {
+    const info = describeSymbol(g.ticker);
+    const kind = g.category === 'ETF' || g.category === 'ETC' || g.category === 'ETN' ? 'ETF' : g.category === 'STOCK' ? 'STOCK' : info.kind;
+    const merged = { ...info, currency: g.currency, kind, yahooSymbol: g.currency === 'USD' && info.symbol.endsWith('.US') ? info.ticker : info.yahooSymbol };
+    const existing = matchInstrument(state, merged);
+    symbols[g.ticker] = { ...merged, name: g.name, instrumentId: existing?.id || null, existingLabel: existing ? `${existing.ticker} · ${existing.name}` : null };
+  }
+  return {
+    mode: 'OPEN',
+    sheetName: sheet.name,
+    groups: valid,
+    symbols,
+    totals: {
+      value: valid.reduce((s, g) => s + g.value, 0),
+      profit: valid.reduce((s, g) => s + g.profit, 0),
+      cost: valid.reduce((s, g) => s + g.cost, 0),
+      lots: valid.reduce((s, g) => s + g.lots.length, 0),
+    },
+  };
+}
+
+// Otwarte pozycje → transakcje kupna (każda transza osobno, koszt w PLN = wartość − zysk netto z XTB),
+// opcjonalnie wpłaty pokrywające zakupy (gotówka konta = 0) i zastąpienie wcześniejszych transakcji konta.
+export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash = true, replaceAccount = false }) {
+  const accountId = account.id;
+  const tradePrefix = `xtbpos_${accountId}_`;
+  const fundPrefix = `xtbposfund_${accountId}_`;
+  const newInstruments = [];
+  const instIdFor = {};
+  for (const g of analysis.groups) {
+    const m = mapping[g.ticker];
+    if (m?.instrumentId) {
+      instIdFor[g.ticker] = m.instrumentId;
+      continue;
+    }
+    const id = `inst_xtb_${m.ticker.toLowerCase().replace(/[^a-z0-9]/g, '')}_${m.currency.toLowerCase()}`;
+    instIdFor[g.ticker] = id;
+    if (!state.instruments.some((i) => i.id === id) && !newInstruments.some((i) => i.id === id)) {
+      newInstruments.push({ id, ticker: m.ticker, yahooSymbol: m.yahooSymbol, name: m.name || m.ticker, kind: m.kind, currency: m.currency, ter: 0, sector: '', mockPrice: g.currentPrice || undefined });
+    }
+  }
+  const trades = [];
+  const cashflows = [];
+  for (const g of analysis.groups) {
+    const m = mapping[g.ticker];
+    const ccy = m?.instrumentId ? state.instruments.find((i) => i.id === m.instrumentId)?.currency || m.currency : m.currency;
+    for (const lot of g.lots) {
+      const cost = Math.round((lot.value - lot.profit) * 100) / 100;
+      const gross = lot.quantity * lot.openPrice;
+      const trade = {
+        id: `${tradePrefix}${lot.positionId}`,
+        accountId,
+        instrumentId: instIdFor[g.ticker],
+        date: lot.date,
+        side: 'BUY',
+        quantity: lot.quantity,
+        price: lot.openPrice,
+        currency: ccy,
+        note: `XTB: otwarta pozycja ${lot.positionId}`,
+        source: 'XTB_OPEN',
+      };
+      if (ccy === 'PLN') {
+        trade.fxRate = 1;
+        trade.fee = Math.max(0, Math.round((cost - gross) * 100) / 100);
+        if (trade.fee < 0.01) trade.fee = 0;
+      } else {
+        // Koszt z XTB zawiera już przewalutowanie – kurs dobrany tak, by koszt w aplikacji = koszt z raportu
+        trade.fxRate = gross > 0 ? Math.round((cost / gross) * 1e6) / 1e6 : 1;
+        trade.fee = 0;
+        trade.fxFeePct = 0;
+      }
+      trades.push(trade);
+      if (fundCash && cost > 0) {
+        cashflows.push({ id: `${fundPrefix}${lot.positionId}`, accountId, date: lot.date, type: 'DEPOSIT', amount: cost, note: `Wpłata na zakup ${g.ticker} (import otwartych pozycji XTB)`, source: 'XTB_OPEN' });
+      }
+    }
+  }
+  // Ceny bieżące z raportu XTB jako notowania – tylko gdy brak notowania na żywo (live z Yahoo ma pierwszeństwo)
+  const quotes = {};
+  const now = new Date().toISOString();
+  for (const g of analysis.groups) {
+    const id = instIdFor[g.ticker];
+    const existing = state.prices?.quotes?.[id];
+    const live = existing && existing.source && !/mock|xtb/i.test(existing.source);
+    if (!live && g.currentPrice > 0) {
+      const ccy = mapping[g.ticker]?.instrumentId ? state.instruments.find((i) => i.id === id)?.currency || g.currency : mapping[g.ticker]?.currency || g.currency;
+      quotes[id] = { price: g.currentPrice, prevClose: g.currentPrice, currency: ccy, source: 'XTB (raport)', updatedAt: now };
+    }
+  }
+
+  const newTradeIds = new Set(trades.map((t) => t.id));
+  const newCashIds = new Set(cashflows.map((c) => c.id));
+  // Usuwane: transze z poprzedniego importu, których już nie ma (sprzedane), albo – przy zastąpieniu – wszystkie transakcje i wpłaty konta
+  const removeTrades = state.trades.filter((t) => t.accountId === accountId && (replaceAccount ? !newTradeIds.has(t.id) : String(t.id).startsWith(tradePrefix) && !newTradeIds.has(t.id))).map((t) => t.id);
+  const removeCashflows = state.cashflows
+    .filter((c) => c.accountId === accountId && (replaceAccount ? !newCashIds.has(c.id) && c.source !== 'AUTO_BOND' : String(c.id).startsWith(fundPrefix) && !newCashIds.has(c.id)))
+    .map((c) => c.id);
+  const existingTrade = new Set(state.trades.map((t) => t.id));
+  const existingCash = new Set(state.cashflows.map((c) => c.id));
+  return {
+    newInstruments,
+    trades,
+    cashflows,
+    quotes,
+    upsertTrades: trades,
+    upsertCashflows: cashflows,
+    added: trades.filter((t) => !existingTrade.has(t.id)).length,
+    updated: trades.filter((t) => existingTrade.has(t.id)).length,
+    addedCash: cashflows.filter((c) => !existingCash.has(c.id)).length,
+    removeTrades,
+    removeCashflows,
+    otherTrades: state.trades.filter((t) => t.accountId === accountId && !String(t.id).startsWith(tradePrefix)).length,
   };
 }

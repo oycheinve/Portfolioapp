@@ -89,10 +89,13 @@ export async function readXlsx(buffer) {
   const rels = {};
   if (relsXml) for (const r of byTag(parseXml(relsXml), 'Relationship')) rels[r.getAttribute('Id')] = r.getAttribute('Target');
   const sheets = [];
-  for (const s of byTag(workbook, 'sheet')) {
+  const sheetRefs = [];
+  byTag(workbook, 'sheet').forEach((s, index) => sheetRefs.push({ s, index }));
+  for (const { s, index } of sheetRefs) {
     const rid = s.getAttribute('r:id') || s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
     let target = rels[rid] || '';
-    target = target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`;
+    // Brak relacji w pliku → standardowa ścieżka arkusza
+    target = !target ? `xl/worksheets/sheet${index + 1}.xml` : target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`;
     const xml = await readText(files, target);
     if (!xml) continue;
     const rows = [];
