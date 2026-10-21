@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Calculator, Droplets, Flame, FlaskConical, Zap } from 'lucide-react';
+import { Calculator, Droplets, Flame, FlaskConical, Scale, Zap } from 'lucide-react';
+import EtfCostCalculator from '../components/simulations/EtfCostCalculator.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { computeAllocation } from '../lib/allocation.js';
 import ContributionCalculator from '../components/allocation/ContributionCalculator.jsx';
@@ -11,6 +12,7 @@ export const SIMULATIONS = [
   { id: 'fire', label: 'Symulacja FIRE', description: 'Niezależność finansowa – ścieżka majątku i dochodu pasywnego', icon: Flame },
   { id: 'stress', label: 'Stress test / Co jeśli', description: 'Korekta rynków i zmiana kursów walut', icon: Zap },
   { id: 'topup', label: 'Kalkulator Inteligentnej Dopłaty', description: 'Plan zakupów wyrównujący wagi docelowe (z przewalutowaniem XTB 0,05%)', icon: Droplets },
+  { id: 'etf', label: 'Kalkulator opłacalności ETF', description: 'TER, przewalutowanie XTB 0,05% i podatek – długoterminowy wpływ kosztów', icon: Scale },
   { id: 'calculator', label: 'Kalkulator inwestycyjny', description: 'Procent składany, TER i podatki wg konta', icon: Calculator },
 ];
 
@@ -65,6 +67,7 @@ export default function SimulationsView({ param, onNavigate }) {
       {type === 'fire' && <FireView onNavigate={onNavigate} />}
       {type === 'stress' && <StressTestView onNavigate={onNavigate} />}
       {type === 'topup' && <TopUpSimulation onNavigate={onNavigate} />}
+      {type === 'etf' && <EtfCostCalculator />}
       {type === 'calculator' && <InvestmentCalculator />}
     </div>
   );

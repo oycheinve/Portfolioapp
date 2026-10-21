@@ -46,7 +46,7 @@ export default function TerAnalysis({ analysis }) {
   const barColor = seriesColor(1, isDark);
 
   return (
-    <Card title="Analiza kosztów TER" subtitle={`Roczny koszt utrzymania ETF i przewalutowanie ${fxPct}% przy kupnie i sprzedaży`} icon={Percent} bodyClassName="p-0 sm:p-0">
+    <Card title="Analiza kosztów TER – ETF-y w portfelu" subtitle={`Roczny koszt utrzymania ETF i przewalutowanie ${fxPct}% przy kupnie i sprzedaży`} icon={Percent} bodyClassName="p-0 sm:p-0">
       {rows.length === 0 ? (
         <EmptyState icon={Percent} title="Brak ETF w wybranym zakresie kont" />
       ) : (

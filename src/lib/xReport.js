@@ -82,7 +82,7 @@ function weeklyText({ metrics, totals, options }) {
 // Szablon miesięczny – dosłownie wg wzoru użytkownika
 function monthlyText({ metrics, options }) {
   const { hideAmounts } = options;
-  const lines = ['📊 Podsumowanie miesiąca:'];
+  const lines = ['📊Podsumowanie miesiąca:'];
   if (!hideAmounts) {
     lines.push(`Wpłaty: ${tplZl(metrics.deposits)}`);
     lines.push(`Zysk/strata: ${tplZl(metrics.profit, true)}`);

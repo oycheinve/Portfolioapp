@@ -78,7 +78,8 @@ export default function XReportGenerator() {
     persist(patch);
   };
 
-  const periods = useMemo(() => listPeriods(state, type), [state, type]);
+  // Podsumowania miesięczne wyłącznie dla pełnych, zamkniętych miesięcy (październik raportujemy do końca listopada)
+  const periods = useMemo(() => listPeriods(state, type).filter((p) => type !== 'MONTH' || p.closed), [state, type]);
   const period = periods[Math.min(periodIdx, periods.length - 1)];
   const resolver = useMemo(() => createPriceResolver(state), [state]);
   const metrics = useMemo(() => (period ? periodMetrics(state, period, resolver) : null), [state, period, resolver]);
@@ -147,7 +148,28 @@ export default function XReportGenerator() {
   };
   const intentUrl = `https://x.com/intent/post?text=${encodeURIComponent(text)}`;
 
-  if (!period || !metrics) return <Card title="Raport na X">Brak danych do raportu.</Card>;
+  if (!period || !metrics) {
+    return (
+      <Card title="Raport na X">
+        <div className="space-y-3">
+          <Segmented
+            options={TYPES}
+            value={type}
+            onChange={(t) => {
+              setType(t);
+              setPeriodIdx(0);
+              setEdited(null);
+              persist({ type: t });
+            }}
+            ariaLabel="Okres raportu"
+          />
+          <p className="text-sm text-stone-500">
+            {type === 'MONTH' ? 'Brak zamkniętego miesiąca – podsumowanie miesięczne pojawi się po zakończeniu pierwszego pełnego miesiąca.' : 'Brak danych do raportu.'}
+          </p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">

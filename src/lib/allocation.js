@@ -63,7 +63,8 @@ export function computeAllocation(state, scopeOverride) {
   const sleeveValue = t.market;
   const instrumentTargets = alloc.instrumentTargets || {};
   const instruments = state.instruments
-    .filter((inst) => byInstrument.has(inst.id) || (Number(instrumentTargets[inst.id]) || 0) > 0)
+    // Tylko aktywa faktycznie posiadane (wartość > 0 zł) – bez pozycji sprzedanych, wyczyszczonych i historycznych
+    .filter((inst) => (byInstrument.get(inst.id)?.value || 0) > 0.005)
     .map((inst) => {
       const held = byInstrument.get(inst.id) || { value: 0, quantity: 0, cost: 0, fxFees: 0, fxSellFee: 0 };
       return {
@@ -79,7 +80,7 @@ export function computeAllocation(state, scopeOverride) {
     .sort((a, b) => b.value - a.value || b.target - a.target);
 
   const classTargetSum = sumTargets(alloc.classTargets);
-  const instrumentTargetSum = sumTargets(instrumentTargets);
+  const instrumentTargetSum = sumTargets(Object.fromEntries(instruments.map((i) => [i.key, instrumentTargets[i.key]])));
   const classTargetsSet = classTargetSum > 0;
   const instrumentTargetsSet = instrumentTargetSum > 0;
 

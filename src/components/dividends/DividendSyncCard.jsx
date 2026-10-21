@@ -5,7 +5,17 @@ import { runDividendSync } from '../../lib/dividendSync.js';
 import { formatDateTime } from '../../lib/format.js';
 import { Button, Toggle } from '../ui.jsx';
 
-// Automatyczne dane dywidend: synchronizacja przy otwarciu zakładki (raz na 12 h) lub na żądanie
+// Synchronizacja przy otwarciu zakładki Dywidendy (raz na 12 h) – niezależnie od tego, która sekcja jest rozwinięta
+export function useDividendAutoSync() {
+  const { state, actions } = useApp();
+  useEffect(() => {
+    const prefs = state.settings.dividendPrefs || {};
+    const age = prefs.lastSync ? (Date.now() - new Date(prefs.lastSync).getTime()) / 3600000 : Infinity;
+    if (prefs.autoSync !== false && age > 12) runDividendSync(state, actions, { silent: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+// Automatyczne dane dywidend: ustawienia i synchronizacja na żądanie
 export default function DividendSyncCard() {
   const { state, actions } = useApp();
   const prefs = state.settings.dividendPrefs || {};
@@ -20,11 +30,6 @@ export default function DividendSyncCard() {
       setBusy(false);
     }
   };
-
-  useEffect(() => {
-    const age = prefs.lastSync ? (Date.now() - new Date(prefs.lastSync).getTime()) / 3600000 : Infinity;
-    if (prefs.autoSync !== false && age > 12) sync(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const auto = state.dividendSchedule.filter((d) => d.source === 'YAHOO' || d.source === 'HISTORY');
   return (

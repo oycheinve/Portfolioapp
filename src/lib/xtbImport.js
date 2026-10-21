@@ -86,12 +86,25 @@ function findHeader(rows) {
 }
 
 // Rodzaj operacji z kolumny „Type” (EN/PL) i komentarza
+export const KIND_LABELS = {
+  DEPOSIT: { label: 'Wpłata', tone: 'green' },
+  WITHDRAWAL: { label: 'Wypłata', tone: 'red' },
+  BUY: { label: 'Kupno', tone: 'blue' },
+  SELL: { label: 'Sprzedaż', tone: 'amber' },
+  DIVIDEND: { label: 'Dywidenda', tone: 'green' },
+  INTEREST: { label: 'Odsetki', tone: 'green' },
+  TAX: { label: 'Podatek', tone: 'violet' },
+  INTEREST_TAX: { label: 'Podatek od odsetek', tone: 'violet' },
+  FEE: { label: 'Prowizja', tone: 'neutral' },
+  UNKNOWN: { label: 'Nierozpoznane', tone: 'neutral' },
+};
+
 export function classifyOperation(type, comment, amount) {
   const t = norm(type);
   const c = String(comment || '').toUpperCase();
-  if (/withholding|podatek|tax/.test(t)) return /interest|odsetk/.test(t) ? 'INTEREST_TAX' : 'TAX';
+  if (/withholding|podatek|tax/.test(t)) return /interest|odset/.test(t) ? 'INTEREST_TAX' : 'TAX';
   if (/divid|dywid/.test(t)) return 'DIVIDEND';
-  if (/interest|odsetk/.test(t)) return 'INTEREST';
+  if (/interest|odset/.test(t)) return 'INTEREST';
   if (/purchase|zakup|kupno/.test(t) || /^OPEN BUY/.test(c)) return 'BUY';
   if (/sale|sell|sprzeda/.test(t) || (/close/.test(t) && /CLOSE BUY/.test(c)) || /^CLOSE BUY/.test(c)) return 'SELL';
   if (/withdraw|wypłat|wyplat/.test(t)) return 'WITHDRAWAL';
@@ -150,14 +163,15 @@ export function analyzeXtb(sheets, { state, accountId }) {
     const date = parseDate(row[col.time]);
     if (!type || !Number.isFinite(amount) || !date) continue;
     const comment = col.comment !== undefined ? String(row[col.comment] ?? '') : '';
-    const symbol = col.symbol !== undefined ? String(row[col.symbol] ?? '').trim() : '';
+    // Symbol z kolumny albo z komentarza (np. „XTB.PL PLN WHT 19%” przy podatku bez symbolu)
+    const symbol = (col.symbol !== undefined ? String(row[col.symbol] ?? '').trim() : '') || (/^([A-Z0-9]+\.[A-Z]{2})\b/.exec(comment.trim()) || [])[1] || '';
     const xtbId = col.id !== undefined && row[col.id] !== '' ? String(row[col.id]).trim() : `${date}_${r}`;
     ops.push({ row: r + 1, xtbId, type: String(type), kind: classifyOperation(type, comment, amount), date, amount, comment, symbol });
   }
 
   const symbols = {};
   for (const o of ops) {
-    if (!o.symbol || !['BUY', 'SELL', 'DIVIDEND', 'TAX'].includes(o.kind)) continue;
+    if (!o.symbol || !['BUY', 'SELL', 'DIVIDEND', 'TAX', 'FEE'].includes(o.kind)) continue;
     if (!symbols[o.symbol.toUpperCase()]) {
       const info = describeSymbol(o.symbol);
       const existing = matchInstrument(state, info);
@@ -193,6 +207,7 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
   const income = [];
   const skipped = [];
   const taxes = [];
+  const fees = [];
   for (const o of analysis.ops) {
     const id = `${prefix}${o.xtbId}`;
     const sym = o.symbol.toUpperCase();
@@ -234,6 +249,8 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
       income.push({ id, accountId, date: o.date, type: 'INTEREST', gross: Math.round(o.amount * 100) / 100, foreignTax: 0, note: `XTB: ${o.type}`, source: 'XTB' });
     } else if (o.kind === 'TAX' || o.kind === 'INTEREST_TAX') {
       taxes.push(o);
+    } else if (o.kind === 'FEE' && sym) {
+      fees.push(o);
     } else {
       skipped.push({ ...o, reason: o.kind === 'FEE' ? 'opłata bez powiązanej transakcji' : 'nieznany typ operacji' });
     }
@@ -249,6 +266,13 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
         : income.filter((i) => i.type === 'INTEREST' && dayDiff(i.date, t.date) <= 5)[0];
     if (target) target.foreignTax = Math.round((target.foreignTax + Math.abs(t.amount)) * 100) / 100;
     else skipped.push({ ...t, reason: 'podatek bez dopasowanej dywidendy/odsetek' });
+  }
+
+  // Prowizje: dopięcie do transakcji tego samego instrumentu z tego samego dnia
+  for (const f of fees) {
+    const target = trades.find((t) => t.instrumentId === instIdFor[f.symbol.toUpperCase()] && t.date === f.date);
+    if (target) target.fee = Math.round(((Number(target.fee) || 0) + Math.abs(f.amount)) * 100) / 100;
+    else skipped.push({ ...f, reason: 'prowizja bez transakcji z tego dnia' });
   }
 
   const known = (col, item) => state[col].some((x) => x.id === item.id);

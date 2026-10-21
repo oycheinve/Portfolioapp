@@ -365,7 +365,7 @@ export function Dropdown({ label, icon: Icon, badge, children, align = 'left', t
 
 // Akordeon sekcji: lista zwijanych pozycji, rozwinięte zapamiętywane w localStorage (klucz storageKey).
 // items: [{ id, title, subtitle, icon, badge, render: () => węzeł }] – treść renderowana tylko po rozwinięciu.
-export function Accordion({ items, storageKey, defaultOpen = [] }) {
+export function Accordion({ items, storageKey, defaultOpen = [], exclusive = false }) {
   const [open, setOpen] = useState(() => {
     try {
       const saved = storageKey ? JSON.parse(localStorage.getItem(storageKey) || 'null') : null;
@@ -375,7 +375,8 @@ export function Accordion({ items, storageKey, defaultOpen = [] }) {
     }
   });
   const toggle = (id) => {
-    const next = open.includes(id) ? open.filter((x) => x !== id) : [...open, id];
+    // exclusive: rozwinięta jest tylko jedna sekcja naraz (wybór jak z listy)
+    const next = open.includes(id) ? open.filter((x) => x !== id) : exclusive ? [id] : [...open, id];
     setOpen(next);
     if (!storageKey) return;
     try {

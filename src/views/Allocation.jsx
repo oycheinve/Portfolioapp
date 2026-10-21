@@ -1,14 +1,13 @@
 import { useMemo } from 'react';
-import { AlertTriangle, BellRing, Layers, ListChecks, Percent, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, BellRing, Layers, ListChecks, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { computeAllocation, unitPricePLN } from '../lib/allocation.js';
+import { computeAllocation } from '../lib/allocation.js';
 import { assetClassColor } from '../lib/colors.js';
 import { formatPLN } from '../lib/format.js';
 import { Accordion, Card, Field, Input } from '../components/ui.jsx';
 import { AccountFilterSelect } from '../components/dashboard/PortfolioStatsCard.jsx';
 import AllocationDonut, { instrumentColorMap } from '../components/allocation/AllocationDonut.jsx';
 import DeviationList, { formatDeviation } from '../components/allocation/DeviationList.jsx';
-import TerAnalysis from '../components/allocation/TerAnalysis.jsx';
 
 // Skaluje wagi do sumy 100% (2 miejsca po przecinku, reszta z zaokrągleń trafia do największej wagi)
 function normalizeTo100(targets, decimals = 2) {
@@ -32,25 +31,15 @@ export default function AllocationView() {
   const analysis = useMemo(() => computeAllocation(state), [state]);
   const setAlloc = (patch) => actions.updateSettings({ allocation: { ...alloc, ...patch } });
 
-  // Wszystkie instrumenty – także nieposiadane, aby móc nadać im wagę docelową
-  const instrumentRows = useMemo(() => {
-    const byKey = Object.fromEntries(analysis.instruments.map((r) => [r.key, r]));
-    const rows = state.instruments.map(
-      (inst) =>
-        byKey[inst.id] || {
-          key: inst.id,
-          label: inst.ticker,
-          value: 0,
-          weight: 0,
-          target: (Number(alloc.instrumentTargets?.[inst.id]) || 0) / 100,
-          devPP: -(Number(alloc.instrumentTargets?.[inst.id]) || 0),
-          devPLN: -((Number(alloc.instrumentTargets?.[inst.id]) || 0) / 100) * analysis.sleeveValue,
-          instrument: inst,
-          price: unitPricePLN(state, inst),
-        },
-    );
-    return rows.map((r) => ({ ...r, sub: `${r.instrument.kind === 'ETF' ? 'ETF' : 'Akcja'} · ${r.instrument.name}` })).sort((a, b) => b.value - a.value || b.target - a.target);
-  }, [analysis, state, alloc.instrumentTargets]);
+  // Wyłącznie aktywa obecne w portfelu (wartość > 0 zł)
+  const instrumentRows = useMemo(
+    () =>
+      analysis.instruments
+        .filter((r) => r.value > 0.005)
+        .map((r) => ({ ...r, sub: `${r.instrument.kind === 'ETF' ? 'ETF' : 'Akcja'} · ${r.instrument.name}` }))
+        .sort((a, b) => b.value - a.value),
+    [analysis],
+  );
 
   const instrumentColors = useMemo(() => instrumentColorMap(state, isDark), [state, isDark]);
 
@@ -135,19 +124,12 @@ export default function AllocationView() {
                 targets={instrumentTargets}
                 threshold={analysis.threshold}
                 onTargetChange={(key, v) => setAlloc({ instrumentTargets: { ...instrumentTargets, [key]: v } })}
-                onNormalize={() => setAlloc({ instrumentTargets: normalizeTo100(instrumentTargets) })}
+                onNormalize={() => setAlloc({ instrumentTargets: normalizeTo100(Object.fromEntries(instrumentRows.map((r) => [r.key, instrumentTargets[r.key] || 0]))) })}
                 onSetCurrent={() => setAlloc({ instrumentTargets: currentAsTargets(instrumentRows.filter((r) => r.value > 0)) })}
                 onClear={() => setAlloc({ instrumentTargets: {} })}
                 emptyText="Brak instrumentów – dodaj transakcje lub instrumenty."
               />
             ),
-          },
-          {
-            id: 'ter',
-            title: 'Analiza kosztów TER',
-            subtitle: 'Opłaty roczne ETF oraz koszty przewalutowania przy kupnie i sprzedaży',
-            icon: Percent,
-            render: () => <TerAnalysis analysis={analysis} />,
           },
         ]}
       />

@@ -5,11 +5,20 @@ import { PORTFOLIO_CATEGORIES, buildPortfolioRows, groupRows } from '../lib/port
 import { computePeriodStats } from '../lib/engine.js';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
 import { formatDate, formatMoney, formatNumber, formatPLN, formatPercent, signClass } from '../lib/format.js';
-import { Card, Dropdown, EmptyState, Modal } from '../components/ui.jsx';
+import { Card, Dropdown, EmptyState, Modal, Segmented } from '../components/ui.jsx';
 import OperationFormModal, { emptyOperation } from '../components/cash/OperationFormModal.jsx';
 import { DividendsModal, InstrumentEditModal, PriceChartModal } from '../components/portfolio/RowModals.jsx';
 
 const PREFS_KEY = 'wealth-app-portfolio-filters';
+const VIEW_KEY = 'wealth-app-portfolio-mobile-view';
+
+function readMobileView() {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'cards' ? 'cards' : 'table';
+  } catch {
+    return 'table';
+  }
+}
 
 // Liczby w tabeli jak we wzorcu: kropka dziesiętna, spacja tysięcy („1 397.20”), jednostka w nagłówku kolumny
 const dotFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -126,6 +135,16 @@ export default function PortfolioView({ onNavigate }) {
   const [collapsed, setCollapsed] = useState(() => saved?.collapsed || {});
   const [opsFor, setOpsFor] = useState(null);
   const [opForm, setOpForm] = useState(null);
+  // Telefon: tabela przewijana w poziomie (przypięta kolumna „Walor”) albo karty
+  const [mobileView, setMobileViewState] = useState(readMobileView);
+  const setMobileView = (v) => {
+    setMobileViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // brak localStorage – wybór widoku nie zostanie zapamiętany
+    }
+  };
   const [divFor, setDivFor] = useState(null);
   const [chartFor, setChartFor] = useState(null);
   const [editInst, setEditInst] = useState(null);
@@ -235,6 +254,18 @@ export default function PortfolioView({ onNavigate }) {
         >
           {allCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />} {allCollapsed ? 'Rozwiń sekcje' : 'Zwiń sekcje'}
         </button>
+        <div className="md:hidden">
+          <Segmented
+            size="sm"
+            value={mobileView}
+            onChange={setMobileView}
+            ariaLabel="Widok portfela na telefonie"
+            options={[
+              { value: 'table', label: 'Tabela' },
+              { value: 'cards', label: 'Karty' },
+            ]}
+          />
+        </div>
         <div className="ml-auto flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm tabular">
           <span>
             <span className="text-xs text-stone-500">Wartość </span>
@@ -256,14 +287,14 @@ export default function PortfolioView({ onNavigate }) {
       ) : (
         <section className="min-w-0 overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900">
           {/* Tabela – desktop (układ wzorowany na profesjonalnym widoku portfela) */}
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[1120px] border-collapse text-[13px] tabular">
+          <div className={`${mobileView === 'table' ? 'block' : 'hidden'} overflow-x-auto overscroll-x-contain md:block`}>
+            <table className="w-full min-w-[1040px] border-collapse text-[12px] tabular md:min-w-[1120px] md:text-[13px]">
               <thead>
                 <tr className="bg-[#0d1b2e] text-white">
                   {COLS.map((c) => (
                     <th
                       key={c.key}
-                      className={`border-l border-white/10 px-2 py-2.5 text-center align-top text-[12px] leading-tight font-bold first:border-l-0 ${c.key === 'name' ? 'sticky left-0 z-10 w-[17rem] bg-[#0d1b2e]' : ''}`}
+                      className={`border-l border-white/10 px-2 py-2.5 text-center align-top text-[12px] leading-tight font-bold first:border-l-0 ${c.key === 'name' ? 'sticky left-0 z-10 w-[9.5rem] bg-[#0d1b2e] sm:w-[17rem]' : ''}`}
                     >
                       {c.label}
                     </th>
@@ -310,9 +341,12 @@ export default function PortfolioView({ onNavigate }) {
                 return (
                   <tbody key={g.id}>
                     <tr className="cursor-pointer border-y-2 border-stone-300 bg-white hover:bg-stone-50 dark:border-white/15 dark:bg-neutral-900 dark:hover:bg-white/[0.05]" onClick={() => toggleSection(g.id)}>
-                      <td colSpan={COLS.length} className="px-3 py-2 text-left text-[15px] font-semibold">
-                        <Toggle size={14} className="mr-1.5 inline-block align-[-2px] text-stone-500" aria-hidden />
-                        <SectionSummary g={g} />
+                      <td colSpan={COLS.length} className="px-3 py-2 text-left text-[12px] font-semibold md:text-[15px]">
+                        {/* Na telefonie opis sekcji zostaje widoczny przy przewijaniu tabeli w poziomie */}
+                        <div className="sticky left-3 max-w-[calc(100vw-4rem)] md:max-w-none">
+                          <Toggle size={14} className="mr-1.5 inline-block align-[-2px] text-stone-500" aria-hidden />
+                          <SectionSummary g={g} />
+                        </div>
                       </td>
                     </tr>
                     {isOpen &&
@@ -322,10 +356,10 @@ export default function PortfolioView({ onNavigate }) {
                         const stripe = idx % 2 ? 'bg-stone-50 dark:bg-[#1c1c1c]' : 'bg-white dark:bg-neutral-900';
                         return (
                           <tr key={r.id} className={`group border-b border-stone-200 hover:bg-blue-50/60 dark:border-white/5 dark:hover:bg-white/[0.05] ${stripe}`}>
-                            <td className={`sticky left-0 z-10 max-w-[17rem] py-1.5 pr-2 pl-0 text-left ${stripe} group-hover:bg-blue-50 dark:group-hover:bg-neutral-800`}>
+                            <td className={`sticky left-0 z-10 max-w-[9.5rem] py-1.5 pr-2 pl-0 text-left shadow-[2px_0_0_rgba(0,0,0,0.06)] sm:max-w-[17rem] ${stripe} group-hover:bg-blue-50 dark:group-hover:bg-neutral-800`}>
                               <div className="flex items-center gap-2">
                                 <span className="h-5 w-[3px] shrink-0" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
-                                <div className="min-w-0 truncate text-[14px]" title={`${r.sub || ''}${r.account ? ` · ${r.account.name}` : ''}`}>
+                                <div className="min-w-0 truncate text-[13px] md:text-[14px]" title={`${r.sub || ''}${r.account ? ` · ${r.account.name}` : ''}`}>
                                   {isSecurity && r.sub && r.sub.toUpperCase() !== r.name.toUpperCase() ? `${r.sub} (${r.name})` : r.name}
                                   {isSecurity && multiAccount[r.instrumentId] > 1 && <span className="ml-1.5 text-[11px] text-stone-500">· {r.account?.name.split(' – ')[0]}</span>}
                                 </div>
@@ -380,7 +414,7 @@ export default function PortfolioView({ onNavigate }) {
           </div>
 
           {/* Lista – mobile */}
-          <div className="md:hidden">
+          <div className={mobileView === 'cards' ? 'md:hidden' : 'hidden'}>
             <div className="flex items-start justify-between gap-3 bg-[#0d1b2e] px-4 py-3 text-white">
               <div>
                 <div className="text-sm font-semibold">Cały Portfel</div>

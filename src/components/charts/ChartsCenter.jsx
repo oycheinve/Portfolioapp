@@ -12,7 +12,7 @@ import {
   dividendsByYear,
   selectionAccountIds,
 } from '../../lib/series.js';
-import { isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
+import { computeHoldings, isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
 import { formatDate, formatDateTime, formatPLN, formatPercent, signClass } from '../../lib/format.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
 import { Button, Card, Dropdown, Input, Segmented, Select } from '../ui.jsx';
@@ -175,6 +175,11 @@ export default function ChartsCenter({ param }) {
   const instColors = instrumentColorMap(state, isDark);
   const span = (new Date(series.end) - new Date(series.start)) / 86400000;
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
+  // Na liście aktywów tylko instrumenty obecnie posiadane
+  const heldInstruments = useMemo(() => {
+    const held = new Set(computeHoldings(state, isoDay(new Date()), null).filter((h) => h.quantity > 1e-9).map((h) => h.instrumentId));
+    return state.instruments.filter((i) => held.has(i.id));
+  }, [state]);
 
   const setKinds = (kinds) => setSelection((s) => ({ ...s, kinds, instruments: [], compare: false }));
   const presets = [
@@ -291,7 +296,7 @@ export default function ChartsCenter({ param }) {
                     )}
                   </div>
                   <div className="grid grid-cols-2">
-                    {state.instruments.map((i) => (
+                    {heldInstruments.map((i) => (
                       <CheckItem key={i.id} checked={selection.instruments.includes(i.id)} onChange={(on) => toggleInstrument(i.id, on)} label={i.ticker} color={instColors[i.id]} />
                     ))}
                   </div>

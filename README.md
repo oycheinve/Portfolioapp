@@ -102,6 +102,15 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Usuń wszystkie transakcje** (Rejestr Wpłat/Wypłat → Zarządzanie danymi oraz Ustawienia → Kopia zapasowa): czyści transakcje, wpłaty/wypłaty, dywidendy i odsetki, harmonogram dywidend i migawki (opcjonalnie obligacje i listę instrumentów). Potwierdzenie: zaznaczenie „Rozumiem…” i wpisanie „USUŃ”; konta, ustawienia i cele zostają.
 - **Portfel**: liczby jak we wzorcu (kropka dziesiętna, spacje tysięcy), wiersz „Cały Portfel” liczony jak fundusz (cena jednostki od 100, stopa TWR, liczba jednostek), jednoliniowe nazwy walorów z paskiem koloru konta, nagłówki sekcji w jednej linii, ikony operacji: kup, sprzedaj, historia transakcji, dywidendy (z kropką, gdy były wypłaty), wykres notowań, edycja waloru.
 
+## Import XTB z wyborem konta, Portfel na telefonie, kalkulator ETF
+
+- **Import z XTB**: najpierw wybór konta docelowego z listy (lub „Nowe konto XTB”), potem plik; konto można zmienić także po wczytaniu. Rozpoznawanie typów po polsku i angielsku (wpłata, wypłata, kupno, sprzedaż, dywidenda, odsetki, podatki, prowizje – prowizja dopinana do transakcji z tego dnia, symbol podatku odczytywany z komentarza). Podgląd: liczniki typów i tabela rozpoznanych operacji.
+- **Portfel na telefonie**: przełącznik Tabela / Karty; tabela przewijana w poziomie z przypiętą kolumną „Walor” i przyklejonym opisem sekcji.
+- **Dywidendy**: zwijana lista z jedną rozwiniętą sekcją naraz – Podsumowanie, Kalendarz i przypomnienia (najbliższe 60 dni), Rejestr wypłat, Prognoza DGR, Automatyczne dane dywidend (synchronizacja działa przy otwarciu zakładki).
+- **Raport na X**: miesięczny szablon dosłownie („📊Podsumowanie miesiąca:” …) i wyłącznie dla pełnych, zamkniętych miesięcy.
+- **Wagi instrumentów**: tylko aktywa obecne w portfelu (wartość > 0 zł) – w Alokacji, kalkulatorze dopłat i liście aktywów w Wykresach.
+- **Kalkulator opłacalności ETF** (Symulacje): porównanie do 5 ETF-ów – TER, przewalutowanie XTB 0,05% (kupno i sprzedaż), podatek wg konta; wykres utraconego wyniku lub wartości, tabela z kosztem TER/FX, stopą netto i różnicą do najtańszego; pod spodem analiza TER ETF-ów z portfela.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |
