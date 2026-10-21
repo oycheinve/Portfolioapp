@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { BarChart3, Calculator, Info, PiggyBank } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { computeLimitUsage, computePeriodStats } from '../../lib/engine.js';
+import { createPriceResolver } from '../../lib/history.js';
 import { computeIkzeRefund } from '../../lib/tax.js';
 import { ACCOUNT_TYPES, ACCOUNT_TYPE_LIST, TAX_BRACKETS } from '../../lib/constants.js';
 import { formatDate, formatPLN, formatPercent, signClass } from '../../lib/format.js';
@@ -19,7 +20,11 @@ export function AccountFilterSelect({ value, onChange, className = '' }) {
   const typesPresent = ACCOUNT_TYPE_LIST.filter((t) => state.accounts.some((a) => a.type === t.id));
   return (
     <Select value={value} onChange={(e) => onChange(e.target.value)} className={`w-auto min-w-[11rem] ${className}`} aria-label="Filtr konta">
-      <option value="ALL">Wszystkie konta</option>
+      <option value="ALL">Wszystkie konta (majątek)</option>
+      <optgroup label="Portfel">
+        <option value="INVEST">Portfel inwestycyjny (bez poduszki)</option>
+        <option value="SAFE">Poduszka finansowa</option>
+      </optgroup>
       <optgroup label="Typ konta">
         {typesPresent.map((t) => (
           <option key={t.id} value={`TYPE:${t.id}`}>
@@ -38,12 +43,16 @@ export function AccountFilterSelect({ value, onChange, className = '' }) {
   );
 }
 
-export default function PortfolioStatsCard() {
+// filter/onFilterChange – sterowane z zewnątrz (wspólny wybór konta w Statystykach); bez nich – własny wybór
+export default function PortfolioStatsCard({ filter: filterProp, onFilterChange }) {
   const { state, isDark } = useApp();
   const [period, setPeriod] = useState('ALL');
-  const [filter, setFilter] = useState('ALL');
+  const [ownFilter, setOwnFilter] = useState('INVEST');
+  const filter = filterProp ?? ownFilter;
+  const setFilter = onFilterChange ?? setOwnFilter;
 
-  const stats = useMemo(() => computePeriodStats(state, { period, filter }), [state, period, filter]);
+  const resolver = useMemo(() => createPriceResolver(state), [state]);
+  const stats = useMemo(() => computePeriodStats(state, { period, filter, priceAt: resolver.instrumentPLN }), [state, period, filter, resolver]);
 
   const breakdown = [
     { key: 'price', label: 'Zysk kursowy', hint: 'Zmiana wyceny akcji/ETF (zrealizowana i niezrealizowana), różnice kursowe, prowizje', value: stats.priceGain },
@@ -58,12 +67,12 @@ export default function PortfolioStatsCard() {
   return (
     <Card
       title="Statystyki Portfela i Prawdziwy Zysk"
-      subtitle={`Zysk Total = Wartość − Wkład własny netto · ${periodLabel}`}
+      subtitle={`Zysk Total = Wartość + Wypłaty − Wpłaty · ${periodLabel}`}
       icon={BarChart3}
       actions={
         <>
           <Segmented options={PERIODS} value={period} onChange={setPeriod} ariaLabel="Okres" />
-          <AccountFilterSelect value={filter} onChange={setFilter} />
+          {!onFilterChange && <AccountFilterSelect value={filter} onChange={setFilter} />}
         </>
       }
     >
@@ -81,8 +90,8 @@ export default function PortfolioStatsCard() {
               value={formatPLN(stats.totalReturn, { sign: true })}
               valueClassName={signClass(stats.totalReturn)}
               sub={
-                <span className={signClass(stats.totalReturnPct)}>
-                  {formatPercent(stats.totalReturnPct, { sign: true })} <span className="text-stone-500">(ważony przepływami)</span>
+                <span className={signClass(stats.totalReturnPct)} title={`Zysk / kapitał zaangażowany (${formatPLN(stats.capitalEngaged)}). Stopa ważona przepływami (MWR): ${formatPercent(stats.mwr, { sign: true })}`}>
+                  {formatPercent(stats.totalReturnPct, { sign: true })} <span className="text-stone-500">na kapitale {formatPLN(stats.capitalEngaged, { compact: true })}</span>
                 </span>
               }
               className="col-span-2 sm:col-span-1"
@@ -137,6 +146,9 @@ export default function PortfolioStatsCard() {
             <p className="text-[11px] text-amber-700 dark:text-amber-400">
               Brak migawki z początku okresu – wartość startową przyjęto jako wkład netto na ten dzień.
             </p>
+          )}
+          {stats.startValueSource === 'revaluation' && (
+            <p className="text-[11px] text-stone-500 dark:text-stone-400">Wartość na start okresu wyliczona z cen historycznych pozycji (brak migawki z tego dnia).</p>
           )}
         </div>
 

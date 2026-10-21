@@ -74,7 +74,9 @@ export function applyRollover(state, plan, decisions) {
         year: plan.toYear,
         name: renameForYear(item.goal.name, plan.fromYear, plan.toYear),
         target: Number(d.target) || item.newTarget || item.target,
-        current: 0,
+        // Cel „w dół” kontynuowany od osiągniętej wartości; „w górę” – licznik od zera
+        current: progress.direction === 'DOWN' ? progress.current : 0,
+        startValue: progress.direction === 'DOWN' ? progress.current : undefined,
         rolledFrom: item.goal.id,
       });
       update.rolledTo = id;

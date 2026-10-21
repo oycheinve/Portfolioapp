@@ -8,6 +8,8 @@ import { fetchAllHistory } from '../lib/history.js';
 import { pendingSavingsInterest } from '../lib/savings.js';
 import { computeLimitsForYear } from '../lib/tax.js';
 import { uid } from '../lib/format.js';
+import { reconcileDividends } from '../lib/dividends.js';
+import { runDividendSync } from '../lib/dividendSync.js';
 
 const AppContext = createContext(null);
 
@@ -82,6 +84,15 @@ export function AppProvider({ children }) {
         .join(';');
     if (key(desired) !== key(current)) dispatch({ type: 'SYNC_AUTO_FUNDING', payload: desired });
   }, [state.accounts, state.bonds, state.cashflows, state.trades, state.income, state.instruments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dywidendy bez ręcznego klikania: parowanie harmonogramu z rejestrem (np. import XTB) i autoksięgowanie po dniu wypłaty
+  useEffect(() => {
+    if (state.dividendSchedule.length === 0) return;
+    const r = reconcileDividends(state, { autoBook: state.settings.dividendPrefs?.autoBook !== false });
+    if (r.removeIncome.length) dispatch({ type: 'REMOVE_MANY', payload: { collection: 'income', ids: r.removeIncome } });
+    if (r.addIncome.length) dispatch({ type: 'ADD_MANY', payload: { collection: 'income', items: r.addIncome } });
+    for (const u of r.updates) dispatch({ type: 'UPSERT', payload: { collection: 'dividendSchedule', item: u } });
+  }, [state.income, state.dividendSchedule, state.trades, state.settings.dividendPrefs?.autoBook]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Etap 3: automatyczne księgowanie odsetek na kontach oszczędnościowych (za zakończone okresy kapitalizacji)
   useEffect(() => {
@@ -239,6 +250,17 @@ export function AppProvider({ children }) {
     }),
     [refreshPrices, refreshHistory, notify],
   );
+
+  // Dane dywidend (Yahoo / historia wypłat) pobierane po starcie aplikacji – raz na 12 h, bez otwierania zakładki
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const s = stateRef.current;
+      const prefs = s.settings.dividendPrefs || {};
+      const age = prefs.lastSync ? (Date.now() - new Date(prefs.lastSync).getTime()) / 3600000 : Infinity;
+      if (s.accounts.length && s.instruments.length && prefs.autoSync !== false && age > 12) runDividendSync(s, actions, { silent: true }).catch(() => {});
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = useMemo(
     () => ({ state, actions, isDark, refreshing, historyLoading, toast, dismissToast: () => setToast(null) }),

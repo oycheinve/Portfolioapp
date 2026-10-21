@@ -134,6 +134,15 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - Przy każdej dywidendzie z XTB zapisywana jest stawka na akcję z komentarza („DIG.PL PLN 5.0/ SHR”). DPS = brutto / liczba sztuk z transakcji, a gdy liczby sztuk nie da się odtworzyć – zapisana stawka (przeliczona na PLN), więc prognoza 12 mies., stopa dywidendy i prognoza z historii nie spadają do 0.
 - Wpisy harmonogramu z Yahoo bez kwoty są pomijane, a prognoza opiera się wtedy na rejestrze wypłat; sumy w kalendarzu i kafelkach odporne na brakujące wartości. „Średnia miesięczna” liczona z ostatnich 12 miesięcy.
 
+## Portfel inwestycyjny vs poduszka, prawdziwy zysk, dywidendy bez klikania, cele „w dół”
+
+- **Wybór konta w Statystykach**: jeden selektor na górze zakładki (Portfel inwestycyjny – domyślnie, Poduszka finansowa, cały majątek, typ konta, pojedyncze konto) przelicza Prawdziwy Zysk, podsumowanie roku, miesiące i lata.
+- **Zysk Total %** = (wartość + wypłaty − wpłaty) / kapitał zaangażowany (wartość na start okresu + wpłaty w okresie). Dywidendy i odsetki są już w wartości (gotówka), więc nie są liczone podwójnie. Dawna stopa Modified Dietz zawyżała wynik przy dużych wpłatach pod koniec okresu (np. 45% zamiast 23%); jest dostępna w podpowiedzi jako MWR. TWR liczony z miesięcznych wycen (migawki lub ceny historyczne) – bez skoków przy braku migawek. Wartość na start okresu bez migawki wyceniana cenami historycznymi.
+- **Poduszka finansowa** = konta oszczędnościowe i konta obligacji skarbowych. Portfel inwestycyjny = pozostałe konta (także ich wolna gotówka). Alokacja domyślnie dla portfela inwestycyjnego; w Portfelu wiersze „↳ Portfel inwestycyjny” i „↳ Poduszka finansowa”; cele: wpłaty liczone dla portfela inwestycyjnego, nowe źródła „Wartość portfela inwestycyjnego” i „Poduszka finansowa”.
+- **Dywidendy historycznie**: DPS z liczby akcji na koncie, na które wpłynęła wypłata, w dniu przed wypłatą; harmonogram – akcje na każdym koncie przed dniem dywidendy; spółki sprzedane mają dywidendy tylko sprzed sprzedaży.
+- **Bez „Zaksięguj”**: wypłaty z rejestru (np. import XTB) parowane z harmonogramem Yahoo/historii (ta sama spółka, okno dni), pozostałe księgowane automatycznie po dniu wypłaty; gdy później przyjdzie prawdziwa wypłata z XTB, automatyczny wpis jest zastępowany. Synchronizacja dywidend także po starcie aplikacji (raz na 12 h).
+- **Cele**: kierunek automatyczny (docelowa niższa niż wartość startowa = cel „w dół”) lub wybrany ręcznie; postęp liczony od wartości startowej, cel osiągnięty dopiero po spadku do wartości docelowej.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

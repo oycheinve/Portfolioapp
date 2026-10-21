@@ -1,5 +1,5 @@
 // Etap 6: cele roczne – kategorie, postęp % (ręczny lub automatyczny z danych portfela) i wskaźnik zbiorczy
-import { computeLimitUsage, incomeEventsWithTax, isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from './engine.js';
+import { computeLimitUsage, incomeEventsWithTax, isSafeAccount, isoDay, livePriceLookup, otherAssetsValue, resolveAccountIds, valuePortfolio } from './engine.js';
 
 export const GOAL_CATEGORIES = {
   FINANCIAL: { id: 'FINANCIAL', label: 'Finansowe', slot: 0 },
@@ -10,7 +10,9 @@ export const GOAL_CATEGORIES = {
 // Źródła automatyczne – wartość X liczona z danych aplikacji dla roku celu
 export const GOAL_SOURCES = {
   MANUAL: { id: 'MANUAL', label: 'Ręcznie (+ / −)' },
-  DEPOSITS: { id: 'DEPOSITS', label: 'Wpłaty netto w roku', unit: 'zł' },
+  DEPOSITS: { id: 'DEPOSITS', label: 'Wpłaty netto na portfel inwestycyjny w roku', unit: 'zł' },
+  INVEST_VALUE: { id: 'INVEST_VALUE', label: 'Wartość portfela inwestycyjnego (dziś)', unit: 'zł' },
+  SAFE_VALUE: { id: 'SAFE_VALUE', label: 'Poduszka finansowa (dziś)', unit: 'zł' },
   DIVIDENDS: { id: 'DIVIDENDS', label: 'Dywidendy netto w roku', unit: 'zł' },
   PASSIVE: { id: 'PASSIVE', label: 'Dochód pasywny netto w roku', unit: 'zł' },
   NET_WORTH: { id: 'NET_WORTH', label: 'Majątek całkowity (dziś)', unit: 'zł' },
@@ -22,8 +24,18 @@ export function autoGoalValue(state, goal) {
   const year = Number(goal.year) || new Date().getFullYear();
   const y = String(year);
   switch (goal.source) {
-    case 'DEPOSITS':
-      return state.cashflows.filter((c) => c.date.startsWith(y)).reduce((s, c) => s + (c.type === 'DEPOSIT' ? 1 : -1) * (Number(c.amount) || 0), 0);
+    case 'DEPOSITS': {
+      // Tylko portfel inwestycyjny – wpłaty na poduszkę (oszczędności, obligacje) liczone osobno
+      const safe = new Set(state.accounts.filter(isSafeAccount).map((a) => a.id));
+      return state.cashflows
+        .filter((c) => c.date.startsWith(y) && !safe.has(c.accountId))
+        .reduce((s, c) => s + (c.type === 'DEPOSIT' ? 1 : -1) * (Number(c.amount) || 0), 0);
+    }
+    case 'INVEST_VALUE':
+    case 'SAFE_VALUE': {
+      const ids = resolveAccountIds(state, goal.source === 'INVEST_VALUE' ? 'INVEST' : 'SAFE');
+      return valuePortfolio(state, { asOf: isoDay(new Date()), accountIds: ids, priceLookup: livePriceLookup(state) }).totals.total;
+    }
     case 'DIVIDENDS':
       return incomeEventsWithTax(state)
         .filter((i) => i.type === 'DIVIDEND' && i.date.startsWith(y) && i.date <= isoDay(new Date()))
@@ -48,18 +60,35 @@ export function autoGoalValue(state, goal) {
   }
 }
 
+// Kierunek celu: 'UP' (wartość ma rosnąć) albo 'DOWN' (ma spadać – docelowa niższa niż wartość na starcie).
+// Jawny wybór w celu ma pierwszeństwo; „auto” – porównanie wartości docelowej z wartością startową.
+export function goalDirection(goal) {
+  if (goal.direction === 'UP' || goal.direction === 'DOWN') return goal.direction;
+  const start = Number(goal.startValue);
+  const target = Number(goal.target) || 0;
+  return Number.isFinite(start) && goal.startValue !== undefined && goal.startValue !== null && target < start ? 'DOWN' : 'UP';
+}
+
+function measure(goal, current, target) {
+  if (goalDirection(goal) === 'DOWN') {
+    // Postęp = jaką część drogi od wartości startowej do docelowej już przebyto
+    const start = Number.isFinite(Number(goal.startValue)) && goal.startValue !== undefined ? Number(goal.startValue) : Math.max(current, target);
+    const span = start - target;
+    const pct = span > 0 ? Math.max(0, (start - current) / span) : current <= target ? 1 : 0;
+    return { current, target, start, pct, capped: Math.min(1, pct), done: current <= target, direction: 'DOWN' };
+  }
+  const pct = target > 0 ? Math.max(0, current / target) : 0;
+  return { current, target, pct, capped: Math.min(1, pct), done: target > 0 && current >= target, direction: 'UP' };
+}
+
 export function goalProgress(state, goal) {
+  const target = Number(goal.target) || 0;
   // Cel zarchiwizowany przy zamknięciu roku – wynik zamrożony
   if (goal.status === 'ARCHIVED' && goal.result) {
-    const target = Number(goal.target) || 0;
-    const current = Number(goal.result.current) || 0;
-    const pct = target > 0 ? Math.max(0, current / target) : 0;
-    return { current, target, pct, capped: Math.min(1, pct), done: target > 0 && current >= target, archived: true };
+    return { ...measure(goal, Number(goal.result.current) || 0, target), archived: true };
   }
   const current = goal.source && goal.source !== 'MANUAL' ? autoGoalValue(state, goal) : Number(goal.current) || 0;
-  const target = Number(goal.target) || 0;
-  const pct = target > 0 ? Math.max(0, current / target) : 0;
-  return { current, target, pct, capped: Math.min(1, pct), done: target > 0 && current >= target };
+  return measure(goal, current, target);
 }
 
 // Wskaźnik zbiorczy: średnia postępu celów (każdy maks. 100%)

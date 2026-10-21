@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronUp, CircleDollarSign, Coins, History, Info, LineChart, MinusSquare, Pencil, PlusSquare, ShoppingBasket, SlidersHorizontal, Table2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { PORTFOLIO_CATEGORIES, buildPortfolioRows, groupRows } from '../lib/portfolioTable.js';
-import { computePeriodStats } from '../lib/engine.js';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
+import { isSafeAccount } from '../lib/engine.js';
 import { formatDate, formatMoney, formatNumber, formatPLN, formatPercent, signClass } from '../lib/format.js';
 import { Card, Dropdown, EmptyState, Modal, Segmented } from '../components/ui.jsx';
 import OperationFormModal, { emptyOperation } from '../components/cash/OperationFormModal.jsx';
@@ -155,16 +155,25 @@ export default function PortfolioView({ onNavigate }) {
   const activeFilters = presentCats.filter((c) => !categories.includes(c.id)).length + hiddenAccounts.length;
   const visibleRows = data.groups.flatMap((g) => g.rows);
   const totalDays = weightedDays(visibleRows);
-  // „Cały Portfel” jak fundusz: jednostka startuje od 100 zł i rośnie o stopę zwrotu ważoną czasem (TWR);
-  // przy aktywnych filtrach – o prostą stopę zwrotu widocznych pozycji
-  const twr = useMemo(() => {
-    try {
-      return computePeriodStats(state, { period: 'ALL' }).twr;
-    } catch {
-      return null;
-    }
-  }, [state]);
-  const fundReturn = activeFilters === 0 && Number.isFinite(twr) ? twr : data.gainPct;
+  // „Cały Portfel” jak fundusz: jednostka startuje od 100 zł i rośnie o prostą stopę zwrotu
+  // (zysk / koszt zakupu widocznych pozycji – bez zawyżeń przy dużych wpłatach na końcu okresu)
+  const fundReturn = data.gainPct;
+  // Podział: portfel inwestycyjny vs poduszka finansowa (konta oszczędnościowe i obligacyjne); nieruchomości poza oboma
+  const split = useMemo(() => {
+    const agg = (list) => {
+      const value = list.reduce((s, r) => s + r.value, 0);
+      const withGain = list.filter((r) => r.gain !== null && r.gain !== undefined);
+      const gain = withGain.reduce((s, r) => s + r.gain, 0);
+      const cost = withGain.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+      const dayChange = list.reduce((s, r) => s + (r.dayChange || 0), 0);
+      return { value, gain, gainPct: cost > 0 ? gain / cost : null, dayPct: value - dayChange > 0 ? dayChange / (value - dayChange) : 0, share: data.total > 0 ? value / data.total : 0, count: list.length, days: weightedDays(list) };
+    };
+    const rowsAll = data.groups.flatMap((g) => g.rows);
+    return [
+      { id: 'invest', label: 'Portfel inwestycyjny', ...agg(rowsAll.filter((r) => r.category !== 'OTHER' && !(r.account && isSafeAccount(r.account)))) },
+      { id: 'safe', label: 'Poduszka finansowa', ...agg(rowsAll.filter((r) => r.category !== 'OTHER' && r.account && isSafeAccount(r.account))) },
+    ].filter((x) => x.count > 0);
+  }, [data]);
   const unitPrice = 100 * (1 + fundReturn);
   const fundUnits = unitPrice > 0 ? data.total / unitPrice : null;
   const multiAccount = useMemo(() => {
@@ -325,13 +334,31 @@ export default function PortfolioView({ onNavigate }) {
                   <td className={`${cell} ${signClass(fundReturn)}`}>
                     <span className="inline-flex items-center gap-1">
                       {pct2(fundReturn)}
-                      <span title={activeFilters === 0 ? 'Stopa zwrotu ważona czasem (TWR) – niezależna od terminów wpłat' : 'Prosta stopa zwrotu widocznych pozycji (aktywne filtry)'}>
+                      <span title="Stopa zwrotu: zysk / koszt zakupu widocznych pozycji (wartość + wypłaty − wpłaty na kapitale zaangażowanym)">
                         <Info size={13} className="text-amber-500" aria-label="Stopa zwrotu ważona czasem" />
                       </span>
                     </span>
                   </td>
                   <td className={`${cell} ${signClass(data.gain)}`}>{fmt2(data.gain)}</td>
                 </tr>
+                {split.length > 1 &&
+                  split.map((x) => (
+                    <tr key={x.id} className="border-b border-stone-200 bg-stone-50 text-[12px] font-medium dark:border-white/10 dark:bg-[#1c1c1c]">
+                      <td className="sticky left-0 z-10 bg-stone-50 py-1.5 pr-2 pl-6 text-left whitespace-nowrap text-stone-600 dark:bg-[#1c1c1c] dark:text-stone-300">↳ {x.label}</td>
+                      <td className={`${cell} text-stone-500`}>{x.count} poz.</td>
+                      <td className={cell}>
+                        <Arrowed value={x.dayPct} />
+                      </td>
+                      <td className={cell} />
+                      <td className={cell} />
+                      <td className={cell} />
+                      <td className={cell}>{x.days ?? '—'}</td>
+                      <td className={cell}>{fmt2(x.value)}</td>
+                      <td className={cell}>{pct2(x.share)}</td>
+                      <td className={cell}>{x.gainPct !== null ? <Arrowed value={x.gainPct} /> : '—'}</td>
+                      <td className={`${cell} ${signClass(x.gain)}`}>{fmt2(x.gain)}</td>
+                    </tr>
+                  ))}
               </tbody>
               {data.groups.map((g) => {
                 const isOpen = !collapsed[g.id];
@@ -443,6 +470,19 @@ export default function PortfolioView({ onNavigate }) {
                 <div className="text-[11px] text-white/80">{formatPLN(data.gain, { sign: true })}</div>
               </div>
             </div>
+            {split.length > 1 && (
+              <div className="grid grid-cols-2 divide-x divide-stone-200 border-b border-stone-200 bg-stone-50 text-[11px] dark:divide-white/10 dark:border-white/10 dark:bg-[#1c1c1c]">
+                {split.map((x) => (
+                  <div key={x.id} className="px-4 py-2">
+                    <div className="truncate text-stone-500">{x.label}</div>
+                    <div className="font-semibold tabular">{formatPLN(x.value)}</div>
+                    <div className="tabular">
+                      <Signed value={x.gain} /> {x.gainPct !== null && <Signed value={x.gainPct} kind="pct" digits={1} />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {data.groups.map((g) => {
               const isOpen = !collapsed[g.id];
               const Toggle = isOpen ? MinusSquare : PlusSquare;

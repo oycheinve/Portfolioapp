@@ -25,6 +25,7 @@ export function ScheduleCard() {
     [state, today],
   );
   const held = state.instruments;
+  const autoBook = state.settings.dividendPrefs?.autoBook !== false;
 
   const book = (item) => {
     const entries = bookingEntries(state, item);
@@ -92,7 +93,10 @@ export function ScheduleCard() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                {ev.status === 'PENDING' && (
+                {ev.paired && <Badge tone="green">sparowana z rejestrem</Badge>}
+                {item.autoBooked && !ev.paired && <Badge tone="green">zaksięgowana auto</Badge>}
+                {ev.status === 'PENDING' && autoBook && <Badge>księgowanie auto po {formatDate(item.payDate)}</Badge>}
+                {ev.status === 'PENDING' && !autoBook && (
                   <Button size="sm" icon={BookCheck} onClick={() => book(item)} title="Dodaj wypłatę do rejestru przychodów">
                     Zaksięguj
                   </Button>
@@ -105,7 +109,7 @@ export function ScheduleCard() {
         </ul>
       )}
       <p className="px-4 py-2.5 text-[11px] text-stone-500 sm:px-5 dark:text-stone-500">
-        Liczba akcji liczona na sesję przed Dniem Dywidendy. „Zaksięguj” dodaje dywidendę brutto per konto – podatek Belki (lub 0% na IKE/IKZE) i podatek u źródła liczą się automatycznie.
+        Liczba akcji na każdym koncie liczona na sesję przed Dniem Dywidendy (stan historyczny – akcje sprzedane wcześniej nie dostają dywidendy). Wypłaty z importu XTB są parowane automatycznie, a pozostałe księgowane same po dniu wypłaty; podatek Belki (lub 0% na IKE/IKZE) i podatek u źródła liczą się automatycznie.
       </p>
 
       <Modal

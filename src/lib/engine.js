@@ -21,8 +21,15 @@ function inFilter(accountIds, accountId) {
   return !accountIds || accountIds.includes(accountId);
 }
 
+// Poduszka finansowa = konta oszczędnościowe i konta obligacji skarbowych; reszta to portfel inwestycyjny
+export function isSafeAccount(account) {
+  return account?.type === 'SAVINGS' || account?.type === 'BONDS';
+}
+
 export function resolveAccountIds(state, filter) {
   if (!filter || filter === 'ALL') return state.accounts.map((a) => a.id);
+  if (filter === 'INVEST') return state.accounts.filter((a) => !isSafeAccount(a)).map((a) => a.id);
+  if (filter === 'SAFE') return state.accounts.filter((a) => isSafeAccount(a)).map((a) => a.id);
   if (filter.startsWith('TYPE:')) {
     const type = filter.slice(5);
     return state.accounts.filter((a) => a.type === type).map((a) => a.id);
@@ -361,7 +368,7 @@ function flowsList(state, accountIds, from, to) {
 }
 
 // Wartość z migawki dla zbioru kont; null, jeśli brak migawki <= date
-export function snapshotValueAt(state, accountIds, date) {
+export function snapshotValueAt(state, accountIds, date, maxAgeDays = Infinity) {
   const snaps = state.snapshots;
   let found = null;
   for (let i = snaps.length - 1; i >= 0; i -= 1) {
@@ -370,7 +377,7 @@ export function snapshotValueAt(state, accountIds, date) {
       break;
     }
   }
-  if (!found) return null;
+  if (!found || daysBetween(found.date, date) > maxAgeDays) return null;
   let v = 0;
   for (const id of accountIds) v += found.accounts?.[id]?.value || 0;
   return { date: found.date, value: v };
@@ -399,26 +406,47 @@ function modifiedDietz(startValue, endValue, flows, startDate, endDate) {
 }
 
 // TWR łańcuchowy na podstawie migawek (segmenty liczone metodą Modified Dietz)
-export function computeTWR(state, accountIds, fromDate, toDate, endValue) {
-  const points = state.snapshots
-    .filter((s) => (!fromDate || s.date >= fromDate) && s.date < toDate)
-    .map((s) => ({
-      date: s.date,
-      value: accountIds.reduce((acc, id) => acc + (s.accounts?.[id]?.value || 0), 0),
-    }));
-  const series = [];
-  if (fromDate) {
-    const start = snapshotValueAt(state, accountIds, fromDate);
-    series.push({ date: fromDate, value: start ? start.value : 0 });
-  } else {
-    const firstFlow = state.cashflows
-      .filter((c) => accountIds.includes(c.accountId))
-      .reduce((m, c) => (!m || c.date < m ? c.date : m), null);
-    if (!firstFlow) return { twr: 0, days: 0, startDate: toDate };
-    const dayBefore = isoDay(new Date(new Date(firstFlow).getTime() - DAY));
-    series.push({ date: dayBefore, value: 0 });
+// Wartość kont na dzień: świeża migawka (≤ 3 dni), a bez niej wycena pozycji cenami historycznymi (priceAt)
+function makeValueAt(state, accountIds, priceAt) {
+  const cache = new Map();
+  return (date) => {
+    if (cache.has(date)) return cache.get(date);
+    const snap = snapshotValueAt(state, accountIds, date, 3);
+    let value = null;
+    if (snap) value = snap.value;
+    else if (priceAt) value = valuePortfolio(state, { asOf: date, accountIds, priceLookup: (inst) => priceAt(inst, date) }).totals.total;
+    cache.set(date, value);
+    return value;
+  };
+}
+
+function monthEnds(from, to) {
+  const out = [];
+  const [y, m] = from.split('-').map(Number);
+  let d = new Date(y, m, 0);
+  while (isoDay(d) < to) {
+    if (isoDay(d) > from) out.push(isoDay(d));
+    d = new Date(d.getFullYear(), d.getMonth() + 2, 0);
   }
-  for (const p of points) if (p.date > series[0].date) series.push(p);
+  return out;
+}
+
+// TWR: łańcuch miesięcznych stóp (Modified Dietz w obrębie miesiąca) na wycenach z migawek lub z cen historycznych.
+// Okresy bez kapitału (wartość ≈ 0) są pomijane, a pojedyncze skrajne stopy przy znikomym kapitale nie zawyżają wyniku.
+export function computeTWR(state, accountIds, fromDate, toDate, endValue, priceAt) {
+  const valueAt = makeValueAt(state, accountIds, priceAt);
+  let start;
+  if (fromDate) start = fromDate;
+  else {
+    const firstFlow = firstFlowDate(state, accountIds);
+    if (!firstFlow) return { twr: 0, days: 0, startDate: toDate };
+    start = isoDay(new Date(new Date(firstFlow).getTime() - DAY));
+  }
+  const series = [{ date: start, value: fromDate ? valueAt(start) ?? 0 : 0 }];
+  for (const d of monthEnds(start, toDate)) {
+    const v = valueAt(d);
+    if (v !== null) series.push({ date: d, value: v });
+  }
   series.push({ date: toDate, value: endValue });
 
   let growth = 1;
@@ -426,15 +454,18 @@ export function computeTWR(state, accountIds, fromDate, toDate, endValue) {
     const a = series[i - 1];
     const b = series[i];
     const flows = flowsList(state, accountIds, a.date, b.date);
-    if (a.value <= 0 && flows.length === 0) continue;
+    const inflow = flows.reduce((s, f) => s + Math.max(0, f.amount), 0);
+    // Znikomy kapitał (np. kilka złotych przed pierwszą dużą wpłatą) – stopa byłaby losowa
+    if (a.value + inflow < 1) continue;
     const r = modifiedDietz(a.value, b.value, flows, a.date, b.date);
-    if (Number.isFinite(r)) growth *= 1 + r;
+    if (Number.isFinite(r) && r > -1) growth *= 1 + r;
   }
   return { twr: growth - 1, days: daysBetween(series[0].date, toDate), startDate: series[0].date };
 }
 
 // Statystyki „Prawdziwy Zysk” dla okresu i filtra kont
-export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', today = new Date() } = {}) {
+// priceAt(instrument, data) – ceny historyczne (createPriceResolver(state).instrumentPLN); bez nich wycena tylko z migawek
+export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', today = new Date(), priceAt = null } = {}) {
   const accountIds = resolveAccountIds(state, filter);
   const todayIso = isoDay(today);
   const priceLookup = livePriceLookup(state);
@@ -445,10 +476,13 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   let startValue = 0;
   let startValueSource = 'none';
   if (startDate) {
-    const snap = snapshotValueAt(state, accountIds, startDate);
+    const snap = snapshotValueAt(state, accountIds, startDate, 3);
     if (snap) {
       startValue = snap.value;
       startValueSource = 'snapshot';
+    } else if (priceAt) {
+      startValue = valuePortfolio(state, { asOf: startDate, accountIds, priceLookup: (inst) => priceAt(inst, startDate) }).totals.total;
+      startValueSource = 'revaluation';
     } else {
       startValue = netFlows(state, accountIds, null, startDate);
       startValueSource = 'contributions';
@@ -486,8 +520,12 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   const priceGain = totalReturn - dividendsNet - interestNet;
 
   const mdReturn = modifiedDietz(startValue, endValue, flowsList(state, accountIds, startDate, todayIso), startDate || firstFlowDate(state, accountIds) || todayIso, todayIso);
-  const twr = computeTWR(state, accountIds, startDate, todayIso, endValue);
-  const full = startDate ? computeTWR(state, accountIds, null, todayIso, endValue) : twr;
+  // Prosta stopa zwrotu: (wartość + wypłaty − wpłaty) / kapitał zaangażowany (wartość na start + wpłaty w okresie).
+  // Dywidendy i odsetki są już w wartości (gotówka na koncie), więc nie są doliczane drugi raz.
+  const capitalEngaged = startValue + depositsInPeriod;
+  const simpleReturn = capitalEngaged > 0 ? totalReturn / capitalEngaged : 0;
+  const twr = computeTWR(state, accountIds, startDate, todayIso, endValue, priceAt);
+  const full = startDate ? computeTWR(state, accountIds, null, todayIso, endValue, priceAt) : twr;
   const years = full.days / 365.25;
   const cagr = years >= 1 ? Math.pow(1 + full.twr, 1 / years) - 1 : full.twr;
 
@@ -518,7 +556,9 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
     withdrawalsInPeriod,
     contributionsAll,
     totalReturn,
-    totalReturnPct: mdReturn,
+    totalReturnPct: simpleReturn,
+    capitalEngaged,
+    mwr: mdReturn,
     priceGain,
     dividendsNet,
     dividendsTax,

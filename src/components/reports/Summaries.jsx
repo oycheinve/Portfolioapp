@@ -3,6 +3,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer,
 import { CalendarRange, History, Trophy } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { createPriceResolver } from '../../lib/history.js';
+import { resolveAccountIds } from '../../lib/engine.js';
 import { firstActivity, makePeriod, periodMetrics, yearSummary } from '../../lib/reports.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatPLN, formatPercent, signClass } from '../../lib/format.js';
@@ -95,7 +96,8 @@ function MetricsTable({ rows }) {
 }
 
 // parts: które sekcje pokazać – 'year' (podsumowanie roku), 'months' (tabela miesięcy), 'years' (lata kalendarzowe)
-export default function Summaries({ parts = ['year', 'months', 'years'] }) {
+// filter – zakres kont jak w Statystykach (ALL / INVEST / SAFE / TYPE:… / id konta)
+export default function Summaries({ parts = ['year', 'months', 'years'], filter = 'ALL' }) {
   const { state, isDark } = useApp();
   const chrome = chartChrome(isDark);
   const resolver = useMemo(() => createPriceResolver(state), [state]);
@@ -103,8 +105,9 @@ export default function Summaries({ parts = ['year', 'months', 'years'] }) {
   const firstYear = Number(firstActivity(state).slice(0, 4));
   const years = useMemo(() => Array.from({ length: currentYear - firstYear + 1 }, (_, i) => currentYear - i), [currentYear, firstYear]);
   const [year, setYear] = useState(currentYear);
-  const summary = useMemo(() => yearSummary(state, year, resolver), [state, year, resolver]);
-  const allYears = useMemo(() => years.map((y) => periodMetrics(state, makePeriod('YEAR', `${y}-06-01`), resolver)), [state, years, resolver]);
+  const accountIds = useMemo(() => (filter === 'ALL' ? null : resolveAccountIds(state, filter)), [state, filter]);
+  const summary = useMemo(() => yearSummary(state, year, resolver, undefined, accountIds), [state, year, resolver, accountIds]);
+  const allYears = useMemo(() => years.map((y) => periodMetrics(state, makePeriod('YEAR', `${y}-06-01`), resolver, undefined, accountIds)), [state, years, resolver, accountIds]);
   const t = summary.total;
   const monthsDesc = [...summary.months].reverse();
   const chartData = summary.months.map((m) => ({ label: m.period.shortLabel, profit: m.profit, pct: m.pct }));
@@ -130,7 +133,7 @@ export default function Summaries({ parts = ['year', 'months', 'years'] }) {
         >
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <Kpi label="Zysk / strata" value={formatPLN(t.profit, { sign: true })} tone={signClass(t.profit)} />
-            <Kpi label="Stopa zwrotu" value={formatPercent(t.pct, { sign: true })} tone={signClass(t.pct)} sub="ważona przepływami" />
+            <Kpi label="Stopa zwrotu" value={formatPercent(t.pct, { sign: true })} tone={signClass(t.pct)} sub="na kapitale zaangażowanym" />
             <Kpi label="Wpłaty netto" value={formatPLN(t.flows, { sign: true })} sub={`wpłaty ${formatPLN(t.deposits, { compact: true })}`} />
             <Kpi label="Dywidendy netto" value={formatPLN(t.dividends)} sub={t.interest > 0 ? `odsetki ${formatPLN(t.interest)}` : null} />
             <Kpi label="Wartość: start → koniec" value={formatPLN(t.endValue, { compact: true })} sub={`z ${formatPLN(t.startValue, { compact: true })}`} />

@@ -3,7 +3,7 @@ import { Landmark, PiggyBank, Shield, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
 import { getCpiTable, valueBond } from '../lib/bonds.js';
-import { isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../lib/engine.js';
+import { isSafeAccount, isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../lib/engine.js';
 import { savingsProjection } from '../lib/savings.js';
 import { bondBelkaRate } from '../lib/tax.js';
 import { seriesColor } from '../lib/colors.js';
@@ -12,7 +12,8 @@ import { Card } from '../components/ui.jsx';
 import BondsSection from '../components/bonds/BondsSection.jsx';
 import { CpiCard, SavingsCards } from '../components/bonds/SavingsSection.jsx';
 
-// Poduszka finansowa: obligacje skarbowe, konta oszczędnościowe i gotówka na rachunkach maklerskich w jednym miejscu
+// Poduszka finansowa = konta oszczędnościowe i konta obligacji skarbowych (obligacje + gotówka na nich).
+// Gotówka i obligacje na kontach inwestycyjnych należą do portfela inwestycyjnego – pokazane osobno, niewliczane.
 export default function SafeCapitalView({ onNavigate }) {
   const { state, isDark } = useApp();
   const today = isoDay(new Date());
@@ -27,18 +28,26 @@ export default function SafeCapitalView({ onNavigate }) {
     }
     const savingsAccounts = state.accounts.filter((a) => a.type === 'SAVINGS');
     const savingsIncome = savingsAccounts.reduce((s, a) => s + savingsProjection(state, a, today).yearlyNet, 0);
+    const safeIds = new Set(state.accounts.filter(isSafeAccount).map((a) => a.id));
+    const sumBy = (pred, field) => Object.entries(v.byAccount).filter(([id]) => pred(id)).reduce((s, [, x]) => s + (x[field] || 0), 0);
+    const bondsSafe = sumBy((id) => safeIds.has(id), 'bonds');
+    const savingsCash = sumBy((id) => state.accounts.find((a) => a.id === id)?.type === 'SAVINGS', 'cash');
+    const bondCash = sumBy((id) => state.accounts.find((a) => a.id === id)?.type === 'BONDS', 'cash');
+    // Poza poduszką: wolna gotówka i obligacje na kontach inwestycyjnych
     const brokerCash = state.accounts
-      .filter((a) => a.type !== 'SAVINGS')
+      .filter((a) => !isSafeAccount(a))
       .map((a) => ({ account: a, cash: v.byAccount[a.id]?.cash || 0 }))
       .filter((x) => Math.abs(x.cash) >= 0.5);
+    const investBonds = sumBy((id) => !safeIds.has(id), 'bonds');
+    const investValue = sumBy((id) => !safeIds.has(id), 'total');
     const netWorth = v.totals.total + otherAssetsValue(state).includedValue;
     const parts = [
-      { key: 'bonds', label: 'Obligacje skarbowe', value: v.totals.bonds, icon: Landmark, slot: 2 },
-      { key: 'savings', label: 'Konta oszczędnościowe', value: v.totals.savingsCash, icon: PiggyBank, slot: 3 },
-      { key: 'broker', label: 'Gotówka na rachunkach', value: v.totals.brokerCash, icon: Wallet, slot: 0 },
+      { key: 'bonds', label: 'Obligacje skarbowe', value: bondsSafe, icon: Landmark, slot: 2 },
+      { key: 'savings', label: 'Konta oszczędnościowe', value: savingsCash, icon: PiggyBank, slot: 3 },
+      { key: 'bondcash', label: 'Gotówka na kontach obligacyjnych', value: bondCash, icon: Wallet, slot: 0 },
     ];
     const safe = parts.reduce((s, p) => s + p.value, 0);
-    return { parts, safe, share: netWorth > 0 ? safe / netWorth : 0, shareInvest: v.totals.total > 0 ? safe / v.totals.total : 0, income: bondsIncome + savingsIncome, brokerCash };
+    return { parts, safe, share: netWorth > 0 ? safe / netWorth : 0, investValue, investBonds, income: bondsIncome + savingsIncome, brokerCash };
   }, [state, today]);
 
   return (
@@ -51,7 +60,7 @@ export default function SafeCapitalView({ onNavigate }) {
             </div>
             <div className="mt-1 text-3xl font-semibold tracking-tight tabular">{formatPLN(data.safe)}</div>
             <div className="text-xs text-stone-500 dark:text-stone-400">
-              {formatPercent(data.share, { digits: 1 })} majątku całkowitego · {formatPercent(data.shareInvest, { digits: 1 })} portfela inwestycyjnego
+              {formatPercent(data.share, { digits: 1 })} majątku całkowitego · osobno od portfela inwestycyjnego ({formatPLN(data.investValue)})
             </div>
           </div>
           <div className="text-right">
@@ -88,7 +97,12 @@ export default function SafeCapitalView({ onNavigate }) {
 
       <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-2">
         <SavingsCards onNavigate={onNavigate} />
-        <Card title="Gotówka na rachunkach maklerskich" subtitle="Wolne środki czekające na inwestycję" icon={Wallet} bodyClassName="p-0 sm:p-0">
+        <Card
+          title="Gotówka na kontach inwestycyjnych"
+          subtitle={`Wolne środki czekające na inwestycję – część portfela inwestycyjnego, nie poduszki${data.investBonds > 0 ? ` · obligacje na kontach inwestycyjnych: ${formatPLN(data.investBonds)}` : ''}`}
+          icon={Wallet}
+          bodyClassName="p-0 sm:p-0"
+        >
           {data.brokerCash.length === 0 ? (
             <p className="px-5 py-6 text-center text-sm text-stone-500">Brak wolnej gotówki na rachunkach.</p>
           ) : (

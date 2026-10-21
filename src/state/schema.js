@@ -21,7 +21,8 @@ export const COLLECTIONS = [
 // Etap 2: wagi docelowe i ustawienia kalkulatora dopłat
 export function defaultAllocation() {
   return {
-    scope: 'ALL', // filtr kont, jak w statystykach: 'ALL' | 'TYPE:IKE' | id konta
+    scope: 'INVEST', // filtr kont, jak w statystykach: 'INVEST' (bez poduszki) | 'ALL' | 'TYPE:IKE' | id konta
+    scopeV2: true, // zakres domyślny zmieniony na portfel inwestycyjny
     classTargets: { STOCKS: 0, ETF: 0, BONDS: 0, CASH: 0 }, // % całego portfela (bez nieruchomości)
     instrumentTargets: {}, // { [instrumentId]: % } – wagi w części akcje + ETF, suma 100%
     driftThreshold: 5, // próg alertu w punktach procentowych
@@ -68,7 +69,7 @@ export function defaultSettings() {
     limitsPolicy: { autoUpdate: true, growthPct: 6, projectedWages: {} },
     contributionLimitsMeta: {}, // { rok: 'official' | 'manual' | 'wage' | 'estimate' }
     goalsReview: { reviewedYears: [] }, // lata, dla których wykonano zamknięcie roku i przeniesienie celów
-    dividendPrefs: { dgr: 6, years: 10, drip: true, reminderDays: 30, autoSync: true, autoBook: false, lastSync: null }, // Etap 4 (+ automatyczne dane dywidend)
+    dividendPrefs: { dgr: 6, years: 10, drip: true, reminderDays: 30, autoSync: true, autoBook: true, autoBookV2: true, lastSync: null }, // Etap 4 (+ automatyczne dane dywidend)
     customBenchmarks: [], // własne benchmarki o stałej stopie: [{ id: 'custom_…', name, ratePct }]
     cpiOverrides: {}, // Etap 3: ręczne odczyty CPI r/r { 'RRRR-MM': % }
     priceMode: 'auto', // 'auto' | 'mock'
@@ -137,7 +138,12 @@ export function migrateState(raw) {
       ...(raw.settings?.fire || {}),
       returns: { ...base.settings.fire.returns, ...(raw.settings?.fire?.returns || {}) },
     },
-    dividendPrefs: { ...base.settings.dividendPrefs, ...(raw.settings?.dividendPrefs || {}) },
+    // Automatyczne księgowanie dywidend włączane jednorazowo także w starszych danych (bez ręcznego „Zaksięguj”)
+    dividendPrefs: {
+      ...base.settings.dividendPrefs,
+      ...(raw.settings?.dividendPrefs || {}),
+      ...(raw.settings?.dividendPrefs && !raw.settings.dividendPrefs.autoBookV2 ? { autoBook: true, autoBookV2: true } : {}),
+    },
     goalsReview: {
       reviewedYears: Array.isArray(raw.settings?.goalsReview?.reviewedYears) ? raw.settings.goalsReview.reviewedYears : [],
     },
@@ -148,6 +154,10 @@ export function migrateState(raw) {
     },
   };
   delete out.settings.oki;
+  // Alokacja dotyczy portfela inwestycyjnego – dotychczasowy zakres „wszystkie konta” zamieniany jednorazowo
+  if (raw.settings?.allocation && !raw.settings.allocation.scopeV2) {
+    out.settings.allocation = { ...out.settings.allocation, scope: out.settings.allocation.scope === 'ALL' ? 'INVEST' : out.settings.allocation.scope, scopeV2: true };
+  }
   out.settings.customBenchmarks = Array.isArray(raw.settings?.customBenchmarks)
     ? raw.settings.customBenchmarks.filter((b) => b && b.id && b.name)
     : [];

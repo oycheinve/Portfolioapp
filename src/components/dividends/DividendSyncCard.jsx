@@ -42,7 +42,7 @@ export default function DividendSyncCard() {
         </div>
       </div>
       <Toggle checked={prefs.autoSync !== false} onChange={(v) => setPrefs({ autoSync: v })} label="Przy otwarciu" />
-      <Toggle checked={!!prefs.autoBook} onChange={(v) => setPrefs({ autoBook: v })} label="Księguj wypłaty" />
+      <Toggle checked={!!prefs.autoBook} onChange={(v) => setPrefs({ autoBook: v })} label="Księguj automatycznie" />
       <Button size="sm" variant="primary" icon={RefreshCw} onClick={() => sync(false)} disabled={busy}>
         {busy ? 'Synchronizacja…' : 'Synchronizuj'}
       </Button>

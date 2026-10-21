@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Archive, CalendarCheck, CheckCircle2, Lock, Minus, Pencil, Plus, Repeat, Target, Trash2, Unlock, Zap } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { GOAL_CATEGORIES, GOAL_SOURCES, goalsSummary } from '../lib/goals.js';
+import { GOAL_CATEGORIES, GOAL_SOURCES, autoGoalValue, goalDirection, goalsSummary } from '../lib/goals.js';
 import { seriesColor } from '../lib/colors.js';
 import { formatNumber, formatPercent } from '../lib/format.js';
 import { Badge, Button, Card, EmptyState, Field, IconButton, Input, Modal, Select } from '../components/ui.jsx';
@@ -16,6 +16,17 @@ function fmtValue(v, unit) {
 
 export default function GoalsView() {
   const { state, actions, isDark } = useApp();
+
+  // Uzupełnienie wartości startowej w starszych celach (wyznacza kierunek „auto”): liczniki roczne startują od 0,
+  // cele wartościowe i ręczne – od obecnej wartości (docelowa niższa = cel „w dół”)
+  useEffect(() => {
+    const counters = new Set(['DEPOSITS', 'DIVIDENDS', 'PASSIVE', 'IKE_LIMIT', 'IKZE_LIMIT']);
+    for (const g of state.goals) {
+      if (g.status === 'ARCHIVED' || g.startValue !== undefined) continue;
+      const startValue = counters.has(g.source) ? 0 : g.source && g.source !== 'MANUAL' ? autoGoalValue(state, g) : Number(g.current) || 0;
+      actions.upsert('goals', { ...g, startValue });
+    }
+  }, [state.goals]); // eslint-disable-line react-hooks/exhaustive-deps
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [form, setForm] = useState(null);
@@ -45,12 +56,20 @@ export default function GoalsView() {
   const newGoal = (category = 'FINANCIAL') => setForm({ year, category, name: '', target: '', current: 0, unit: '', step: 1, source: 'MANUAL' });
   const save = () => {
     const src = GOAL_SOURCES[form.source];
+    const target = Number(form.target) || 0;
+    const current = Number(form.current) || 0;
+    // Wartość na starcie celu (zapamiętywana przy utworzeniu albo zmianie wartości docelowej) – wyznacza kierunek „auto”
+    const prev = form.id ? state.goals.find((g) => g.id === form.id) : null;
+    const keepStart = prev && prev.startValue !== undefined && Number(prev.target) === target && prev.source === form.source;
+    const startValue = keepStart ? prev.startValue : form.source && form.source !== 'MANUAL' ? autoGoalValue(state, { ...form, year: Number(form.year) }) : current;
     actions.upsert('goals', {
       ...form,
       name: form.name.trim(),
       year: Number(form.year),
-      target: Number(form.target) || 0,
-      current: Number(form.current) || 0,
+      target,
+      current,
+      startValue,
+      direction: form.direction || 'AUTO',
       step: Number(form.step) || 1,
       unit: form.unit || src?.unit || '',
     });
@@ -173,7 +192,16 @@ export default function GoalsView() {
                               {goal.rolledFrom && !archived && <Badge tone="blue">z {Number(goal.year) - 1}</Badge>}
                             </div>
                             <div className="text-xs text-stone-500 tabular dark:text-stone-400">
-                              {fmtValue(current, goal.unit)} z {fmtValue(target, goal.unit)}
+                              {goalDirection(goal) === 'DOWN' ? (
+                                <>
+                                  ↓ spadek do {fmtValue(target, goal.unit)} · teraz {fmtValue(current, goal.unit)}
+                                  {goal.startValue !== undefined && ` · start ${fmtValue(Number(goal.startValue), goal.unit)}`}
+                                </>
+                              ) : (
+                                <>
+                                  {fmtValue(current, goal.unit)} z {fmtValue(target, goal.unit)}
+                                </>
+                              )}
                             </div>
                             {auto && (
                               <Badge tone="violet" className="mt-1">
@@ -267,6 +295,13 @@ export default function GoalsView() {
             </Field>
             <Field label="Wartość docelowa (Y)">
               <Input type="number" min="0" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
+            </Field>
+            <Field label="Kierunek celu" hint="Auto: gdy wartość docelowa jest niższa niż obecna, cel polega na zmniejszeniu wartości">
+              <Select value={form.direction || 'AUTO'} onChange={(e) => setForm({ ...form, direction: e.target.value })}>
+                <option value="AUTO">Automatycznie</option>
+                <option value="UP">Wzrost do wartości docelowej</option>
+                <option value="DOWN">Spadek do wartości docelowej</option>
+              </Select>
             </Field>
             <Field label="Jednostka">
               <Input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="np. książek, zł, km" />

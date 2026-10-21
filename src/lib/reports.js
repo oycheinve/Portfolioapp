@@ -90,9 +90,10 @@ export function listPeriods(state, type, today = isoDay(new Date())) {
 
 // Wycena całego portfela na dzień: dziś → notowania bieżące; migawka (≤ 3 dni wcześniej) → zapisana wartość;
 // w przeciwnym razie wycena pozycji cenami historycznymi (resolver).
-function valuationAt(state, date, resolver, today) {
+// accountIds = null → wszystkie konta
+function valuationAt(state, date, resolver, today, accountIds = null) {
   if (date >= today) {
-    const v = valuePortfolio(state, { asOf: today, accountIds: null, priceLookup: livePriceLookup(state) });
+    const v = valuePortfolio(state, { asOf: today, accountIds, priceLookup: livePriceLookup(state) });
     return { date: today, value: v.totals.total, source: 'live' };
   }
   let snap = null;
@@ -103,10 +104,12 @@ function valuationAt(state, date, resolver, today) {
     }
   }
   if (snap && daysBetween(snap.date, date) <= 3) {
-    const value = Object.values(snap.accounts || {}).reduce((s, a) => s + (a.value || 0), 0);
+    const value = Object.entries(snap.accounts || {})
+      .filter(([id]) => !accountIds || accountIds.includes(id))
+      .reduce((s, [, a]) => s + (a.value || 0), 0);
     return { date: snap.date, value, source: 'snapshot' };
   }
-  const v = valuePortfolio(state, { asOf: date, accountIds: null, priceLookup: (inst) => resolver.instrumentPLN(inst, date) });
+  const v = valuePortfolio(state, { asOf: date, accountIds, priceLookup: (inst) => resolver.instrumentPLN(inst, date) });
   return { date, value: v.totals.total, source: 'revaluation' };
 }
 
@@ -124,11 +127,12 @@ function modifiedDietz(startValue, endValue, flows, startDate, endDate) {
 }
 
 // Wyniki instrumentów w okresie: zmiana ceny % (PLN) i wynik pozycji w PLN (z dywidendami)
-function instrumentResults(state, start, end, resolver, income) {
-  const holdStart = computeHoldings(state, start, null);
-  const holdEnd = computeHoldings(state, end, null);
+function instrumentResults(state, start, end, resolver, income, accountIds = null) {
+  const inAcc = (id) => !accountIds || accountIds.includes(id);
+  const holdStart = computeHoldings(state, start, accountIds);
+  const holdEnd = computeHoldings(state, end, accountIds);
   const ids = new Set([...holdStart, ...holdEnd].filter((h) => h.quantity > 0).map((h) => h.instrumentId));
-  for (const t of state.trades) if (t.date > start && t.date <= end) ids.add(t.instrumentId);
+  for (const t of state.trades) if (t.date > start && t.date <= end && inAcc(t.accountId)) ids.add(t.instrumentId);
   const out = [];
   for (const id of ids) {
     const inst = state.instruments.find((i) => i.id === id);
@@ -139,7 +143,7 @@ function instrumentResults(state, start, end, resolver, income) {
     const pEnd = resolver.instrumentPLN(inst, end);
     if (!Number.isFinite(pStart) || !Number.isFinite(pEnd) || pStart <= 0) continue;
     const netBuys = state.trades
-      .filter((t) => t.instrumentId === id && t.date > start && t.date <= end)
+      .filter((t) => t.instrumentId === id && t.date > start && t.date <= end && inAcc(t.accountId))
       .reduce((s, t) => s - tradeCashDelta(state, t), 0);
     const dividends = income.filter((i) => i.type === 'DIVIDEND' && i.instrumentId === id).reduce((s, i) => s + i.net, 0);
     const result = qEnd * pEnd - qStart * pStart - netBuys + dividends;
@@ -154,20 +158,25 @@ function instrumentResults(state, start, end, resolver, income) {
   return out.sort((a, b) => b.pct - a.pct);
 }
 
-export function periodMetrics(state, period, resolver, today = isoDay(new Date())) {
-  const s = valuationAt(state, period.start, resolver, today);
-  const e = valuationAt(state, period.end, resolver, today);
+// accountIds (opcjonalnie) – metryki tylko dla wybranych kont (np. portfel inwestycyjny bez poduszki)
+export function periodMetrics(state, period, resolver, today = isoDay(new Date()), accountIds = null) {
+  const inAcc = (id) => !accountIds || accountIds.includes(id);
+  const s = valuationAt(state, period.start, resolver, today, accountIds);
+  const e = valuationAt(state, period.end, resolver, today, accountIds);
   const flowsList = state.cashflows
-    .filter((c) => c.date > s.date && c.date <= e.date)
+    .filter((c) => c.date > s.date && c.date <= e.date && inAcc(c.accountId))
     .map((c) => ({ date: c.date, amount: (c.type === 'DEPOSIT' ? 1 : -1) * (Number(c.amount) || 0) }));
   const flows = flowsList.reduce((acc, f) => acc + f.amount, 0);
   const deposits = flowsList.filter((f) => f.amount > 0).reduce((acc, f) => acc + f.amount, 0);
-  const income = [...incomeEventsWithTax(state), ...bondIncomeEvents(state, period.end)].filter((i) => i.date > s.date && i.date <= e.date);
+  const income = [...incomeEventsWithTax(state), ...bondIncomeEvents(state, period.end)].filter((i) => i.date > s.date && i.date <= e.date && inAcc(i.accountId));
   const dividends = income.filter((i) => i.type === 'DIVIDEND').reduce((acc, i) => acc + i.net, 0);
   const interest = income.filter((i) => i.type === 'INTEREST').reduce((acc, i) => acc + i.net, 0);
   const profit = e.value - s.value - flows;
-  const pct = modifiedDietz(s.value, e.value, flowsList, s.date, e.date);
-  const instruments = instrumentResults(state, period.start, period.end, resolver, income);
+  // Stopa okresu: zysk / kapitał zaangażowany (wartość na start + wpłaty w okresie); MWR (Modified Dietz) pomocniczo
+  const capital = s.value + deposits;
+  const pct = capital > 0 ? profit / capital : 0;
+  const mwr = modifiedDietz(s.value, e.value, flowsList, s.date, e.date);
+  const instruments = instrumentResults(state, period.start, period.end, resolver, income, accountIds);
   return {
     period,
     startValue: s.value,
@@ -180,23 +189,24 @@ export function periodMetrics(state, period, resolver, today = isoDay(new Date()
     withdrawals: deposits - flows,
     profit,
     pct,
+    mwr,
     dividends,
     interest,
     instruments,
     best: instruments[0] || null,
     worst: instruments.length > 1 ? instruments[instruments.length - 1] : null,
-    contributionsTotal: netFlows(state, state.accounts.map((a) => a.id), null, period.end),
+    contributionsTotal: netFlows(state, accountIds || state.accounts.map((a) => a.id), null, period.end),
   };
 }
 
 // Podsumowanie roku kalendarzowego: 12 miesięcy + rok łącznie
-export function yearSummary(state, year, resolver, today = isoDay(new Date())) {
+export function yearSummary(state, year, resolver, today = isoDay(new Date()), accountIds = null) {
   const months = [];
   for (let m = 0; m < 12; m += 1) {
     const p = makePeriod('MONTH', isoDay(new Date(year, m, 1)), today);
     if (p.first > today || p.last < addDays(firstActivity(state), -1)) continue;
-    months.push(periodMetrics(state, p, resolver, today));
+    months.push(periodMetrics(state, p, resolver, today, accountIds));
   }
-  const total = periodMetrics(state, makePeriod('YEAR', `${year}-06-01`, today), resolver, today);
+  const total = periodMetrics(state, makePeriod('YEAR', `${year}-06-01`, today), resolver, today, accountIds);
   return { year, months, total };
 }

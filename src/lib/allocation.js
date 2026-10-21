@@ -34,7 +34,7 @@ function deviationRow({ key, label, value, total, targetPct }) {
 // Pełna analiza alokacji dla zakresu kont (scope)
 export function computeAllocation(state, scopeOverride) {
   const alloc = state.settings.allocation;
-  const scope = scopeOverride || alloc.scope || 'ALL';
+  const scope = scopeOverride || alloc.scope || 'INVEST';
   const accountIds = resolveAccountIds(state, scope);
   const valuation = valuePortfolio(state, { asOf: isoDay(new Date()), accountIds, priceLookup: livePriceLookup(state) });
   const t = valuation.totals;

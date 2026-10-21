@@ -25,28 +25,37 @@ export function sharesAt(state, instrumentId, date) {
   return out;
 }
 
-// Historia DPS instrumentu: wypłaty pogrupowane po dacie, DPS = brutto / liczba sztuk (w PLN).
-// Gdy liczby sztuk nie da się odtworzyć z transakcji (pozycja sprzedana, import samych otwartych pozycji),
-// używana jest stawka na akcję zapisana przy wypłacie (np. z komentarza XTB „5.0/ SHR”).
+// Historia DPS instrumentu: każda wypłata liczona dla konta, na które wpłynęła – liczba akcji na tym koncie
+// dzień przed wypłatą (stan historyczny, nie obecny). Gdy akcji nie da się odtworzyć (np. sprzedane po dniu
+// dywidendy, import samych otwartych pozycji) – stawka na akcję zapisana przy wypłacie (np. „5.0/ SHR” z XTB).
 export function dividendHistory(state, instrumentId) {
   const fx = state.prices?.fx;
   const byDate = new Map();
+  const sharesCache = new Map();
   for (const i of state.income) {
     if (i.type !== 'DIVIDEND' || i.instrumentId !== instrumentId) continue;
     const gross = Number(i.gross);
     if (!Number.isFinite(gross)) continue;
-    const row = byDate.get(i.date) || { date: i.date, gross: 0, shares: 0, recordedDpsPLN: null };
+    const day = addDays(i.date, -1);
+    if (!sharesCache.has(day)) sharesCache.set(day, sharesAt(state, instrumentId, day));
+    const shares = sharesCache.get(day)[i.accountId] || 0;
+    const recorded = Number(i.dps) > 0 ? Number(i.dps) * fxToPLN(fx, i.dpsCurrency || 'PLN') : null;
+    const row = byDate.get(i.date) || { date: i.date, gross: 0, shares: 0, tradeGross: 0, tradeShares: 0, recordedDpsPLN: null, accounts: new Set() };
     row.gross += gross;
-    if (Number(i.dps) > 0 && row.recordedDpsPLN === null) row.recordedDpsPLN = Number(i.dps) * fxToPLN(fx, i.dpsCurrency || 'PLN');
+    if (shares > 0) {
+      // Kilka wpisów tego samego dnia na jednym koncie (np. dwie wypłaty w raporcie XTB) – akcje liczone raz
+      if (!row.accounts.has(i.accountId)) row.tradeShares += shares;
+      row.accounts.add(i.accountId);
+      row.tradeGross += gross;
+    }
+    if (recorded && row.recordedDpsPLN === null) row.recordedDpsPLN = recorded;
     byDate.set(i.date, row);
   }
   const rows = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
   for (const r of rows) {
-    // sztuki dzień przed wypłatą (Ex-Date zwykle wcześniej – przybliżenie)
-    const shares = Object.values(sharesAt(state, instrumentId, addDays(r.date, -1))).reduce((s, q) => s + q, 0);
-    r.shares = shares;
-    r.dpsPLN = shares > 0 ? r.gross / shares : r.recordedDpsPLN || 0;
-    if (!(shares > 0) && r.recordedDpsPLN) r.shares = r.gross / r.recordedDpsPLN;
+    r.dpsPLN = r.tradeShares > 0 ? r.tradeGross / r.tradeShares : r.recordedDpsPLN || 0;
+    r.shares = r.dpsPLN > 0 ? r.gross / r.dpsPLN : r.tradeShares;
+    delete r.accounts;
   }
   return rows;
 }
@@ -88,9 +97,19 @@ export function dividendPositions(state, today = isoDay(new Date())) {
     });
 }
 
-// Status pozycji harmonogramu
-export function scheduleStatus(item, today = isoDay(new Date())) {
+// Wypłaty z rejestru pasujące do pozycji harmonogramu (ta sama spółka, od 5 dni przed dniem dywidendy
+// do 60 dni po wypłacie) – np. dywidenda z importu XTB sparowana z danymi Yahoo
+export function matchingIncome(state, item) {
+  if (!item?.instrumentId || !item.exDate) return [];
+  const from = addDays(item.exDate, -5);
+  const to = addDays(item.payDate || item.exDate, 60);
+  return state.income.filter((i) => i.type === 'DIVIDEND' && i.instrumentId === item.instrumentId && i.date >= from && i.date <= to);
+}
+
+// Status pozycji harmonogramu (state – opcjonalnie: wypłata już w rejestrze = wypłacona)
+export function scheduleStatus(item, today = isoDay(new Date()), state = null) {
   if (item.bookedAt) return 'PAID';
+  if (state && matchingIncome(state, item).length) return 'PAID';
   if (item.estimated) return 'FORECAST';
   if (item.exDate && item.exDate <= today) return 'PENDING';
   return 'ANNOUNCED';
@@ -116,6 +135,24 @@ export function evaluateScheduleItem(state, item, today = isoDay(new Date())) {
     const t = computeIncomeTax({ gross, foreignTax }, accountsById[accountId], state.settings);
     return { accountId, account: accountsById[accountId], shares: qty, gross, foreignTax, net: t.net };
   });
+  // Pozycja zaksięgowana / sparowana – kwoty rzeczywiste z rejestru
+  const paired = item.incomeIds?.length ? item.incomeIds : matchingIncome(state, item).map((i) => i.id);
+  if (paired.length) {
+    const ids = new Set(paired);
+    const rows = incomeEventsWithTax(state).filter((i) => ids.has(i.id));
+    if (rows.length) {
+      return {
+        instrument: inst,
+        status: 'PAID',
+        shares: perAccount.reduce((s, a) => s + a.shares, 0),
+        gross: rows.reduce((s, i) => s + (Number(i.gross) || 0), 0),
+        net: rows.reduce((s, i) => s + (Number.isFinite(i.net) ? i.net : 0), 0),
+        perAccount,
+        fx,
+        paired: true,
+      };
+    }
+  }
   return {
     instrument: inst,
     status: scheduleStatus(item, today),
@@ -170,7 +207,7 @@ export function buildCalendar(state, year, today = isoDay(new Date())) {
 
   // 2) harmonogram niezaksięgowany (w drodze / ogłoszona) – miesiąc wypłaty
   for (const item of state.dividendSchedule) {
-    if (item.bookedAt || !(Number(item.dps) > 0)) continue;
+    if (item.bookedAt || !(Number(item.dps) > 0) || matchingIncome(state, item).length) continue;
     const date = item.payDate || item.exDate;
     if (!date || Number(date.slice(0, 4)) !== year) continue;
     const m = Number(date.slice(5, 7)) - 1;
@@ -224,7 +261,7 @@ export function dividendKpis(state, today = isoDay(new Date())) {
   const ytdGross = income.filter((i) => i.date.startsWith(year) && i.date <= today).reduce((s, i) => s + (Number(i.gross) || 0), 0);
   const last12Net = income.filter((i) => i.date > addDays(today, -365) && i.date <= today).reduce((s, i) => s + (Number.isFinite(i.net) ? i.net : 0), 0);
   const pending = state.dividendSchedule
-    .filter((s) => scheduleStatus(s, today) === 'PENDING')
+    .filter((s) => scheduleStatus(s, today, state) === 'PENDING')
     .map((s) => evaluateScheduleItem(state, s, today));
   const positions = dividendPositions(state, today);
   const marketValue = positions.reduce((s, p) => s + p.value, 0);
@@ -307,4 +344,36 @@ export function projectDividends(positions, { years = 10, dgr = 0.06, drip = tru
     alternative: drip ? noDrip[i].net : r.net,
     monthly: (drip ? r.net : noDrip[i].net) / 12,
   }));
+}
+
+// Uzgodnienie harmonogramu z rejestrem (bez ręcznego „Zaksięguj”):
+// 1) pozycja z wypłatą w rejestrze (np. import XTB) → oznaczona jako wypłacona i powiązana z tymi wpisami;
+//    jeśli wcześniej zaksięgowano ją automatycznie z danych Yahoo – automatyczne wpisy zastępuje prawdziwa wypłata,
+// 2) przy włączonym autoksięgowaniu: pozycje po dniu wypłaty bez wpisu w rejestrze → wypłata wyliczona
+//    z liczby akcji na każdym koncie w dniu przed dniem dywidendy (stan historyczny).
+export function reconcileDividends(state, { autoBook = true, today = isoDay(new Date()) } = {}) {
+  const removeIncome = [];
+  const addIncome = [];
+  const updates = [];
+  const auto = (id) => String(id).startsWith('divsch_');
+  for (const item of state.dividendSchedule) {
+    const real = matchingIncome(state, item).filter((i) => !auto(i.id));
+    if (real.length) {
+      const ids = real.map((i) => i.id).sort();
+      const current = [...(item.incomeIds || [])].sort();
+      const autoIds = current.filter(auto);
+      if (autoIds.length) removeIncome.push(...autoIds);
+      if (!item.bookedAt || ids.join('|') !== current.join('|')) {
+        updates.push({ ...item, bookedAt: item.bookedAt || new Date().toISOString(), incomeIds: ids, pairedWith: 'rejestr' });
+      }
+      continue;
+    }
+    if (!autoBook || item.bookedAt || item.estimated || !item.payDate || item.payDate > today || !(Number(item.dps) > 0)) continue;
+    if (scheduleStatus(item, today) !== 'PENDING') continue;
+    const entries = bookingEntries(state, item);
+    if (!entries.length) continue;
+    addIncome.push(...entries);
+    updates.push({ ...item, bookedAt: new Date().toISOString(), incomeIds: entries.map((e) => e.id), autoBooked: true });
+  }
+  return { removeIncome, addIncome, updates };
 }
