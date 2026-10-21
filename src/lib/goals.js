@@ -49,6 +49,13 @@ export function autoGoalValue(state, goal) {
 }
 
 export function goalProgress(state, goal) {
+  // Cel zarchiwizowany przy zamknięciu roku – wynik zamrożony
+  if (goal.status === 'ARCHIVED' && goal.result) {
+    const target = Number(goal.target) || 0;
+    const current = Number(goal.result.current) || 0;
+    const pct = target > 0 ? Math.max(0, current / target) : 0;
+    return { current, target, pct, capped: Math.min(1, pct), done: target > 0 && current >= target, archived: true };
+  }
   const current = goal.source && goal.source !== 'MANUAL' ? autoGoalValue(state, goal) : Number(goal.current) || 0;
   const target = Number(goal.target) || 0;
   const pct = target > 0 ? Math.max(0, current / target) : 0;

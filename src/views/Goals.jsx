@@ -1,33 +1,13 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Minus, Pencil, Plus, Target, Trash2, Zap } from 'lucide-react';
+import { Archive, CalendarCheck, CheckCircle2, Lock, Minus, Pencil, Plus, Repeat, Target, Trash2, Unlock, Zap } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { GOAL_CATEGORIES, GOAL_SOURCES, goalsSummary } from '../lib/goals.js';
 import { seriesColor } from '../lib/colors.js';
 import { formatNumber, formatPercent } from '../lib/format.js';
 import { Badge, Button, Card, EmptyState, Field, IconButton, Input, Modal, Select } from '../components/ui.jsx';
-
-function Ring({ value, size = 168, stroke = 16, color, track }) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const v = Math.max(0, Math.min(1, value));
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Postęp celów ${Math.round(v * 100)}%`}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        strokeDasharray={`${c * v} ${c}`}
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        style={{ transition: 'stroke-dasharray 300ms ease' }}
-      />
-    </svg>
-  );
-}
+import Ring from '../components/goals/Ring.jsx';
+import YearReviewModal from '../components/goals/YearReviewModal.jsx';
+import { reopenYear } from '../lib/goalsRollover.js';
 
 function fmtValue(v, unit) {
   const digits = unit === 'zł' ? 0 : 2;
@@ -41,6 +21,16 @@ export default function GoalsView() {
   const [form, setForm] = useState(null);
   const [toDelete, setToDelete] = useState(null);
   const summary = useMemo(() => goalsSummary(state, year), [state, year]);
+  const [review, setReview] = useState(null);
+  const yearGoals = state.goals.filter((g) => Number(g.year) === year);
+  const openGoals = yearGoals.filter((g) => g.status !== 'ARCHIVED');
+  const closed = yearGoals.length > 0 && openGoals.length === 0;
+  const goalById = Object.fromEntries(state.goals.map((g) => [g.id, g]));
+  const reopen = () => {
+    for (const u of reopenYear(state, year)) actions.upsert('goals', u);
+    actions.updateSettings({ goalsReview: { reviewedYears: (state.settings.goalsReview?.reviewedYears || []).filter((y) => y !== year) } });
+    actions.notify(`Otworzono ponownie cele ${year}`, 'info');
+  };
   const years = useMemo(() => {
     const set = new Set([currentYear, currentYear + 1, ...state.goals.map((g) => Number(g.year))]);
     return [...set].sort((a, b) => b - a);
@@ -76,7 +66,7 @@ export default function GoalsView() {
       <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-neutral-900">
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
           <div className="relative shrink-0">
-            <Ring value={summary.overall} color={ringColor} track={isDark ? '#2c2c2a' : '#ecebe6'} />
+            <Ring value={summary.overall} color={ringColor} track={isDark ? '#2c2c2a' : '#ecebe6'} label={`Postęp celów ${Math.round(summary.overall * 100)}%`} />
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-3xl font-bold tabular">{formatPercent(summary.overall, { digits: 0 })}</span>
               <span className="text-xs text-stone-500">celów {year}</span>
@@ -88,8 +78,13 @@ export default function GoalsView() {
                 <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
                   <Target size={16} /> Cele roczne {year}
                 </div>
-                <div className="text-lg font-semibold">
+                <div className="flex flex-wrap items-center gap-2 text-lg font-semibold">
                   Osiągnięte: {summary.done} z {summary.total}
+                  {closed && (
+                    <Badge tone="neutral">
+                      <Lock size={11} /> rok zamknięty
+                    </Badge>
+                  )}
                 </div>
               </div>
               <div className="ml-auto flex items-center gap-2">
@@ -103,6 +98,16 @@ export default function GoalsView() {
                 <Button variant="primary" icon={Plus} onClick={() => newGoal()}>
                   Nowy cel
                 </Button>
+                {openGoals.length > 0 && year <= currentYear && (
+                  <Button icon={CalendarCheck} onClick={() => setReview(year)} title="Podsumowanie roku i kreator przenoszenia celów">
+                    Zamknij rok {year}
+                  </Button>
+                )}
+                {closed && (
+                  <Button variant="ghost" icon={Unlock} onClick={reopen}>
+                    Otwórz ponownie
+                  </Button>
+                )}
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -145,7 +150,8 @@ export default function GoalsView() {
               ) : (
                 <ul className="divide-y divide-stone-100 dark:divide-white/5">
                   {c.rows.map(({ goal, current, target, pct, capped, done }) => {
-                    const auto = goal.source && goal.source !== 'MANUAL';
+                    const archived = goal.status === 'ARCHIVED';
+                    const auto = goal.source && goal.source !== 'MANUAL' && !archived;
                     return (
                       <li key={goal.id} className="px-4 py-3 sm:px-5">
                         <div className="flex items-start gap-2">
@@ -153,6 +159,18 @@ export default function GoalsView() {
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-sm font-medium">{goal.name}</span>
                               {done && <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400" aria-label="Osiągnięty" />}
+                              {archived && <Badge tone={done ? 'green' : 'amber'}>{done ? 'Sukces' : 'Niezrealizowane'}</Badge>}
+                              {archived && goal.rolledTo && goalById[goal.rolledTo] && (
+                                <Badge tone="blue">
+                                  <Repeat size={10} /> przeniesiony na {goalById[goal.rolledTo].year}
+                                </Badge>
+                              )}
+                              {archived && !goal.rolledTo && (
+                                <Badge>
+                                  <Archive size={10} /> archiwum
+                                </Badge>
+                              )}
+                              {goal.rolledFrom && !archived && <Badge tone="blue">z {Number(goal.year) - 1}</Badge>}
                             </div>
                             <div className="text-xs text-stone-500 tabular dark:text-stone-400">
                               {fmtValue(current, goal.unit)} z {fmtValue(target, goal.unit)}
@@ -169,7 +187,7 @@ export default function GoalsView() {
                           <div className="h-full rounded-full transition-all" style={{ width: `${capped * 100}%`, background: done ? '#0ca30c' : seriesColor(c.slot, isDark) }} />
                         </div>
                         <div className="mt-2 flex items-center gap-1">
-                          {!auto && (
+                          {!auto && !archived && (
                             <>
                               <button type="button" aria-label="Zmniejsz" onClick={() => bump(goal, -1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 hover:bg-stone-100 dark:border-white/10 dark:hover:bg-white/5">
                                 <Minus size={14} />
@@ -189,7 +207,7 @@ export default function GoalsView() {
                             </>
                           )}
                           <span className="ml-auto" />
-                          <IconButton icon={Pencil} label="Edytuj cel" onClick={() => setForm({ ...goal })} className="h-8 w-8" />
+                          {!archived && <IconButton icon={Pencil} label="Edytuj cel" onClick={() => setForm({ ...goal })} className="h-8 w-8" />}
                           <IconButton icon={Trash2} label="Usuń cel" onClick={() => setToDelete(goal)} className="h-8 w-8 hover:text-red-600" />
                         </div>
                       </li>
@@ -266,6 +284,16 @@ export default function GoalsView() {
           </div>
         )}
       </Modal>
+
+      {review && (
+        <YearReviewModal
+          year={review}
+          onClose={(toYear) => {
+            setReview(null);
+            if (toYear) setYear(toYear);
+          }}
+        />
+      )}
 
       <Modal
         open={!!toDelete}

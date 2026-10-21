@@ -57,6 +57,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Dziennik decyzji**: wpisy z datą, tytułem, powiązaną transakcją/instrumentem/kontem, tagami i treścią; oś czasu z wyszukiwarką i filtrami (`journal`).
 - **Kopia zapasowa**: eksport `majatek-backup-RRRR-MM-DD_GG-MM.json` z metadanymi, import z podglądem i walidacją struktury (`src/lib/backup.js`), opcja kopii przed importem, przypomnienie o ostatniej kopii.
 - **Cele roczne**: kategorie Finansowe / Rozwój / Inne, cele ręczne (+/−) lub automatyczne z danych portfela, % każdego celu i zbiorczy wskaźnik kołowy (`src/lib/goals.js`).
+- **Zamknięcie roku i przenoszenie celów**: przy pierwszym uruchomieniu w nowym roku ekran podsumowania poprzedniego roku (Sukces / Niezrealizowane) i kreator: „Przerzuć na nowy rok” (postęp od zera, edytowalny cel) lub „Archiwizuj” (wynik zamrożony w historii roku). Cele limitów IKE/IKZE dostają nowe limity z Ustawień. Ręcznie: przycisk „Zamknij rok”, cofnięcie: „Otwórz ponownie” (`src/lib/goalsRollover.js`).
 
 ## Architektura danych (`src/state/schema.js`)
 

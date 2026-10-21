@@ -72,6 +72,7 @@ export function defaultSettings() {
     // Etap 6: polityka limitów IKE/IKZE – automatyczne uzupełnienie po Nowym Roku
     limitsPolicy: { autoUpdate: true, growthPct: 6, projectedWages: {} },
     contributionLimitsMeta: {}, // { rok: 'official' | 'manual' | 'wage' | 'estimate' }
+    goalsReview: { reviewedYears: [] }, // lata, dla których wykonano zamknięcie roku i przeniesienie celów
     dividendPrefs: { dgr: 6, years: 10, drip: true, reminderDays: 30 }, // Etap 4
     cpiOverrides: {}, // Etap 3: ręczne odczyty CPI r/r { 'RRRR-MM': % }
     priceMode: 'auto', // 'auto' | 'mock'
@@ -142,6 +143,9 @@ export function migrateState(raw) {
       returns: { ...base.settings.fire.returns, ...(raw.settings?.fire?.returns || {}) },
     },
     dividendPrefs: { ...base.settings.dividendPrefs, ...(raw.settings?.dividendPrefs || {}) },
+    goalsReview: {
+      reviewedYears: Array.isArray(raw.settings?.goalsReview?.reviewedYears) ? raw.settings.goalsReview.reviewedYears : [],
+    },
     limitsPolicy: {
       ...base.settings.limitsPolicy,
       ...(raw.settings?.limitsPolicy || {}),

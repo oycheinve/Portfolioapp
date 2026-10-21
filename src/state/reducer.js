@@ -64,6 +64,21 @@ export function reducer(state, action) {
       });
     }
 
+    case 'GOALS_ROLLOVER': {
+      // Zamknięcie roku celów: archiwizacja (zamrożony wynik) + utworzenie celów na nowy rok – jedna operacja
+      const { updates, creates, year } = action.payload;
+      const byId = new Map(updates.map((u) => [u.id, u]));
+      const existing = new Set(state.goals.map((g) => g.id));
+      const goals = [...state.goals.map((g) => (byId.has(g.id) ? { ...g, ...byId.get(g.id) } : g)), ...creates.filter((c) => !existing.has(c.id))];
+      const reviewed = new Set(state.settings.goalsReview?.reviewedYears || []);
+      reviewed.add(year);
+      return touch({
+        ...state,
+        goals,
+        settings: { ...state.settings, goalsReview: { ...(state.settings.goalsReview || {}), reviewedYears: [...reviewed].sort() } },
+      });
+    }
+
     case 'SET_META':
       // Etap 6: metadane (np. data ostatniej kopii zapasowej) – bez zmiany updatedAt
       return { ...state, meta: { ...state.meta, ...action.payload } };

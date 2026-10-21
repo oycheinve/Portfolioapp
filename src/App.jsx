@@ -11,6 +11,7 @@ import ReportsView from './views/Reports.jsx';
 import GoalsView from './views/Goals.jsx';
 import JournalView from './views/Journal.jsx';
 import StressTestView from './views/StressTest.jsx';
+import GoalsRolloverHost from './components/goals/GoalsRolloverHost.jsx';
 import SettingsView from './views/Settings.jsx';
 
 const VIEWS = {
@@ -54,6 +55,7 @@ export default function App() {
       <Layout view={view} onNavigate={navigate}>
         <View onNavigate={navigate} />
       </Layout>
+      <GoalsRolloverHost onNavigate={navigate} />
       <Toast />
     </AppProvider>
   );

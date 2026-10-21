@@ -215,6 +215,7 @@ export function AppProvider({ children }) {
         }
       },
       addMany: (collection, items) => dispatch({ type: 'ADD_MANY', payload: { collection, items } }),
+      goalsRollover: (payload) => dispatch({ type: 'GOALS_ROLLOVER', payload }),
       refreshPrices,
       refreshHistory,
       notify,
