@@ -86,6 +86,7 @@ export const ASSET_CLASSES = {
 export const OTHER_ASSET_CATEGORIES = {
   REAL_ESTATE: 'Nieruchomość',
   VEHICLE: 'Pojazd',
+  MOVABLE: 'Ruchomość (sprzęt, wyposażenie)',
   COLLECTIBLE: 'Kolekcje / Złoto',
   OTHER: 'Inne',
 };

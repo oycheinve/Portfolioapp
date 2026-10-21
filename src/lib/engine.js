@@ -342,15 +342,17 @@ export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
   };
 }
 
+// Nieruchomości i ruchomości zawsze wliczają się do Majątku Całkowitego (wartość − zobowiązania).
+// Przełączniki decydują tylko o widoczności w zakładce Portfel (showInPortfolio + ustawienie globalne).
 export function otherAssetsValue(state) {
   const items = state.otherAssets || [];
-  const included = items.filter((a) => a.includeInNetWorth);
   const sum = (arr) => arr.reduce((s, a) => s + (Number(a.value) || 0) - (Number(a.liabilities) || 0), 0);
+  const total = sum(items);
   return {
     items,
-    includedValue: state.settings.includeOtherAssets ? sum(included) : 0,
-    totalValue: sum(items),
-    globallyEnabled: !!state.settings.includeOtherAssets,
+    includedValue: total,
+    totalValue: total,
+    portfolioItems: state.settings.includeOtherAssets === false ? [] : items.filter((a) => a.showInPortfolio !== false),
   };
 }
 
@@ -465,8 +467,9 @@ export function computeTWR(state, accountIds, fromDate, toDate, endValue, priceA
 
 // Statystyki „Prawdziwy Zysk” dla okresu i filtra kont
 // priceAt(instrument, data) – ceny historyczne (createPriceResolver(state).instrumentPLN); bez nich wycena tylko z migawek
-export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', today = new Date(), priceAt = null } = {}) {
-  const accountIds = resolveAccountIds(state, filter);
+// accountIdsOverride – dowolny zestaw kont (np. wybór w raporcie na X) zamiast filtra
+export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', today = new Date(), priceAt = null, accountIds: accountIdsOverride = null } = {}) {
+  const accountIds = accountIdsOverride || resolveAccountIds(state, filter);
   const todayIso = isoDay(today);
   const priceLookup = livePriceLookup(state);
   const now = valuePortfolio(state, { asOf: todayIso, accountIds, priceLookup });
@@ -583,14 +586,36 @@ function firstFlowDate(state, accountIds) {
 }
 
 // Wykorzystanie rocznych limitów IKE/IKZE
+// Wpłaty techniczne (automatyczne uzupełnienie środków, wpłaty na pokrycie zakupów z importu otwartych pozycji)
+const SYNTHETIC_SOURCES = new Set(['AUTO_FUND', 'AUTO_BOND', 'XTB_OPEN']);
+export function isSyntheticDeposit(c) {
+  return SYNTHETIC_SOURCES.has(c?.source) || isAutoFunding(c);
+}
+
+// Wpłaty wliczane do rocznego limitu IKE/IKZE. Rotacja wewnątrz konta (sprzedaż → zakup) nie jest wpłatą:
+// gdy konto ma prawdziwe wpłaty w roku – liczą się tylko one; gdy są wyłącznie wpłaty techniczne –
+// pomniejszone o wpływy ze sprzedaży w tym roku (zakup za środki ze sprzedaży = 0 zł limitu).
+export function limitDeposits(state, accountId, year, { excludeId = null } = {}) {
+  const y = String(year);
+  const list = state.cashflows.filter((c) => c.accountId === accountId && c.type === 'DEPOSIT' && c.date.startsWith(y) && c.id !== excludeId);
+  const real = list.filter((c) => !isSyntheticDeposit(c)).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  if (real > 0) return real;
+  const synthetic = list.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  if (synthetic <= 0) return 0;
+  const account = state.accounts.find((a) => a.id === accountId);
+  const instrumentsById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
+  const sales = state.trades
+    .filter((t) => t.accountId === accountId && t.side === 'SELL' && t.date.startsWith(y))
+    .reduce((s, t) => s + tradeAmounts(t, account, instrumentsById[t.instrumentId]).sellProceeds, 0);
+  return Math.max(0, Math.round((synthetic - sales) * 100) / 100);
+}
+
 export function computeLimitUsage(state, year = new Date().getFullYear()) {
   return state.accounts
     .filter((a) => ACCOUNT_TYPES[a.type]?.hasLimit)
     .map((a) => {
       const limit = limitForAccount(a, state.settings, year);
-      const deposited = state.cashflows
-        .filter((c) => c.accountId === a.id && c.type === 'DEPOSIT' && c.date.startsWith(String(year)))
-        .reduce((s, c) => s + (Number(c.amount) || 0), 0);
+      const deposited = limitDeposits(state, a.id, year);
       return {
         account: a,
         year,

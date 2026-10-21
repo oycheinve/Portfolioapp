@@ -316,6 +316,7 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
   return {
     newInstruments,
     allIncome: income,
+    allCashflows: cashflows,
     ...fresh,
     duplicates: cashflows.length + trades.length + income.length - fresh.cashflows.length - fresh.trades.length - fresh.income.length,
     skipped,
@@ -472,7 +473,8 @@ export function analyzeXtbOpenPositions(sheets, { state }) {
 
 // Otwarte pozycje → transakcje kupna (każda transza osobno, koszt w PLN = wartość − zysk netto z XTB),
 // opcjonalnie wpłaty pokrywające zakupy (gotówka konta = 0) i zastąpienie wcześniejszych transakcji konta.
-export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash = true, replaceAccount = false }) {
+// realCashflows – prawdziwe wpłaty/wypłaty z arkusza „Cash Operations” (zamiast wpłat na pokrycie zakupów)
+export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash = true, replaceAccount = false, realCashflows = null }) {
   const accountId = account.id;
   const tradePrefix = `xtbpos_${accountId}_`;
   const fundPrefix = `xtbposfund_${accountId}_`;
@@ -521,7 +523,7 @@ export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash
         trade.fxFeePct = 0;
       }
       trades.push(trade);
-      if (fundCash && cost > 0) {
+      if (!realCashflows && fundCash && cost > 0) {
         cashflows.push({ id: `${fundPrefix}${lot.positionId}`, accountId, date: lot.date, type: 'DEPOSIT', amount: cost, note: `Wpłata na zakup ${g.ticker} (import otwartych pozycji XTB)`, source: 'XTB_OPEN' });
       }
     }
@@ -539,12 +541,19 @@ export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash
     }
   }
 
+  if (realCashflows) cashflows.push(...realCashflows);
   const newTradeIds = new Set(trades.map((t) => t.id));
   const newCashIds = new Set(cashflows.map((c) => c.id));
   // Usuwane: transze z poprzedniego importu, których już nie ma (sprzedane), albo – przy zastąpieniu – wszystkie transakcje i wpłaty konta
   const removeTrades = state.trades.filter((t) => t.accountId === accountId && (replaceAccount ? !newTradeIds.has(t.id) : String(t.id).startsWith(tradePrefix) && !newTradeIds.has(t.id))).map((t) => t.id);
   const removeCashflows = state.cashflows
-    .filter((c) => c.accountId === accountId && (replaceAccount ? !newCashIds.has(c.id) && c.source !== 'AUTO_BOND' && c.source !== 'AUTO_FUND' : String(c.id).startsWith(fundPrefix) && !newCashIds.has(c.id)))
+    .filter(
+      (c) =>
+        c.accountId === accountId &&
+        (replaceAccount
+          ? !newCashIds.has(c.id) && c.source !== 'AUTO_BOND' && c.source !== 'AUTO_FUND'
+          : (String(c.id).startsWith(fundPrefix) || (realCashflows && String(c.id).startsWith(`xtb_${accountId}_`))) && !newCashIds.has(c.id)),
+    )
     .map((c) => c.id);
   const existingTrade = new Set(state.trades.map((t) => t.id));
   const existingCash = new Set(state.cashflows.map((c) => c.id));
@@ -589,4 +598,11 @@ export function buildXtbIncomeImport(cashAnalysis, openMapping, { state, account
     allIds,
     existingCount: [...allIds].filter((id) => existing.has(id)).length,
   };
+}
+
+// Prawdziwe wpłaty i wypłaty z arkusza „Cash Operations” (np. „IKE deposit”) – podstawa wkładu i limitu IKE/IKZE
+export function buildXtbRealCashflows(cashAnalysis, { state, account }) {
+  const ops = { ...cashAnalysis, ops: cashAnalysis.ops.filter((o) => o.kind === 'DEPOSIT' || o.kind === 'WITHDRAWAL') };
+  const plan = buildXtbImport(ops, {}, { state, account, fxPct: 0 });
+  return plan.allCashflows;
 }

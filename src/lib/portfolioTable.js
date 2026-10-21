@@ -5,12 +5,13 @@ import { belkaRateForAccount, bondBelkaRate } from './tax.js';
 import { OTHER_ASSET_CATEGORIES } from './constants.js';
 
 export const PORTFOLIO_CATEGORIES = [
-  { id: 'CASH', label: 'Konta gotówkowe', short: 'Gotówka' },
+  // Kolejność sekcji w Portfelu: Akcje → ETF → Obligacje → Konta gotówkowe/oszczędnościowe → Nieruchomości
   { id: 'STOCK_PL', label: 'Akcje GPW', short: 'Akcje GPW' },
   { id: 'STOCK_FOREIGN', label: 'Akcje zagraniczne', short: 'Akcje zagr.' },
   { id: 'ETF_FOREIGN', label: 'ETF-y zagraniczne', short: 'ETF zagr.' },
   { id: 'ETF_PL', label: 'ETF/ETC/ETN GPW', short: 'ETF/ETC/ETN GPW' },
   { id: 'BONDS', label: 'Obligacje skarbowe', short: 'Obligacje' },
+  { id: 'CASH', label: 'Konta gotówkowe', short: 'Gotówka' },
   { id: 'OTHER', label: 'Nieruchomości i inne', short: 'Nieruchomości' },
 ];
 
@@ -139,9 +140,10 @@ export function buildPortfolioRows(state) {
   }
 
   // Nieruchomości / inne – jeśli uwzględniane w majątku
-  if (state.settings.includeOtherAssets) {
+  // Widoczność w Portfelu (w majątku całkowitym liczone zawsze)
+  if (state.settings.includeOtherAssets !== false) {
     for (const o of state.otherAssets || []) {
-      if (!o.includeInNetWorth) continue;
+      if (o.showInPortfolio === false) continue;
       rows.push({
         id: `other_${o.id}`,
         ops: [],

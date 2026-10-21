@@ -52,7 +52,7 @@ export default function StressTestView() {
             <Toggle checked={!!shock.plnOnly} onChange={(v) => set({ plnOnly: v })} label="Korekta tylko dla instrumentów w PLN (GPW)" />
             <Slider label="Kurs USD/PLN" value={shock.usd} onChange={(v) => set({ usd: v })} min={-10} max={10} step={1} format={pctLabel} accent={seriesColor(6, isDark)} hint="+ = słabszy złoty (zysk na aktywach w USD)" />
             <Slider label="Kurs EUR/PLN" value={shock.eur} onChange={(v) => set({ eur: v })} min={-10} max={10} step={1} format={pctLabel} accent={seriesColor(1, isDark)} />
-            <Slider label="Nieruchomości / inne aktywa" value={shock.other} onChange={(v) => set({ other: v })} min={-30} max={10} step={1} format={pctLabel} accent={seriesColor(4, isDark)} hint={state.settings.includeOtherAssets ? 'Działa na wartość brutto – kredyt bez zmian' : 'Kategoria wyłączona z majątku w ustawieniach'} />
+            <Slider label="Nieruchomości / inne aktywa" value={shock.other} onChange={(v) => set({ other: v })} min={-30} max={10} step={1} format={pctLabel} accent={seriesColor(4, isDark)} hint="Działa na wartość brutto – kredyt bez zmian" />
             <button type="button" className="self-end justify-self-start text-xs text-blue-600 hover:underline dark:text-blue-400" onClick={() => { setShock(DEFAULT_SHOCK); setLinked(true); }}>
               Przywróć domyślne (−15%)
             </button>

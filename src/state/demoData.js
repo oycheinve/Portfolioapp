@@ -281,8 +281,8 @@ export function createDemoState(today = new Date()) {
 
   // Pozostałe aktywa
   state.otherAssets = [
-    { id: 'oth_flat', name: 'Mieszkanie – Kraków', category: 'REAL_ESTATE', value: 780000, liabilities: 310000, includeInNetWorth: true, note: 'Wartość szacunkowa, hipoteka jako zobowiązanie' },
-    { id: 'oth_car', name: 'Samochód', category: 'VEHICLE', value: 42000, liabilities: 0, includeInNetWorth: false, note: '' },
+    { id: 'oth_flat', name: 'Mieszkanie – Kraków', category: 'REAL_ESTATE', value: 780000, liabilities: 310000, showInPortfolio: true, note: 'Wartość szacunkowa, hipoteka jako zobowiązanie' },
+    { id: 'oth_car', name: 'Samochód', category: 'VEHICLE', value: 42000, liabilities: 0, showInPortfolio: false, note: '' },
   ];
 
   // Historyczne migawki (co tydzień) wyliczone z historycznej ścieżki cen

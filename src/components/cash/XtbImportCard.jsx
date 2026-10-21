@@ -4,7 +4,7 @@ import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES } from '../../lib/constants.js';
 import { accountFxPct } from '../../lib/engine.js';
 import { readSpreadsheet } from '../../lib/xlsx.js';
-import { KIND_LABELS, analyzeXtb, analyzeXtbOpenPositions, buildXtbImport, buildXtbIncomeImport, buildXtbOpenImport, findOpenPositionsSheet } from '../../lib/xtbImport.js';
+import { KIND_LABELS, analyzeXtb, analyzeXtbOpenPositions, buildXtbImport, buildXtbIncomeImport, buildXtbOpenImport, buildXtbRealCashflows, findOpenPositionsSheet } from '../../lib/xtbImport.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
 import { Badge, Button, Card, Input, Select } from '../ui.jsx';
 
@@ -52,7 +52,7 @@ export default function XtbImportCard() {
         let cashOps = null;
         try {
           const c = analyzeXtb(sheets.filter((sh) => !/open\s*position/i.test(sh.name)), { state, accountId });
-          if (c.ops.some((o) => o.kind === 'DIVIDEND' || o.kind === 'INTEREST')) cashOps = c;
+          if (c.ops.some((o) => ['DIVIDEND', 'INTEREST', 'DEPOSIT', 'WITHDRAWAL'].includes(o.kind))) cashOps = c;
         } catch {
           cashOps = null;
         }
@@ -353,10 +353,20 @@ export default function XtbImportCard() {
 function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
   const { state, actions } = useApp();
   const hasOther = state.trades.some((t) => t.accountId === account.id && !String(t.id).startsWith(`xtbpos_${account.id}_`));
-  const [fundCash, setFundCash] = useState(true);
+  const hasRealDeposits = !!analysis.cashOps?.ops.some((o) => o.kind === 'DEPOSIT');
+  // Wpłaty: prawdziwe z raportu (limit IKE bez rotacji) / na pokrycie każdej transzy / brak
+  const [cashMode, setCashMode] = useState(hasRealDeposits ? 'REAL' : 'FUND');
+  const fundCash = cashMode === 'FUND';
+  const realCashflows = useMemo(
+    () => (cashMode === 'REAL' && analysis.cashOps ? buildXtbRealCashflows(analysis.cashOps, { state, account }) : null),
+    [cashMode, analysis, state, account],
+  );
   const [replaceAccount, setReplaceAccount] = useState(hasOther);
   const [withIncome, setWithIncome] = useState(!!analysis.cashOps);
-  const plan = useMemo(() => buildXtbOpenImport(analysis, mapping, { state, account, fundCash, replaceAccount }), [analysis, mapping, state, account, fundCash, replaceAccount]);
+  const plan = useMemo(
+    () => buildXtbOpenImport(analysis, mapping, { state, account, fundCash, replaceAccount, realCashflows }),
+    [analysis, mapping, state, account, fundCash, replaceAccount, realCashflows],
+  );
   const incomePlan = useMemo(
     () => (analysis.cashOps && withIncome ? buildXtbIncomeImport(analysis.cashOps, mapping, { state, account, fxPct: accountFxPct(account) }) : null),
     [analysis, mapping, state, account, withIncome],
@@ -470,12 +480,32 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
         </table>
       </div>
       <div className="space-y-2 text-sm">
-        <label className="flex items-start gap-2">
-          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={fundCash} onChange={(e) => setFundCash(e.target.checked)} />
-          <span>
-            Dodaj wpłaty pokrywające koszt zakupu każdej transzy <span className="text-stone-500">(gotówka konta = 0 zł, wkład = koszt pozycji – bez ujemnego salda)</span>
-          </span>
-        </label>
+        <fieldset className="space-y-1.5">
+          <legend className="mb-1 text-xs font-semibold text-stone-500">Wpłaty na konto</legend>
+          {hasRealDeposits && (
+            <label className="flex items-start gap-2">
+              <input type="radio" name="xtb-cash-mode" className="mt-1 accent-blue-600" checked={cashMode === 'REAL'} onChange={() => setCashMode('REAL')} />
+              <span>
+                Prawdziwe wpłaty i wypłaty z arkusza „{analysis.cashOps.sheetName}”{' '}
+                <span className="text-stone-500">
+                  ({realCashflows ? `${realCashflows.filter((c) => c.type === 'DEPOSIT').length} wpłat · ${formatPLN(realCashflows.filter((c) => c.type === 'DEPOSIT').reduce((s2, c) => s2 + c.amount, 0))}` : 'zalecane'} – limit IKE/IKZE liczony z faktycznych wpłat, rotacja akcji nie zużywa limitu)
+                </span>
+              </span>
+            </label>
+          )}
+          <label className="flex items-start gap-2">
+            <input type="radio" name="xtb-cash-mode" className="mt-1 accent-blue-600" checked={cashMode === 'FUND'} onChange={() => setCashMode('FUND')} />
+            <span>
+              Wpłaty pokrywające koszt zakupu każdej transzy <span className="text-stone-500">(gotówka konta = 0 zł, wkład = koszt pozycji)</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="radio" name="xtb-cash-mode" className="mt-1 accent-blue-600" checked={cashMode === 'NONE'} onChange={() => setCashMode('NONE')} />
+            <span>
+              Bez wpłat <span className="text-stone-500">(braki gotówki uzupełni automatyczne „Uzupełnienie środków”)</span>
+            </span>
+          </label>
+        </fieldset>
         {analysis.cashOps && (
           <label className="flex items-start gap-2">
             <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={withIncome} onChange={(e) => setWithIncome(e.target.checked)} />

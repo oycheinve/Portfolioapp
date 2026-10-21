@@ -54,13 +54,13 @@ export function DividendsMonthlyChart({ rows, year, years, onYearChange, compare
       </div>
       <div className="mt-3 h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} margin={{ top: 6, right: 8, left: 0, bottom: 0 }} barGap={2}>
+          <BarChart data={rows} margin={{ top: 6, right: 8, left: 0, bottom: 0 }} barGap={2} barCategoryGap="12%">
             <CartesianGrid stroke={chrome.grid} vertical={false} />
             <XAxis dataKey="month" tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={{ stroke: chrome.axis }} />
             <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={64} tickFormatter={formatAxisPLN} />
             <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v)} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
-            {compare && <Bar dataKey="previous" name={`${year - 1}`} fill={prev} radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />}
-            <Bar dataKey="current" name={`${year}`} fill={cur} radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
+            {compare && <Bar dataKey="previous" name={`${year - 1}`} fill={prev} radius={[4, 4, 0, 0]} maxBarSize={40} isAnimationActive={false} />}
+            <Bar dataKey="current" name={`${year}`} fill={cur} radius={[4, 4, 0, 0]} maxBarSize={40} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -102,7 +102,7 @@ export function DividendsYearlyChart({ rows }) {
       </div>
       <div className="mt-3 h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={rows} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+          <ComposedChart data={rows} margin={{ top: 6, right: 8, left: 0, bottom: 0 }} barCategoryGap="18%">
             <CartesianGrid stroke={chrome.grid} vertical={false} />
             <XAxis
               dataKey="year"
@@ -113,7 +113,7 @@ export function DividendsYearlyChart({ rows }) {
             />
             <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={64} tickFormatter={formatAxisPLN} />
             <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v)} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
-            <Bar dataKey="total" name="Suma roczna" fill={bar} radius={[4, 4, 0, 0]} maxBarSize={56} isAnimationActive={false} />
+            <Bar dataKey="total" name="Suma roczna" fill={bar} radius={[4, 4, 0, 0]} maxBarSize={96} isAnimationActive={false} />
             <Line type="monotone" dataKey="monthlyAvg" name="Średnia miesięczna" stroke={line} strokeWidth={2} dot={{ r: 4, fill: line, stroke: chrome.surface, strokeWidth: 2 }} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>

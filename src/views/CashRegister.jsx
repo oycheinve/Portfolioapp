@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, CASHFLOW_TYPES } from '../lib/constants.js';
-import { isoDay, tradeAmounts } from '../lib/engine.js';
+import { isoDay, limitDeposits, tradeAmounts } from '../lib/engine.js';
 import { limitForAccount } from '../lib/tax.js';
 import { formatAxisPLN, formatDate, formatMoney, formatNumber, formatPLN } from '../lib/format.js';
 import { chartChrome, seriesColor } from '../lib/colors.js';
@@ -66,10 +66,11 @@ export default function CashRegister() {
       const list = state.cashflows.filter((c) => c.accountId === a.id);
       const dep = list.filter((c) => c.type === 'DEPOSIT').reduce((s, c) => s + Number(c.amount), 0);
       const wd = list.filter((c) => c.type === 'WITHDRAWAL').reduce((s, c) => s + Number(c.amount), 0);
-      const yearDep = list.filter((c) => c.type === 'DEPOSIT' && c.date.startsWith(String(new Date().getFullYear()))).reduce((s, c) => s + Number(c.amount), 0);
+      // Do limitu IKE/IKZE: bez rotacji wewnątrz konta i bez wpłat technicznych
+      const yearDep = limitDeposits(state, a.id, new Date().getFullYear());
       return { account: a, dep, wd, net: dep - wd, yearDep, lastDate: list.reduce((m, c) => (c.date > m ? c.date : m), ''), today };
     });
-  }, [state.accounts, state.cashflows]);
+  }, [state]);
 
   const openNew = () => setForm(emptyOperation(accountFilter !== 'ALL' ? accountFilter : state.accounts[0]?.id));
   const openEdit = (c) => setForm(operationFromCashflow(c));

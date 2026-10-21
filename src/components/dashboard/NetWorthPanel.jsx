@@ -4,7 +4,7 @@ import { Building2, Landmark, ShieldCheck, TrendingUp } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { assetClassColor, chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatDate, formatPLN, formatPercent } from '../../lib/format.js';
-import { ChartTooltip, Segmented, Toggle } from '../ui.jsx';
+import { ChartTooltip, Segmented } from '../ui.jsx';
 import { otherAssetsValue } from '../../lib/engine.js';
 
 const RANGES = [
@@ -14,7 +14,7 @@ const RANGES = [
 ];
 
 export default function NetWorthPanel({ valuation, compact = false }) {
-  const { state, actions, isDark } = useApp();
+  const { state, isDark } = useApp();
   const [range, setRange] = useState('1Y');
   const chrome = chartChrome(isDark);
   const t = valuation.totals;
@@ -137,12 +137,11 @@ export default function NetWorthPanel({ valuation, compact = false }) {
 
           {!compact && pieBlock(false)}
 
-          <Toggle
-            checked={!!state.settings.includeOtherAssets}
-            onChange={(v) => actions.updateSettings({ includeOtherAssets: v })}
-            label="Uwzględniaj nieruchomości i inne aktywa"
-            description={`Zaznaczone pozycje: ${other.items.filter((i) => i.includeInNetWorth).length} z ${other.items.length} (wartość netto po zobowiązaniach). Edycja w ustawieniach.`}
-          />
+          {other.items.length > 0 && (
+            <p className="text-xs text-stone-500 dark:text-stone-400">
+              Nieruchomości i ruchomości ({other.items.length}) zawsze w majątku: {formatPLN(other.totalValue)} netto po zobowiązaniach. Widoczność w zakładce Portfel – w ustawieniach.
+            </p>
+          )}
         </div>
 
         {compact ? (

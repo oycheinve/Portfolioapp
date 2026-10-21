@@ -3,6 +3,7 @@ import { CalendarRange, Database, Layers, LineChart as LineIcon, Plus, RefreshCw
 import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES, BENCHMARKS, benchmarkDefs } from '../../lib/constants.js';
 import { createPriceResolver, historyAgeDays } from '../../lib/history.js';
+import { mayAutoFetch } from '../../lib/marketHours.js';
 import {
   RANGE_PRESETS,
   buildPortfolioSeries,
@@ -146,9 +147,9 @@ export default function ChartsCenter({ param }) {
     }
   };
 
-  // Pierwsze wejście: spróbuj pobrać historię, jeśli jest starsza niż doba
+  // Pierwsze wejście: spróbuj pobrać historię, jeśli jest starsza niż doba (w godzinach sesji albo gdy jej jeszcze nie ma)
   useEffect(() => {
-    if (state.settings.priceMode !== 'mock' && historyAgeDays(state) > 1 && state.priceHistory.status !== 'loading') {
+    if (state.settings.priceMode !== 'mock' && historyAgeDays(state) > 1 && mayAutoFetch(state.priceHistory?.updatedAt) && state.priceHistory.status !== 'loading') {
       actions.refreshHistory({ silent: true });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

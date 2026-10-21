@@ -1,14 +1,15 @@
 import { useMemo, useRef, useState } from 'react';
-import { Check, ClipboardCopy, Download, Image as ImageIcon, Send } from 'lucide-react';
+import { Check, ClipboardCopy, Download, Image as ImageIcon, Send, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { computePeriodStats, isoDay } from '../../lib/engine.js';
+import { computePeriodStats, isSafeAccount, isoDay } from '../../lib/engine.js';
+import { ACCOUNT_TYPES } from '../../lib/constants.js';
 import { createPriceResolver } from '../../lib/history.js';
 import { buildPortfolioSeries, defaultSelection } from '../../lib/series.js';
-import { listPeriods, periodMetrics } from '../../lib/reports.js';
+import { listPeriods, reportScope, scopedPeriodMetrics, scopedTotals } from '../../lib/reports.js';
 import { buildPostText, fmtPct, xLength } from '../../lib/xReport.js';
 import { dividendKpis } from '../../lib/dividends.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
-import { Button, Card, Field, Input, Segmented, Select, Toggle } from '../ui.jsx';
+import { Button, Card, Dropdown, Field, Input, Segmented, Select, Toggle } from '../ui.jsx';
 import ReportCard, { CARD_SIZES, svgToPngBlob } from './ReportCard.jsx';
 
 const TYPES = [
@@ -61,13 +62,23 @@ export default function XReportGenerator() {
     handle: saved.handle || '',
   });
   const [size, setSize] = useState(saved.size || 'WIDE');
+  // Zakres raportu: domyślnie tylko IKE (akcje + ETF); konta i rodzaje aktywów do wyboru
+  const defaultAccounts = () => {
+    const ike = state.accounts.filter((a) => a.type === 'IKE').map((a) => a.id);
+    return ike.length ? ike : state.accounts.filter((a) => !isSafeAccount(a)).map((a) => a.id);
+  };
+  const [scopeAccounts, setScopeAccounts] = useState(() => {
+    const list = (saved.scopeAccounts || []).filter((id) => state.accounts.some((a) => a.id === id));
+    return list.length ? list : defaultAccounts();
+  });
+  const [scopeKinds, setScopeKinds] = useState(() => (saved.scopeKinds?.length ? saved.scopeKinds : ['STOCK', 'ETF']));
   const [edited, setEdited] = useState(null);
   const [copied, setCopied] = useState(false);
   const svgRef = useRef(null);
 
   const persist = (patch) => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ type, size, ...options, ...patch }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ type, size, scopeAccounts, scopeKinds, ...options, ...patch }));
     } catch {
       // brak localStorage – preferencje nie zostaną zapamiętane
     }
@@ -82,22 +93,79 @@ export default function XReportGenerator() {
   const periods = useMemo(() => listPeriods(state, type).filter((p) => type !== 'MONTH' || p.closed), [state, type]);
   const period = periods[Math.min(periodIdx, periods.length - 1)];
   const resolver = useMemo(() => createPriceResolver(state), [state]);
-  const metrics = useMemo(() => (period ? periodMetrics(state, period, resolver) : null), [state, period, resolver]);
+  const scope = useMemo(() => reportScope(state, { accountIds: scopeAccounts, kinds: scopeKinds }), [state, scopeAccounts, scopeKinds]);
+  const metrics = useMemo(() => (period && scopeAccounts.length ? scopedPeriodMetrics(state, period, resolver, scope) : null), [state, period, resolver, scope, scopeAccounts]);
   const totals = useMemo(() => {
-    const st = computePeriodStats(state, { period: 'ALL' });
-    const k = dividendKpis(state);
-    return {
-      value: st.endValue,
-      contributions: st.contributionsAll,
-      profit: st.totalReturn,
-      profitPct: st.contributionsAll > 0 ? st.totalReturn / st.contributionsAll : 0,
-      dividends: st.dividendsNet,
-      dividendYield: k.yield,
-    };
-  }, [state]);
-  const series = useMemo(
-    () => (period ? buildPortfolioSeries(state, { range: { start: period.start, end: period.end }, selection: defaultSelection(), benchmarks: [], resolver }).points : []),
-    [state, period, resolver],
+    const t = scopedTotals(state, scope, { computePeriodStats });
+    return { ...t, dividendYield: dividendKpis(state).yield };
+  }, [state, scope]);
+  const series = useMemo(() => {
+    if (!period || !scopeAccounts.length) return [];
+    const withCash = scopeKinds.includes('CASH');
+    const selection = { ...defaultSelection(), accounts: scopeAccounts, kinds: { STOCK: scopeKinds.includes('STOCK'), ETF: scopeKinds.includes('ETF'), BONDS: withCash, CASH: withCash } };
+    return buildPortfolioSeries(state, { range: { start: period.start, end: period.end }, selection, benchmarks: [], resolver }).points;
+  }, [state, period, resolver, scopeAccounts, scopeKinds]);
+  const toggleAccount = (id, on) => {
+    const next = on ? [...new Set([...scopeAccounts, id])] : scopeAccounts.filter((x) => x !== id);
+    setScopeAccounts(next);
+    setEdited(null);
+    persist({ scopeAccounts: next });
+  };
+  const toggleKind = (k, on) => {
+    const next = on ? [...new Set([...scopeKinds, k])] : scopeKinds.filter((x) => x !== k);
+    if (!next.length) return;
+    setScopeKinds(next);
+    setEdited(null);
+    persist({ scopeKinds: next });
+  };
+  const scopeLabel = `${scopeAccounts.length === state.accounts.length ? 'Wszystkie konta' : state.accounts.filter((a) => scopeAccounts.includes(a.id)).map((a) => a.name.split(' – ')[0]).join(', ') || 'brak kont'} · ${[
+    scopeKinds.includes('STOCK') && 'akcje',
+    scopeKinds.includes('ETF') && 'ETF',
+    scopeKinds.includes('CASH') && 'gotówka i obligacje',
+  ]
+    .filter(Boolean)
+    .join(' + ')}`;
+  const scopePicker = (
+    <Dropdown label={scopeLabel} icon={SlidersHorizontal} title="Co uwzględnić w raporcie" panelClassName="sm:w-80">
+      <div className="space-y-3 text-sm">
+        <div>
+          <div className="mb-1 text-[11px] font-semibold tracking-wide text-stone-500 uppercase">Konta</div>
+          {state.accounts.map((a) => (
+            <label key={a.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-stone-100 dark:hover:bg-white/5">
+              <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={scopeAccounts.includes(a.id)} onChange={(e) => toggleAccount(a.id, e.target.checked)} />
+              <span className="h-2 w-2 rounded-full" style={{ background: ACCOUNT_TYPES[a.type]?.color }} />
+              <span className="truncate">{a.name}</span>
+            </label>
+          ))}
+        </div>
+        <div className="border-t border-stone-100 pt-2 dark:border-white/5">
+          <div className="mb-1 text-[11px] font-semibold tracking-wide text-stone-500 uppercase">Rodzaje aktywów</div>
+          {[
+            ['STOCK', 'Akcje'],
+            ['ETF', 'ETF-y'],
+            ['CASH', 'Gotówka i obligacje (pełna wartość kont)'],
+          ].map(([k, label]) => (
+            <label key={k} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-stone-100 dark:hover:bg-white/5">
+              <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={scopeKinds.includes(k)} onChange={(e) => toggleKind(k, e.target.checked)} />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const acc = defaultAccounts();
+            setScopeAccounts(acc);
+            setScopeKinds(['STOCK', 'ETF']);
+            setEdited(null);
+            persist({ scopeAccounts: acc, scopeKinds: ['STOCK', 'ETF'] });
+          }}
+          className="w-full rounded-lg bg-stone-100 py-1.5 text-xs font-medium hover:bg-stone-200 dark:bg-white/5 dark:hover:bg-white/10"
+        >
+          Domyślnie: tylko IKE (akcje + ETF)
+        </button>
+      </div>
+    </Dropdown>
   );
   const colors = useMemo(() => instrumentColorMap(state, true), [state]);
 
@@ -163,8 +231,9 @@ export default function XReportGenerator() {
             }}
             ariaLabel="Okres raportu"
           />
+          {scopePicker}
           <p className="text-sm text-stone-500">
-            {type === 'MONTH' ? 'Brak zamkniętego miesiąca – podsumowanie miesięczne pojawi się po zakończeniu pierwszego pełnego miesiąca.' : 'Brak danych do raportu.'}
+            {type === 'MONTH' ? 'Brak zamkniętego miesiąca – podsumowanie miesięczne pojawi się po zakończeniu pierwszego pełnego miesiąca.' : 'Brak danych do raportu – sprawdź wybór kont i rodzajów aktywów.'}
           </p>
         </div>
       </Card>
@@ -201,6 +270,7 @@ export default function XReportGenerator() {
             </option>
           ))}
         </Select>
+        {scopePicker}
         <span className="text-xs text-stone-500 dark:text-stone-400">{period.rangeLabel}</span>
         <span className={`ml-auto text-sm font-semibold tabular ${metrics.profit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
           {fmtPct(metrics.pct)} w okresie

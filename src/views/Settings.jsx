@@ -330,14 +330,12 @@ function PricesSection() {
         >
           <Input value={s.corsProxy || ''} onChange={(e) => actions.updateSettings({ corsProxy: e.target.value })} placeholder="np. https://moje-proxy.example.com/?url=" />
         </Field>
-        <Field label="Automatyczne odświeżanie">
-          <Select value={s.autoRefreshMinutes || 0} onChange={(e) => actions.updateSettings({ autoRefreshMinutes: Number(e.target.value) })}>
-            <option value={0}>Wyłączone</option>
-            <option value={5}>Co 5 minut</option>
-            <option value={15}>Co 15 minut</option>
-            <option value={60}>Co godzinę</option>
-          </Select>
-        </Field>
+        <Toggle
+          checked={s.refreshOnEnter !== false}
+          onChange={(v) => actions.updateSettings({ refreshOnEnter: v })}
+          label="Odświeżaj notowania przy wejściu do aplikacji"
+          description="Tylko w godzinach sesji GPW (pn–pt 9:00–16:50, czas polski) i najwyżej co 5 minut. W tle aplikacja niczego nie pobiera; poza sesją – ostatnie kursy (ręcznie: „Odśwież kursy”)."
+        />
         <p className="text-xs text-stone-500 dark:text-stone-400">
           Ostatnia aktualizacja: {formatDateTime(state.prices.lastRefresh)} · {state.prices.fx?.source}
         </p>
@@ -352,10 +350,10 @@ function OtherAssetsSection() {
   return (
     <Card
       title="Nieruchomości i inne aktywa"
-      subtitle="Opcjonalnie wliczane do Majątku Całkowitego (wartość − zobowiązania)"
+      subtitle="Nieruchomości i ruchomości – zawsze wliczane do Majątku Całkowitego (wartość − zobowiązania)"
       icon={Building2}
       actions={
-        <Button icon={Plus} onClick={() => setForm({ name: '', category: 'REAL_ESTATE', value: '', liabilities: '', includeInNetWorth: true, note: '' })}>
+        <Button icon={Plus} onClick={() => setForm({ name: '', category: 'REAL_ESTATE', value: '', liabilities: '', showInPortfolio: true, note: '' })}>
           Dodaj aktywo
         </Button>
       }
@@ -363,9 +361,10 @@ function OtherAssetsSection() {
     >
       <div className="border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
         <Toggle
-          checked={!!state.settings.includeOtherAssets}
+          checked={state.settings.includeOtherAssets !== false}
           onChange={(v) => actions.updateSettings({ includeOtherAssets: v })}
-          label="Uwzględniaj tę kategorię w Majątku Całkowitym"
+          label="Pokazuj nieruchomości i ruchomości w zakładce Portfel"
+          description="Do Majątku Całkowitego wliczają się zawsze. Przełącznik przy pozycji decyduje o jej widoczności w Portfelu."
         />
       </div>
       <ul className="divide-y divide-stone-100 dark:divide-white/5">
@@ -383,7 +382,9 @@ function OtherAssetsSection() {
                 {Number(a.liabilities) > 0 && ` · zobowiązania ${formatPLN(Number(a.liabilities))}`} · netto {formatPLN((Number(a.value) || 0) - (Number(a.liabilities) || 0))}
               </div>
             </div>
-            <Toggle checked={!!a.includeInNetWorth} onChange={(v) => actions.upsert('otherAssets', { ...a, includeInNetWorth: v })} />
+            <span title="Widoczność w zakładce Portfel">
+              <Toggle checked={a.showInPortfolio !== false} onChange={(v) => actions.upsert('otherAssets', { ...a, showInPortfolio: v })} />
+            </span>
             <IconButton icon={Pencil} label="Edytuj" onClick={() => setForm({ ...a })} />
             <IconButton icon={Trash2} label="Usuń" onClick={() => actions.remove('otherAssets', a.id)} className="hover:text-red-600" />
           </li>
@@ -433,7 +434,12 @@ function OtherAssetsSection() {
               <Input value={form.note || ''} onChange={(e) => setForm({ ...form, note: e.target.value })} />
             </Field>
             <div className="sm:col-span-2">
-              <Toggle checked={!!form.includeInNetWorth} onChange={(v) => setForm({ ...form, includeInNetWorth: v })} label="Wliczaj do majątku" />
+              <Toggle
+                checked={form.showInPortfolio !== false}
+                onChange={(v) => setForm({ ...form, showInPortfolio: v })}
+                label="Pokaż w zakładce Portfel"
+                description="Do Majątku Całkowitego wliczane zawsze"
+              />
             </div>
           </div>
         )}

@@ -223,7 +223,7 @@ export default function PortfolioView({ onNavigate }) {
               {[
                 { label: 'Wszystko', cats: allCats },
                 { label: 'Akcje i ETF', cats: ['STOCK_PL', 'STOCK_FOREIGN', 'ETF_PL', 'ETF_FOREIGN'] },
-                { label: 'Poduszka finansowa', cats: ['CASH', 'BONDS'] },
+                { label: 'Poduszka finansowa', cats: ['BONDS', 'CASH'] },
               ].map((p) => (
                 <button
                   key={p.label}

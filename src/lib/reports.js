@@ -152,6 +152,8 @@ function instrumentResults(state, start, end, resolver, income, accountIds = nul
       pct: pEnd / pStart - 1,
       result,
       dividends,
+      valueStart: qStart * pStart,
+      netBuys,
       valueEnd: qEnd * pEnd,
     });
   }
@@ -209,4 +211,54 @@ export function yearSummary(state, year, resolver, today = isoDay(new Date()), a
   }
   const total = periodMetrics(state, makePeriod('YEAR', `${year}-06-01`, today), resolver, today, accountIds);
   return { year, months, total };
+}
+
+// Raport na X dla wybranych kont i rodzajów aktywów (np. tylko IKE: akcje + ETF).
+// Tryb „aktywa” (bez gotówki i obligacji): wartość pozycji, kapitał w pozycjach (koszt), zysk = niezrealizowany
+// + zrealizowany + dywidendy; wynik okresu z wyników instrumentów. Tryb pełny – wartości całych kont.
+export function reportScope(state, { accountIds, kinds }) {
+  const assetsOnly = !kinds.includes('CASH');
+  const kindOf = (inst) => (inst?.kind === 'ETF' ? 'ETF' : 'STOCK');
+  const pick = (inst) => kinds.includes(kindOf(inst));
+  return { accountIds, kinds, assetsOnly, pick };
+}
+
+export function scopedTotals(state, scope, { computePeriodStats, today = isoDay(new Date()) }) {
+  if (!scope.assetsOnly) {
+    const st = computePeriodStats(state, { period: 'ALL', accountIds: scope.accountIds });
+    return { value: st.endValue, contributions: st.contributionsAll, profit: st.totalReturn, profitPct: st.totalReturnPct, dividends: st.dividendsNet };
+  }
+  const v = valuePortfolio(state, { asOf: today, accountIds: scope.accountIds, priceLookup: livePriceLookup(state) });
+  const positions = v.positions.filter((p) => scope.pick(p.instrument));
+  const value = positions.reduce((s, p) => s + p.value, 0);
+  const cost = positions.reduce((s, p) => s + p.costPLN, 0);
+  const realized = computeHoldings(state, today, scope.accountIds)
+    .filter((h) => scope.pick(h.instrument))
+    .reduce((s, h) => s + (h.realizedPLN || 0), 0);
+  const instIds = new Set(state.instruments.filter((i) => scope.pick(i)).map((i) => i.id));
+  const dividends = incomeEventsWithTax(state)
+    .filter((i) => i.type === 'DIVIDEND' && scope.accountIds.includes(i.accountId) && instIds.has(i.instrumentId) && i.date <= today)
+    .reduce((s, i) => s + i.net, 0);
+  const profit = value - cost + realized + dividends;
+  return { value, contributions: cost, profit, profitPct: cost > 0 ? profit / cost : 0, dividends };
+}
+
+export function scopedPeriodMetrics(state, period, resolver, scope, today = isoDay(new Date())) {
+  const m = periodMetrics(state, period, resolver, today, scope.accountIds);
+  if (!scope.assetsOnly) return m;
+  const instruments = m.instruments.filter((r) => scope.pick(r.instrument));
+  const profit = instruments.reduce((s, r) => s + r.result, 0);
+  const capital = instruments.reduce((s, r) => s + r.valueStart + Math.max(0, r.netBuys), 0);
+  const dividends = instruments.reduce((s, r) => s + r.dividends, 0);
+  return {
+    ...m,
+    instruments,
+    profit,
+    pct: capital > 0 ? profit / capital : 0,
+    dividends,
+    startValue: instruments.reduce((s, r) => s + r.valueStart, 0),
+    endValue: instruments.reduce((s, r) => s + r.valueEnd, 0),
+    best: instruments[0] || null,
+    worst: instruments.length > 1 ? instruments[instruments.length - 1] : null,
+  };
 }

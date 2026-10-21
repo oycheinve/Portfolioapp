@@ -3,15 +3,16 @@ import { CloudDownload, RefreshCw } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { runDividendSync } from '../../lib/dividendSync.js';
 import { formatDateTime } from '../../lib/format.js';
+import { mayAutoFetch } from '../../lib/marketHours.js';
 import { Button, Toggle } from '../ui.jsx';
 
-// Synchronizacja przy otwarciu zakładki Dywidendy (raz na 12 h) – niezależnie od tego, która sekcja jest rozwinięta
+// Synchronizacja przy otwarciu zakładki Dywidendy (raz na 12 h, w godzinach sesji) – niezależnie od tego, która sekcja jest rozwinięta
 export function useDividendAutoSync() {
   const { state, actions } = useApp();
   useEffect(() => {
     const prefs = state.settings.dividendPrefs || {};
     const age = prefs.lastSync ? (Date.now() - new Date(prefs.lastSync).getTime()) / 3600000 : Infinity;
-    if (prefs.autoSync !== false && age > 12) runDividendSync(state, actions, { silent: true });
+    if (prefs.autoSync !== false && age > 12 && mayAutoFetch(prefs.lastSync)) runDividendSync(state, actions, { silent: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }
 

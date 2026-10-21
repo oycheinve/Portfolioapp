@@ -74,7 +74,7 @@ export function defaultSettings() {
     cpiOverrides: {}, // Etap 3: ręczne odczyty CPI r/r { 'RRRR-MM': % }
     priceMode: 'auto', // 'auto' | 'mock'
     corsProxy: 'https://corsproxy.io/?url=',
-    autoRefreshMinutes: 0,
+    refreshOnEnter: true, // odświeżanie notowań przy wejściu do aplikacji w godzinach sesji GPW
   };
 }
 
@@ -163,6 +163,8 @@ export function migrateState(raw) {
     : [];
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
   out.accounts = migrateAccounts(out);
+  // Nieruchomości/ruchomości: dawny przełącznik „wliczaj do majątku” = widoczność w Portfelu (do majątku zawsze)
+  out.otherAssets = out.otherAssets.map((a) => (a && a.showInPortfolio === undefined ? { ...a, showInPortfolio: a.includeInNetWorth !== false } : a));
   out.priceHistory = {
     ...base.priceHistory,
     ...(raw.priceHistory || {}),

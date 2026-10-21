@@ -10,6 +10,7 @@ import { computeLimitsForYear } from '../lib/tax.js';
 import { uid } from '../lib/format.js';
 import { reconcileDividends } from '../lib/dividends.js';
 import { runDividendSync } from '../lib/dividendSync.js';
+import { isWarsawMarketOpen, mayAutoFetch } from '../lib/marketHours.js';
 
 const AppContext = createContext(null);
 
@@ -125,8 +126,9 @@ export function AppProvider({ children }) {
 
   const notify = useCallback((message, type = 'info') => setToast({ message, type, id: Date.now() }), []);
 
+  // silent – odświeżenie automatyczne (przy wejściu do aplikacji) bez komunikatu
   const refreshPrices = useCallback(
-    async (modeOverride) => {
+    async (modeOverride, { silent = false } = {}) => {
       const s = stateRef.current;
       setRefreshing(true);
       dispatch({ type: 'SET_PRICES', payload: { status: 'loading' } });
@@ -140,7 +142,7 @@ export function AppProvider({ children }) {
         });
         dispatch({ type: 'SET_PRICES', payload: result });
         // Bez komunikatów o błędach: przy braku Yahoo aplikacja płynnie korzysta z ostatnich danych (status w nagłówku)
-        if (result.status === 'live' || result.status === 'partial') notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');
+        if (!silent && (result.status === 'live' || result.status === 'partial')) notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');
       } catch {
         dispatch({ type: 'SET_PRICES', payload: { status: 'offline' } });
       } finally {
@@ -175,13 +177,29 @@ export function AppProvider({ children }) {
     [notify],
   );
 
-  // Automatyczne odświeżanie co N minut (opcjonalne)
+  // Notowania odświeżane wyłącznie przy wejściu do aplikacji (start, powrót do karty/okna) i tylko w godzinach
+  // sesji GPW (pn–pt 9:00–16:50). Bez timerów w tle – aplikacja zminimalizowana lub otwarta bez nawigacji nic nie pobiera.
   useEffect(() => {
-    const minutes = Number(state.settings.autoRefreshMinutes) || 0;
-    if (minutes <= 0) return undefined;
-    const t = setInterval(() => refreshPrices(), minutes * 60000);
-    return () => clearInterval(t);
-  }, [state.settings.autoRefreshMinutes, refreshPrices]);
+    const MIN_GAP_MS = 5 * 60 * 1000;
+    const onEnter = () => {
+      const s = stateRef.current;
+      if (document.visibilityState === 'hidden') return;
+      if (s.settings.priceMode === 'mock' || s.settings.refreshOnEnter === false || !s.instruments.length) return;
+      if (!isWarsawMarketOpen()) return;
+      const last = s.prices.lastRefresh ? new Date(s.prices.lastRefresh).getTime() : 0;
+      if (Date.now() - last < MIN_GAP_MS || s.prices.status === 'loading') return;
+      refreshPrices(undefined, { silent: true });
+    };
+    const onVisibility = () => document.visibilityState === 'visible' && onEnter();
+    const start = setTimeout(onEnter, 1500);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onEnter);
+    return () => {
+      clearTimeout(start);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onEnter);
+    };
+  }, [refreshPrices]);
 
   const actions = useMemo(
     () => ({
@@ -251,13 +269,13 @@ export function AppProvider({ children }) {
     [refreshPrices, refreshHistory, notify],
   );
 
-  // Dane dywidend (Yahoo / historia wypłat) pobierane po starcie aplikacji – raz na 12 h, bez otwierania zakładki
+  // Dane dywidend (Yahoo / historia wypłat) pobierane po starcie aplikacji – raz na 12 h, w godzinach sesji, bez otwierania zakładki
   useEffect(() => {
     const t = setTimeout(() => {
       const s = stateRef.current;
       const prefs = s.settings.dividendPrefs || {};
       const age = prefs.lastSync ? (Date.now() - new Date(prefs.lastSync).getTime()) / 3600000 : Infinity;
-      if (s.accounts.length && s.instruments.length && prefs.autoSync !== false && age > 12) runDividendSync(s, actions, { silent: true }).catch(() => {});
+      if (s.accounts.length && s.instruments.length && prefs.autoSync !== false && age > 12 && mayAutoFetch(prefs.lastSync)) runDividendSync(s, actions, { silent: true }).catch(() => {});
     }, 4000);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

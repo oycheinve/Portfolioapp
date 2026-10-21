@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES } from '../../lib/constants.js';
-import { accountFxPct, bondIncomeEvents, computeCashBalances, fxConversionPct, incomeEventsWithTax, tradeAmounts } from '../../lib/engine.js';
+import { accountFxPct, bondIncomeEvents, computeCashBalances, fxConversionPct, incomeEventsWithTax, limitDeposits, tradeAmounts } from '../../lib/engine.js';
 import { belkaRateForAccount, limitForAccount } from '../../lib/tax.js';
 import { formatPLN, todayISO } from '../../lib/format.js';
 import { Button, Field, Input, Modal, Segmented, Select } from '../ui.jsx';
@@ -85,9 +85,8 @@ export default function OperationFormModal({ form, setForm, onSave }) {
   }, [state, account, f.id, f.date, open]);
 
   const limit = account ? limitForAccount(account, state.settings, year) : 0;
-  const yearDeposits = state.cashflows
-    .filter((c) => c.accountId === f.accountId && c.type === 'DEPOSIT' && c.date.startsWith(String(year)) && c.id !== f.id)
-    .reduce((s, c) => s + Number(c.amount), 0);
+  // Wpłaty liczone do limitu bez rotacji wewnątrz konta i bez wpłat technicznych
+  const yearDeposits = account ? limitDeposits(state, account.id, year, { excludeId: f.id }) : 0;
   const remaining = Math.max(0, limit - yearDeposits);
 
   // Instrument transakcji (istniejący lub nowy)

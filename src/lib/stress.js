@@ -46,9 +46,7 @@ export function runStress(state, shock) {
   const other = otherAssetsValue(state);
   const otherBefore = other.includedValue;
   // Szok nieruchomości działa na wartość brutto, zobowiązania pozostają bez zmian
-  const otherGross = state.settings.includeOtherAssets
-    ? (state.otherAssets || []).filter((a) => a.includeInNetWorth).reduce((s, a) => s + (Number(a.value) || 0), 0)
-    : 0;
+  const otherGross = (state.otherAssets || []).reduce((s, a) => s + (Number(a.value) || 0), 0);
   const otherAfter = otherBefore + otherGross * ((shock.other || 0) / 100);
 
   const t = v.totals;

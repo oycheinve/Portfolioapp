@@ -140,8 +140,16 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Zysk Total %** = (wartość + wypłaty − wpłaty) / kapitał zaangażowany (wartość na start okresu + wpłaty w okresie). Dywidendy i odsetki są już w wartości (gotówka), więc nie są liczone podwójnie. Dawna stopa Modified Dietz zawyżała wynik przy dużych wpłatach pod koniec okresu (np. 45% zamiast 23%); jest dostępna w podpowiedzi jako MWR. TWR liczony z miesięcznych wycen (migawki lub ceny historyczne) – bez skoków przy braku migawek. Wartość na start okresu bez migawki wyceniana cenami historycznymi.
 - **Poduszka finansowa** = konta oszczędnościowe i konta obligacji skarbowych. Portfel inwestycyjny = pozostałe konta (także ich wolna gotówka). Alokacja domyślnie dla portfela inwestycyjnego; w Portfelu wiersze „↳ Portfel inwestycyjny” i „↳ Poduszka finansowa”; cele: wpłaty liczone dla portfela inwestycyjnego, nowe źródła „Wartość portfela inwestycyjnego” i „Poduszka finansowa”.
 - **Dywidendy historycznie**: DPS z liczby akcji na koncie, na które wpłynęła wypłata, w dniu przed wypłatą; harmonogram – akcje na każdym koncie przed dniem dywidendy; spółki sprzedane mają dywidendy tylko sprzed sprzedaży.
-- **Bez „Zaksięguj”**: wypłaty z rejestru (np. import XTB) parowane z harmonogramem Yahoo/historii (ta sama spółka, okno dni), pozostałe księgowane automatycznie po dniu wypłaty; gdy później przyjdzie prawdziwa wypłata z XTB, automatyczny wpis jest zastępowany. Synchronizacja dywidend także po starcie aplikacji (raz na 12 h).
+- **Bez „Zaksięguj”**: wypłaty z rejestru (np. import XTB) parowane z harmonogramem Yahoo/historii (ta sama spółka, okno dni), pozostałe księgowane automatycznie po dniu wypłaty; gdy później przyjdzie prawdziwa wypłata z XTB, automatyczny wpis jest zastępowany. Synchronizacja dywidend także po starcie aplikacji (raz na 12 h, w godzinach sesji).
 - **Cele**: kierunek automatyczny (docelowa niższa niż wartość startowa = cel „w dół”) lub wybrany ręcznie; postęp liczony od wartości startowej, cel osiągnięty dopiero po spadku do wartości docelowej.
+
+## Limit IKE przy rotacji, zakres raportu na X, nieruchomości, odświeżanie kursów
+
+- **Limit IKE/IKZE przy rotacji**: do limitu liczą się wyłącznie prawdziwe wpłaty z bieżącego roku. Automatyczne pokrycie zakupów (`AUTO_FUND`, import otwartych pozycji) nie jest wpłatą – gdy konto ma tylko takie wpisy, limit = pokrycia − przychody ze sprzedaży w roku, więc sprzedaż i odkupienie (rotacja) daje bilans 0 zł. Import arkusza „Open Positions” może pobrać rzeczywiste wpłaty z „Cash Operations” (domyślnie, gdy są w pliku) zamiast pokrycia każdej transzy.
+- **Raport na X – zakres**: domyślnie tylko konta IKE i wyłącznie akcje + ETF-y (bez gotówki i obligacji). Panel z checkboxami (konta, rodzaje aktywów, przycisk „Domyślnie: tylko IKE”) zmienia wartość portfela, zysk, wynik okresu, najlepsze/najsłabsze spółki i wykres na karcie; wybór zapamiętywany w przeglądarce.
+- **Nieruchomości i ruchomości** zawsze wliczają się do Majątku Całkowitego (pulpit, udział poduszki, stress test). Przełącznik przy pozycji („Pokaż w zakładce Portfel”) i globalny przełącznik w ustawieniach decydują tylko o widoczności w zakładce Portfel. Nowa kategoria „Ruchomość (sprzęt, wyposażenie)”.
+- **Odświeżanie kursów** wyłącznie przy wejściu do aplikacji (start, powrót do karty lub okna) i tylko w godzinach sesji GPW: pn–pt 9:00–16:50 czasu polskiego (najczęściej raz na 5 minut). Brak timerów w tle. Automatyczna synchronizacja dywidend i historii cen też tylko w godzinach sesji (wyjątek: pierwsze pobranie, gdy danych jeszcze nie ma). Ręczne „Odśwież kursy” działa zawsze.
+- **Portfel**: sekcje w kolejności Akcje → ETF → Obligacje → Konta gotówkowe/oszczędnościowe → Nieruchomości. **Wykresy dywidend**: grubsze słupki (miesięczne i roczne).
 
 ## Architektura danych (`src/state/schema.js`)
 
@@ -153,7 +161,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 | `cashflows` | Wpłaty/wypłaty własne – podstawa wkładu netto |
 | `income` | Dywidendy/odsetki brutto + podatek u źródła; Belka 19% liczona automatycznie poza IKE/IKZE (można wyłączyć per konto/transza) |
 | `bonds` | Obligacje EDO/COI/TOS/ROR: data zakupu, sztuki, oprocentowanie 1. roku, marża, inflacja |
-| `otherAssets` | Nieruchomości/inne z przełącznikiem uwzględniania w majątku |
+| `otherAssets` | Nieruchomości/ruchomości – zawsze w majątku; `showInPortfolio` = widoczność w zakładce Portfel |
 | `goals` | Cele roczne: kategoria, wartość docelowa i aktualna, źródło automatyczne (Etap 6) |
 | `journal` | Dziennik decyzji inwestycyjnych (Etap 6) – dane zachowane, zakładka chwilowo ukryta w menu |
 | `dividendSchedule` | Ogłoszone dywidendy: DPS, Ex-Date, wypłata, podatek u źródła, status księgowania (Etap 4) |
