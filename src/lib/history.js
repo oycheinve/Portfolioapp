@@ -148,6 +148,28 @@ export function createPriceResolver(state) {
     return merged;
   };
 
+  // Etap 5: ceny zapisane w migawkach dziennych (ostatnia migawka ≤ data, maks. 10 dni wcześniej)
+  const snapPrices = new Map();
+  for (const sn of state.snapshots || []) {
+    for (const [id, price] of Object.entries(sn.prices || {})) {
+      if (!snapPrices.has(id)) snapPrices.set(id, []);
+      snapPrices.get(id).push([sn.date, price]);
+    }
+  }
+  const snapshotPriceAt = (id, iso) => {
+    const pts = snapPrices.get(id);
+    if (!pts?.length || iso < pts[0][0]) return null;
+    let lo = 0;
+    let hi = pts.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (pts[mid][0] <= iso) lo = mid;
+      else hi = mid - 1;
+    }
+    const [d, p] = pts[lo];
+    return (toTime(iso) - toTime(d)) / DAY <= 10 ? p : null;
+  };
+
   const instrumentPLN = (inst, iso) => {
     if (!inst) return null;
     const q = quotes[inst.id];
@@ -159,7 +181,12 @@ export function createPriceResolver(state) {
       sources[inst.id] = 'yahoo';
       return closeAt(s.points, iso) * fxAt(s.currency || inst.currency, iso);
     }
-    sources[inst.id] = sources[inst.id] || 'reconstructed';
+    const snap = snapshotPriceAt(inst.id, iso);
+    if (snap !== null) {
+      sources[inst.id] = sources[inst.id] === 'reconstructed' ? 'reconstructed' : 'snapshots';
+      return snap;
+    }
+    sources[inst.id] = 'reconstructed';
     return interpolate(anchorsFor(inst), iso);
   };
 

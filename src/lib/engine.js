@@ -476,5 +476,10 @@ export function buildSnapshot(state, asOf, priceLookup) {
       contrib: Math.round(netFlows(state, [id], null, asOf) * 100) / 100,
     };
   }
-  return { date: asOf, accounts };
+  // Etap 5: ceny instrumentów z dnia migawki (PLN) – historia cen do raportów okresowych
+  const prices = {};
+  for (const pos of v.positions) {
+    if (!pos.priceMissing && Number.isFinite(pos.pricePLN)) prices[pos.instrumentId] = Math.round(pos.pricePLN * 10000) / 10000;
+  }
+  return { date: asOf, accounts, prices };
 }

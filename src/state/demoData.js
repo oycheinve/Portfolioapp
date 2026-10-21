@@ -281,6 +281,10 @@ export function createDemoState(today = new Date()) {
     isoDay(new Date(today.getFullYear() - 1, 11, 31)),
     isoDay(new Date(today.getFullYear(), today.getMonth() - 1, today.getDate())),
   ];
+  // Etap 5: migawki na koniec każdego miesiąca – precyzyjne podsumowania miesięczne i roczne
+  for (let m = new Date(2024, 0, 31); m < today; m = new Date(m.getFullYear(), m.getMonth() + 2, 0)) extra.push(isoDay(m));
+  // oraz dzienne migawki z ostatnich ~6 tygodni (jak przy codziennym korzystaniu z aplikacji)
+  for (let k = 45; k >= 1; k -= 1) extra.push(isoDay(new Date(today.getFullYear(), today.getMonth(), today.getDate() - k)));
   for (const date of extra) {
     if (date >= todayIso || date < DEMO_START || snaps.some((s) => s.date === date)) continue;
     const lookup = (inst) => {

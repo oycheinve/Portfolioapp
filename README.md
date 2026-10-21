@@ -43,6 +43,13 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - Nawigacja mobilna: 4 główne zakładki + arkusz „Więcej”.
 - Logika: `src/lib/dividends.js`, `src/lib/fire.js`, `src/lib/calendarExport.js`; stan: `dividendSchedule`, `settings.fire`, `settings.dividendPrefs`, `instrument.dividend` (DPS, najbliższe wydarzenie).
 
+## Etap 5 – Raport na X i podsumowania
+
+- **Raport na X**: okres tygodniowy (ISO) / miesięczny / roczny, wybór bieżącego lub wcześniejszego okresu; automatyczny tekst posta (wartość, wpłacone, zysk total, dywidendy, wynik okresu, najlepsze i najsłabsze spółki), licznik znaków X, tryb „ukryj kwoty”, hashtagi i nick, przycisk „Kopiuj tekst na X” oraz otwarcie okna publikacji X.
+- **Karta graficzna** (SVG, ciemny motyw, 16:9 lub 1:1): wynik okresu, statystyki, wykres TWR okresu, największe ruchy z monogramami spółek; eksport do PNG (2×) i kopiowanie obrazu.
+- **Podsumowania**: rok kalendarzowy 1.01–31.12 (bieżący do dziś) z wykresem wyników miesięcy, tabela każdego miesiąca i każdego roku: wartość, wpłaty netto, zysk/strata PLN i %, dywidendy, najlepszy i najgorszy instrument.
+- Logika: `src/lib/reports.js`, `src/lib/xReport.js`. Migawki dzienne zapisują teraz także ceny instrumentów (`snapshots[].prices`), co zasila historię cen raportów i wykresów.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |
@@ -56,7 +63,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 | `otherAssets` | Nieruchomości/inne z przełącznikiem uwzględniania w majątku |
 | `goals` | Cele roczne (kolejne etapy) |
 | `dividendSchedule` | Ogłoszone dywidendy: DPS, Ex-Date, wypłata, podatek u źródła, status księgowania (Etap 4) |
-| `snapshots` | Dzienne migawki wartości i wkładu per konto (historia, TWR, start okresów YTD/1M) |
+| `snapshots` | Dzienne migawki wartości i wkładu per konto oraz ceny instrumentów (historia, TWR, raporty okresowe) |
 | `prices` | Notowania, kursy walut, status i dziennik odświeżania |
 | `priceHistory` | Tygodniowa historia cen instrumentów, benchmarków i walut (Etap 3) |
 

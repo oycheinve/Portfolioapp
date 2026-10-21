@@ -48,6 +48,12 @@ function firstActivityDate(state, accountIds) {
 }
 
 export function resolveRange(state, range, accountIds, today = isoDay(new Date())) {
+  // Etap 5: zakres jawny { start, end }
+  if (range && typeof range === 'object') {
+    const first = addDays(firstActivityDate(state, accountIds), -1);
+    const end = range.end > today ? today : range.end;
+    return { start: range.start < first ? first : range.start, end };
+  }
   const [ty, tm, td] = today.split('-').map(Number);
   let start;
   let end = today;

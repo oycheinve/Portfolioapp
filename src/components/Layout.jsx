@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, Coins, Flame, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, Coins, FileText, Flame, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -12,6 +12,7 @@ export const NAV_ITEMS = [
   { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i Obligacje', icon: LineChart, mobile: true },
   { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins, mobile: true },
   { id: 'fire', label: 'FIRE', longLabel: 'FIRE 2055', icon: Flame, mobile: true },
+  { id: 'reports', label: 'Raporty', longLabel: 'Raporty i podsumowania', icon: FileText },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];

@@ -7,6 +7,7 @@ import AllocationView from './views/Allocation.jsx';
 import ChartsBondsView from './views/ChartsBonds.jsx';
 import DividendsView from './views/Dividends.jsx';
 import FireView from './views/Fire.jsx';
+import ReportsView from './views/Reports.jsx';
 import SettingsView from './views/Settings.jsx';
 
 const VIEWS = {
@@ -15,6 +16,7 @@ const VIEWS = {
   charts: ChartsBondsView,
   dividends: DividendsView,
   fire: FireView,
+  reports: ReportsView,
   cash: CashRegister,
   settings: SettingsView,
 };
