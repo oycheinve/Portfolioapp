@@ -171,6 +171,7 @@ export function AppProvider({ children }) {
       deleteAccount: (id) => dispatch({ type: 'DELETE_ACCOUNT', payload: id }),
       loadDemo: () => dispatch({ type: 'LOAD_DEMO' }),
       resetEmpty: () => dispatch({ type: 'RESET_EMPTY' }),
+      clearHistory: (opts = {}) => dispatch({ type: 'CLEAR_HISTORY', payload: { ...opts, today: isoDay(new Date()) } }),
       exportState: () => {
         const s = stateRef.current;
         const now = new Date();

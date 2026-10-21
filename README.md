@@ -97,6 +97,11 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Raport na X**: tydzień i miesiąc dosłownie wg szablonów („📊 Raport portfela | Tydzień N…”, „📊 Podsumowanie miesiąca:…”).
 - **Portfel**: ciemny nagłówek, wiersz „Cały Portfel”, sekcje z opisem w jednej linii (wartość, zysk, wartość zakupu, zysk dzienny, zwrot, zmiana dzienna, udział), ikony operacji (kup, sprzedaj, historia, notowania), strzałki zmian, stopka „Razem (N)”.
 
+## Zarządzanie historią i dopracowany Portfel
+
+- **Usuń wszystkie transakcje** (Rejestr Wpłat/Wypłat → Zarządzanie danymi oraz Ustawienia → Kopia zapasowa): czyści transakcje, wpłaty/wypłaty, dywidendy i odsetki, harmonogram dywidend i migawki (opcjonalnie obligacje i listę instrumentów). Potwierdzenie: zaznaczenie „Rozumiem…” i wpisanie „USUŃ”; konta, ustawienia i cele zostają.
+- **Portfel**: liczby jak we wzorcu (kropka dziesiętna, spacje tysięcy), wiersz „Cały Portfel” liczony jak fundusz (cena jednostki od 100, stopa TWR, liczba jednostek), jednoliniowe nazwy walorów z paskiem koloru konta, nagłówki sekcji w jednej linii, ikony operacji: kup, sprzedaj, historia transakcji, dywidendy (z kropką, gdy były wypłaty), wykres notowań, edycja waloru.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

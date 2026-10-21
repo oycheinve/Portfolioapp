@@ -64,6 +64,28 @@ export function reducer(state, action) {
       });
     }
 
+    case 'CLEAR_HISTORY': {
+      // Usuwa całą historię operacji (transakcje, wpłaty/wypłaty, dywidendy/odsetki, harmonogram dywidend, migawki).
+      // Konta, ustawienia i cele zostają; obligacje i instrumenty – opcjonalnie.
+      const { bonds = false, instruments = false, today } = action.payload || {};
+      return touch({
+        ...state,
+        meta: { ...state.meta, demo: false },
+        trades: [],
+        cashflows: [],
+        income: [],
+        dividendSchedule: [],
+        snapshots: [],
+        bonds: bonds ? [] : state.bonds,
+        instruments: instruments ? [] : state.instruments,
+        // Automatyczne odsetki liczone od dziś – inaczej zostałyby ponownie dopisane za przeszłe okresy
+        accounts: state.accounts.map((a) => (a.autoInterest ? { ...a, autoInterestFrom: today } : a)),
+        settings: instruments
+          ? { ...state.settings, allocation: { ...state.settings.allocation, instrumentTargets: {} } }
+          : state.settings,
+      });
+    }
+
     case 'GOALS_ROLLOVER': {
       // Zamknięcie roku celów: archiwizacja (zamrożony wynik) + utworzenie celów na nowy rok – jedna operacja
       const { updates, creates, year } = action.payload;

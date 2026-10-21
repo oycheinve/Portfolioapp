@@ -10,6 +10,7 @@ import { chartChrome, seriesColor } from '../lib/colors.js';
 import { Badge, Button, Card, ChartTooltip, EmptyState, IconButton, Input, Modal, Segmented, Select } from '../components/ui.jsx';
 import OperationFormModal, { emptyOperation, operationFromCashflow, operationFromTrade } from '../components/cash/OperationFormModal.jsx';
 import XtbImportCard from '../components/cash/XtbImportCard.jsx';
+import ClearHistoryButton from '../components/settings/ClearHistoryButton.jsx';
 
 const MONTHS = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
 
@@ -258,6 +259,14 @@ export default function CashRegister() {
       <TradesCard accountFilter={accountFilter} yearFilter={yearFilter} onEdit={(t) => setForm(operationFromTrade(t))} />
 
       <XtbImportCard />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50/50 px-4 py-3 sm:px-5 dark:border-red-500/20 dark:bg-red-500/5">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">Zarządzanie danymi</div>
+          <div className="text-xs text-stone-600 dark:text-stone-400">Wyczyść całą historię operacji (np. przed ponownym importem z XTB). Konta i ustawienia zostają.</div>
+        </div>
+        <ClearHistoryButton />
+      </div>
 
       <OperationFormModal
         form={form}

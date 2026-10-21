@@ -1,19 +1,29 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronUp, CircleDollarSign, Coins, History, LineChart, MinusSquare, PlusSquare, ShoppingBasket, SlidersHorizontal, Table2 } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronUp, CircleDollarSign, Coins, History, Info, LineChart, MinusSquare, Pencil, PlusSquare, ShoppingBasket, SlidersHorizontal, Table2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { PORTFOLIO_CATEGORIES, buildPortfolioRows, groupRows } from '../lib/portfolioTable.js';
+import { computePeriodStats } from '../lib/engine.js';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
 import { formatDate, formatMoney, formatNumber, formatPLN, formatPercent, signClass } from '../lib/format.js';
 import { Card, Dropdown, EmptyState, Modal } from '../components/ui.jsx';
 import OperationFormModal, { emptyOperation } from '../components/cash/OperationFormModal.jsx';
+import { DividendsModal, InstrumentEditModal, PriceChartModal } from '../components/portfolio/RowModals.jsx';
 
 const PREFS_KEY = 'wealth-app-portfolio-filters';
 
-// Liczby w tabeli: dwa miejsca po przecinku, spacja tysięcy także dla liczb 4-cyfrowych (jednostka w nagłówku kolumny)
-const fmt2Formatter = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmt2 = (v) => (Number.isFinite(v) ? fmt2Formatter.format(v).replace(/^(-?\d)(\d{3}),/, '$1 $2,') : '—');
+// Liczby w tabeli jak we wzorcu: kropka dziesiętna, spacja tysięcy („1 397.20”), jednostka w nagłówku kolumny
+const dotFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const unitFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 6 });
+const fmt2 = (v) => (Number.isFinite(v) ? dotFormatter.format(v).replace(/,/g, ' ') : '—');
 const pct2 = (v) => (Number.isFinite(v) ? fmt2(v * 100) : '—');
-const units = (v) => (Number.isFinite(v) ? formatNumber(v, v % 1 === 0 ? 0 : 4) : '—');
+// Bez zbędnych zer na końcu: „88.9”, „0”, „117.81”
+const trim = (text) => (text.includes('.') ? text.replace(/\.?0+$/, '') : text);
+const pctTrim = (v) => (Number.isFinite(v) ? trim(pct2(v)) : '—');
+const units = (v) => (Number.isFinite(v) ? unitFormatter.format(v).replace(/,/g, ' ') : '—');
+// Nagłówek sekcji: kwoty z przecinkiem bez separatora tysięcy („5545,86”, „6800”), procenty jak we wzorcu
+const hAmount = (v) => trim((Number(v) || 0).toFixed(2)).replace('.', ',');
+const hPctComma = (v) => `${trim(((Number(v) || 0) * 100).toFixed(2)).replace('.', ',')}%`;
+const hPctDot = (v) => `${trim(((Number(v) || 0) * 100).toFixed(2))}%`;
 
 function readPrefs() {
   try {
@@ -61,14 +71,14 @@ function Signed({ value, kind = 'pln', digits = 2 }) {
   return <span className={signClass(value)}>{kind === 'pct' ? formatPercent(value, { sign: true, digits }) : formatPLN(value, { sign: true })}</span>;
 }
 
-// Wartość z kolorem i strzałką (jak w tabeli wzorcowej): ^ 1,99 / v -7,72
-function Arrowed({ value }) {
+// Wartość z kolorem i strzałką (jak w tabeli wzorcowej): ^ 1.99 / v -7.72
+function Arrowed({ value, trimZeros = false }) {
   if (value === null || value === undefined || !Number.isFinite(value)) return <span className="text-stone-400">—</span>;
   const Icon = value > 0 ? ChevronUp : value < 0 ? ChevronDown : null;
   return (
     <span className={`inline-flex w-full items-center justify-between gap-1 ${signClass(value)}`}>
       <span className="w-3">{Icon && <Icon size={13} strokeWidth={2.5} />}</span>
-      <span>{pct2(value)}</span>
+      <span>{trimZeros ? pctTrim(value) : pct2(value)}</span>
     </span>
   );
 }
@@ -92,15 +102,15 @@ const COLS = [
   { key: 'gain', label: 'Zysk [PLN]' },
 ];
 
-const cell = 'border-l border-stone-200 px-2 py-1.5 text-right dark:border-white/10';
+const cell = 'border-l border-stone-200 px-2 py-1 text-right whitespace-nowrap dark:border-white/10';
 
 // Nagłówek sekcji jako jedna linia tekstu: „Akcje GPW (9), wartość: …, zysk: …, wartość zakupu: …, zysk dzienny: …, zwrot: …, zmiana dzienna: …, udział: …”
 function SectionSummary({ g }) {
   const cost = g.rows.reduce((s, r) => s + (Number(r.cost) || 0), 0);
   return (
     <>
-      {g.label} ({g.rows.length}), wartość: {fmt2(g.value)}, zysk: <Colored value={g.gain}>{fmt2(g.gain ?? 0)}</Colored>, wartość zakupu: {fmt2(cost)}, zysk dzienny: <Colored value={g.dayChange}>{fmt2(g.dayChange)}</Colored>, zwrot:{' '}
-      <Colored value={g.gainPct}>{pct2(g.gainPct ?? 0)}%</Colored>, zmiana dzienna: <Colored value={g.dayPct}>{pct2(g.dayPct)}%</Colored>, udział: {pct2(g.share)}%
+      {g.label} ({g.rows.length}), wartość: {hAmount(g.value)}, zysk: <Colored value={g.gain}>{hAmount(g.gain)}</Colored>, wartość zakupu: {hAmount(cost)}, zysk dzienny: <Colored value={g.dayChange}>{hAmount(g.dayChange)}</Colored>,
+      zwrot: <Colored value={g.gainPct}>{hPctComma(g.gainPct)}</Colored>, zmiana dzienna: <Colored value={g.dayPct}>{hPctDot(g.dayPct)}</Colored>, udział: {hPctDot(g.share)}
     </>
   );
 }
@@ -116,6 +126,9 @@ export default function PortfolioView({ onNavigate }) {
   const [collapsed, setCollapsed] = useState(() => saved?.collapsed || {});
   const [opsFor, setOpsFor] = useState(null);
   const [opForm, setOpForm] = useState(null);
+  const [divFor, setDivFor] = useState(null);
+  const [chartFor, setChartFor] = useState(null);
+  const [editInst, setEditInst] = useState(null);
 
   const accounts = allAccs.filter((id) => !hiddenAccounts.includes(id));
   const data = useMemo(() => groupRows(rows, { categories, accounts }), [rows, categories, accounts]);
@@ -124,8 +137,24 @@ export default function PortfolioView({ onNavigate }) {
   const presentCats = PORTFOLIO_CATEGORIES.filter((c) => present.has(c.id));
   const activeFilters = presentCats.filter((c) => !categories.includes(c.id)).length + hiddenAccounts.length;
   const visibleRows = data.groups.flatMap((g) => g.rows);
-  const totalUnits = visibleRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
   const totalDays = weightedDays(visibleRows);
+  // „Cały Portfel” jak fundusz: jednostka startuje od 100 zł i rośnie o stopę zwrotu ważoną czasem (TWR);
+  // przy aktywnych filtrach – o prostą stopę zwrotu widocznych pozycji
+  const twr = useMemo(() => {
+    try {
+      return computePeriodStats(state, { period: 'ALL' }).twr;
+    } catch {
+      return null;
+    }
+  }, [state]);
+  const fundReturn = activeFilters === 0 && Number.isFinite(twr) ? twr : data.gainPct;
+  const unitPrice = 100 * (1 + fundReturn);
+  const fundUnits = unitPrice > 0 ? data.total / unitPrice : null;
+  const multiAccount = useMemo(() => {
+    const seen = {};
+    for (const r of rows) if (r.instrumentId) seen[r.instrumentId] = (seen[r.instrumentId] || 0) + 1;
+    return seen;
+  }, [rows]);
 
   const persist = (patch) => {
     try {
@@ -243,24 +272,34 @@ export default function PortfolioView({ onNavigate }) {
               </thead>
               <tbody>
                 {/* Cały Portfel */}
-                <tr className="border-b-2 border-stone-300 bg-stone-200 text-[14px] font-semibold dark:border-white/15 dark:bg-neutral-800">
+                <tr className="border-b-2 border-stone-300 bg-stone-200 text-[15px] font-semibold dark:border-white/15 dark:bg-neutral-800">
                   <td className="sticky left-0 z-10 bg-stone-200 px-3 py-2 text-left dark:bg-neutral-800">Cały Portfel</td>
                   <td className={cell} />
+                  <td className={`${cell} ${signClass(data.dayPct)}`}>{pct2(data.dayPct)}</td>
                   <td className={cell}>
-                    <Arrowed value={data.dayPct} />
-                  </td>
-                  <td className={cell} title="Suma jednostek wszystkich walorów">
-                    {units(totalUnits)}
+                    <span className="inline-flex items-center gap-1">
+                      {units(Math.round((fundUnits ?? 0) * 100) / 100)}
+                      <span title="Liczba jednostek portfela = wartość / cena jednostki (portfel liczony jak fundusz, start 100 zł)">
+                        <Info size={13} className="text-amber-500" aria-label="Jednostki portfela" />
+                      </span>
+                    </span>
                   </td>
                   <td className={cell} />
-                  <td className={cell} />
+                  <td className={cell} title="Cena jednostki portfela (start = 100)">
+                    {fmt2(unitPrice)}
+                  </td>
                   <td className={cell} title="Średni okres ważony wartością pozycji (dni)">
                     {totalDays ?? '—'}
                   </td>
                   <td className={cell}>{fmt2(data.total)}</td>
                   <td className={cell}>100</td>
-                  <td className={cell}>
-                    <Arrowed value={data.gainPct} />
+                  <td className={`${cell} ${signClass(fundReturn)}`}>
+                    <span className="inline-flex items-center gap-1">
+                      {pct2(fundReturn)}
+                      <span title={activeFilters === 0 ? 'Stopa zwrotu ważona czasem (TWR) – niezależna od terminów wpłat' : 'Prosta stopa zwrotu widocznych pozycji (aktywne filtry)'}>
+                        <Info size={13} className="text-amber-500" aria-label="Stopa zwrotu ważona czasem" />
+                      </span>
+                    </span>
                   </td>
                   <td className={`${cell} ${signClass(data.gain)}`}>{fmt2(data.gain)}</td>
                 </tr>
@@ -270,8 +309,8 @@ export default function PortfolioView({ onNavigate }) {
                 const Toggle = isOpen ? MinusSquare : PlusSquare;
                 return (
                   <tbody key={g.id}>
-                    <tr className="cursor-pointer border-y-2 border-stone-300 bg-stone-50 hover:bg-stone-100 dark:border-white/15 dark:bg-white/[0.04] dark:hover:bg-white/[0.07]" onClick={() => toggleSection(g.id)}>
-                      <td colSpan={COLS.length} className="px-3 py-2 text-left text-[14px] font-semibold">
+                    <tr className="cursor-pointer border-y-2 border-stone-300 bg-white hover:bg-stone-50 dark:border-white/15 dark:bg-neutral-900 dark:hover:bg-white/[0.05]" onClick={() => toggleSection(g.id)}>
+                      <td colSpan={COLS.length} className="px-3 py-2 text-left text-[15px] font-semibold">
                         <Toggle size={14} className="mr-1.5 inline-block align-[-2px] text-stone-500" aria-hidden />
                         <SectionSummary g={g} />
                       </td>
@@ -285,12 +324,10 @@ export default function PortfolioView({ onNavigate }) {
                           <tr key={r.id} className={`group border-b border-stone-200 hover:bg-blue-50/60 dark:border-white/5 dark:hover:bg-white/[0.05] ${stripe}`}>
                             <td className={`sticky left-0 z-10 max-w-[17rem] py-1.5 pr-2 pl-0 text-left ${stripe} group-hover:bg-blue-50 dark:group-hover:bg-neutral-800`}>
                               <div className="flex items-center gap-2">
-                                <span className="h-6 w-1 shrink-0 rounded-r" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
-                                <div className="min-w-0">
-                                  <div className="truncate" title={r.sub}>
-                                    {isSecurity && r.sub && r.sub.toUpperCase() !== r.name.toUpperCase() ? `${r.sub} (${r.name})` : r.name}
-                                  </div>
-                                  <div className="truncate text-[10px] text-stone-500 dark:text-stone-400">{r.account ? r.account.name : r.sub}</div>
+                                <span className="h-5 w-[3px] shrink-0" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
+                                <div className="min-w-0 truncate text-[14px]" title={`${r.sub || ''}${r.account ? ` · ${r.account.name}` : ''}`}>
+                                  {isSecurity && r.sub && r.sub.toUpperCase() !== r.name.toUpperCase() ? `${r.sub} (${r.name})` : r.name}
+                                  {isSecurity && multiAccount[r.instrumentId] > 1 && <span className="ml-1.5 text-[11px] text-stone-500">· {r.account?.name.split(' – ')[0]}</span>}
                                 </div>
                               </div>
                             </td>
@@ -300,7 +337,9 @@ export default function PortfolioView({ onNavigate }) {
                                 onBuy={isSecurity ? () => trade(r, 'BUY') : null}
                                 onSell={isSecurity ? () => trade(r, 'SELL') : null}
                                 onHistory={r.ops?.length ? () => setOpsFor(r) : null}
-                                onChart={isSecurity && onNavigate ? () => onNavigate('charts/quotes') : null}
+                                onDividends={isSecurity ? () => setDivFor(r) : null}
+                                onChart={isSecurity ? () => setChartFor(r) : null}
+                                onEdit={isSecurity ? () => setEditInst(r.instrumentId) : r.account && onNavigate ? () => onNavigate('settings') : null}
                               />
                             </td>
                             <td className={cell}>
@@ -314,7 +353,7 @@ export default function PortfolioView({ onNavigate }) {
                             <td className={cell}>{days ?? '—'}</td>
                             <td className={cell}>{fmt2(r.value)}</td>
                             <td className={cell}>{pct2(r.share)}</td>
-                            <td className={cell}>{r.gainPct !== null && r.gainPct !== undefined ? <Arrowed value={r.gainPct} /> : <span className="text-stone-400">—</span>}</td>
+                            <td className={cell}>{r.gainPct !== null && r.gainPct !== undefined ? <Arrowed value={r.gainPct} trimZeros /> : <span className="text-stone-400">—</span>}</td>
                             <td className={`${cell} ${r.gain !== null && r.gain !== undefined ? signClass(r.gain) : ''}`}>{r.gain !== null && r.gain !== undefined ? fmt2(r.gain) : '—'}</td>
                           </tr>
                         );
@@ -431,45 +470,58 @@ export default function PortfolioView({ onNavigate }) {
       </Modal>
 
       <OperationFormModal form={opForm} setForm={setOpForm} onSave={saveOperation} />
+      <DividendsModal row={divFor} onClose={() => setDivFor(null)} />
+      <PriceChartModal row={chartFor} onClose={() => setChartFor(null)} />
+      <InstrumentEditModal key={editInst || 'none'} instrumentId={editInst} onClose={() => setEditInst(null)} />
     </div>
   );
 }
 
-// Pasek ikon operacji przy walorze (kup, sprzedaj, historia, notowania) + wskaźniki dochodu i przewalutowania
-function RowActions({ row, onBuy, onSell, onHistory, onChart }) {
+// Puste miejsce zamiast niedostępnej ikony – ikony w kolejnych wierszach stoją w równych kolumnach
+function Slot({ show, children }) {
+  return show ? children : <span className="inline-block w-[21px]" />;
+}
+
+// Pasek ikon operacji przy walorze (jak we wzorcu): kup, sprzedaj, historia, dywidendy, notowania, edycja + wskaźnik przewalutowania
+function RowActions({ row, onBuy, onSell, onHistory, onDividends, onChart, onEdit }) {
   const ops = row.ops || [];
-  const income = ops.some((o) => /Dywidenda|Kupon|Odsetki/.test(o.type));
+  const hasIncome = ops.some((o) => /Dywidenda|Kupon|Odsetki/.test(o.type));
   const fx = (row.fxFees || 0) > 0;
-  const btn = 'rounded p-1 text-stone-600 hover:bg-stone-200 hover:text-blue-700 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-blue-300';
+  const btn = 'relative rounded p-[3px] text-stone-700 hover:bg-stone-200 hover:text-blue-700 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-blue-300';
   return (
-    <div className="flex items-center gap-0.5">
-      {onBuy && (
+    <div className="flex items-center gap-px">
+      <Slot show={!!onBuy}>
         <button type="button" className={btn} onClick={onBuy} title="Kup" aria-label={`Kup ${row.name}`}>
           <ShoppingBasket size={15} />
         </button>
-      )}
-      {onSell && (
+      </Slot>
+      <Slot show={!!onSell}>
         <button type="button" className={btn} onClick={onSell} title="Sprzedaj" aria-label={`Sprzedaj ${row.name}`}>
           <CircleDollarSign size={15} />
         </button>
-      )}
-      {onHistory && (
-        <button type="button" className={`${btn} inline-flex items-center gap-0.5`} onClick={onHistory} title="Historia operacji" aria-label={`Historia operacji ${row.name}`}>
+      </Slot>
+      <Slot show={!!onHistory}>
+        <button type="button" className={btn} onClick={onHistory} title={`Historia transakcji (${ops.length})`} aria-label={`Historia transakcji ${row.name}`}>
           <History size={15} />
-          <span className="text-[10px] tabular">{ops.length}</span>
         </button>
-      )}
-      {onChart && (
-        <button type="button" className={btn} onClick={onChart} title="Notowania" aria-label={`Notowania ${row.name}`}>
+      </Slot>
+      <Slot show={!!onDividends}>
+        <button type="button" className={btn} onClick={onDividends} title={hasIncome ? 'Dywidendy – wypłacone i nadchodzące' : 'Dywidendy (brak wypłat)'} aria-label={`Dywidendy ${row.name}`}>
+          <Coins size={15} className={hasIncome ? '' : 'opacity-40'} />
+          {hasIncome && <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-red-600" />}
+        </button>
+      </Slot>
+      <Slot show={!!onChart}>
+        <button type="button" className={btn} onClick={onChart} title="Wykres notowań" aria-label={`Wykres ${row.name}`}>
           <LineChart size={15} />
         </button>
-      )}
-      {(income || fx) && (
-        <span className="ml-1 inline-flex items-center gap-0.5 text-stone-400">
-          {income && <Coins size={12} aria-label="Wypłaty dochodu" />}
-          {fx && <ArrowLeftRight size={12} aria-label={`Przewalutowanie ${fmt2(row.fxFees)} zł`} />}
-        </span>
-      )}
+      </Slot>
+      <Slot show={!!onEdit}>
+        <button type="button" className={btn} onClick={onEdit} title="Edytuj walor" aria-label={`Edytuj ${row.name}`}>
+          <Pencil size={14} />
+        </button>
+      </Slot>
+      {fx && <ArrowLeftRight size={12} className="ml-1 text-stone-400" aria-label={`Przewalutowanie ${fmt2(row.fxFees)} zł`} />}
     </div>
   );
 }

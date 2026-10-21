@@ -5,6 +5,7 @@ import { COLLECTIONS } from '../../state/schema.js';
 import { collectionLabel, validateBackup } from '../../lib/backup.js';
 import { formatDateTime } from '../../lib/format.js';
 import { Badge, Button, Card, Modal, Toggle } from '../ui.jsx';
+import ClearHistoryButton from './ClearHistoryButton.jsx';
 
 function daysSince(iso) {
   if (!iso) return null;
@@ -106,6 +107,7 @@ export default function BackupCard() {
         <Button size="sm" icon={RotateCcw} onClick={() => setConfirm('demo')}>
           Wczytaj dane demo
         </Button>
+        <ClearHistoryButton size="sm" />
         <Button size="sm" variant="danger" icon={Trash2} onClick={() => setConfirm('empty')}>
           Wyczyść wszystko
         </Button>
