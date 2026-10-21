@@ -280,7 +280,7 @@ export default function ContributionCalculator({ analysis }) {
               </ul>
             )}
             <p className="text-[11px] text-stone-500 dark:text-stone-500">
-              Kursy z modułu notowań ({state.prices.status === 'live' ? 'na żywo' : 'symulowane/ostatnie znane'})
+              Kursy z modułu notowań ({state.prices.status === 'live' ? 'na żywo' : state.prices.status === 'mock' ? 'symulowane' : 'ostatnie znane / z transakcji'})
               {accountFxPct(account) > 0 ? `, z przewalutowaniem ${String(accountFxPct(account)).replace('.', ',')}% (XTB) doliczonym do ceny instrumentów w walutach obcych` : ''}. Plan nie uwzględnia prowizji maklerskich. Wagi liczone w części akcje + ETF
               wybranego zakresu kont.
             </p>

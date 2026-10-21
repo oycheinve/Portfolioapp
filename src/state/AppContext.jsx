@@ -125,12 +125,13 @@ export function AppProvider({ children }) {
           previous: s.prices,
           corsProxy: s.settings.corsProxy,
           mode: modeOverride || s.settings.priceMode,
+          trades: s.trades,
         });
         dispatch({ type: 'SET_PRICES', payload: result });
-        notify(result.log[0]?.message || 'Zaktualizowano notowania', result.status === 'live' ? 'success' : 'warn');
-      } catch (e) {
-        dispatch({ type: 'SET_PRICES', payload: { status: 'error' } });
-        notify(`Błąd aktualizacji: ${e.message}`, 'error');
+        // Bez komunikatów o błędach: przy braku Yahoo aplikacja płynnie korzysta z ostatnich danych (status w nagłówku)
+        if (result.status === 'live' || result.status === 'partial') notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');
+      } catch {
+        dispatch({ type: 'SET_PRICES', payload: { status: 'offline' } });
       } finally {
         setRefreshing(false);
       }
@@ -152,10 +153,10 @@ export function AppProvider({ children }) {
       try {
         const result = await fetchAllHistory(s);
         dispatch({ type: 'SET_PRICE_HISTORY', payload: result });
-        if (!silent) notify(result.log[0]?.message || 'Pobrano historię', result.status === 'live' ? 'success' : 'warn');
-      } catch (e) {
+        if (!silent && result.status !== 'offline') notify(result.log[0]?.message || 'Pobrano historię', 'success');
+      } catch {
+        // Wykresy korzystają wtedy z rekonstrukcji z transakcji i migawek – bez komunikatu o błędzie
         dispatch({ type: 'SET_PRICE_HISTORY', payload: { status: 'offline', updatedAt: new Date().toISOString() } });
-        if (!silent) notify(`Błąd pobierania historii: ${e.message}`, 'error');
       } finally {
         setHistoryLoading(false);
       }

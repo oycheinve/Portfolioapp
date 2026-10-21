@@ -122,6 +122,12 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Wykresy**: wszystkie linie i obszary wygładzone (`type="monotone"`).
 - Po imporcie z XTB zapisane migawki historii są czyszczone, aby wykresy liczyły się od nowa z zaimportowanych transakcji.
 
+## Stabilne pobieranie z Yahoo Finance
+
+- **Trasy (bez blokady CORS)**: 1) `/api/yahoo?path=…` – funkcja serwerowa Vercel (`api/yahoo.js`) z tej samej domeny co aplikacja; lokalnie ta sama logika działa w serwerze Vite (dev i preview); 2) opcjonalne własne proxy z ustawień; 3) publiczne proxy: corsproxy.io, allorigins, codetabs. Działająca trasa jest zapamiętywana, niedziałające odpoczywają 5 minut; najwyżej 3–4 zapytania naraz. Funkcja serwerowa przepuszcza wyłącznie zapytania o wykresy (`/v8/finance/chart/…`).
+- **Tickery**: automatyczna normalizacja – GPW `.WA`, Xetra `.DE`, Londyn `.L`, USA bez końcówki; końcówki XTB (`.PL`, `.UK`, `.US`, `.NL`…) zamieniane przy pobieraniu; instrument bez symbolu → ticker + `.WA` dla PLN.
+- **Bez sieci**: ostatnie znane notowanie (bez zmiany dziennej) albo cena z ostatniej transakcji; kursy walut z ostatnich danych. Brak komunikatów o błędach – tylko status w nagłówku („Kursy z ostatnich danych”). Wykresy korzystają z migawek i rekonstrukcji z transakcji. Tryb „Tylko dane symulowane” działa jak dotąd.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

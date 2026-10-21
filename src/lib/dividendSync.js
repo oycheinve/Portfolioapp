@@ -3,6 +3,7 @@
 import { computeHoldings, isoDay } from './engine.js';
 import { bookingEntries, dividendHistory, scheduleStatus, sharesAt } from './dividends.js';
 import { fetchYahooDividends } from './prices.js';
+import { mapLimited, yahooSymbolFor } from './yahooFetch.js';
 
 const DAY = 86400000;
 
@@ -30,16 +31,16 @@ export async function fetchDividendHistories(state) {
   const out = {};
   const log = [];
   if (state.settings.priceMode === 'mock') return { histories: out, log: [{ level: 'info', message: 'Tryb symulacji – prognoza z historii wypłat' }] };
-  await Promise.all(
-    dividendInstruments(state)
-      .filter((i) => i.yahooSymbol)
-      .map(async (inst) => {
-        try {
-          out[inst.id] = await fetchYahooDividends(inst.yahooSymbol, state.settings.corsProxy);
-        } catch (e) {
-          log.push({ level: 'warn', message: `${inst.ticker}: ${e.message}` });
-        }
-      }),
+  await mapLimited(
+    dividendInstruments(state).filter((i) => yahooSymbolFor(i)),
+    3,
+    async (inst) => {
+      try {
+        out[inst.id] = await fetchYahooDividends(yahooSymbolFor(inst), state.settings.corsProxy);
+      } catch (e) {
+        log.push({ level: 'warn', message: `${inst.ticker}: ${e.message}` });
+      }
+    },
   );
   return { histories: out, log };
 }

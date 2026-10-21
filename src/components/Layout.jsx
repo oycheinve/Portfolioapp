@@ -29,7 +29,8 @@ function PriceStatus() {
   const { status, lastRefresh } = state.prices;
   const map = {
     live: { dot: 'bg-emerald-500', text: 'Kursy na żywo' },
-    partial: { dot: 'bg-amber-500', text: 'Kursy częściowo symulowane' },
+    partial: { dot: 'bg-amber-500', text: 'Część kursów z ostatnich danych' },
+    offline: { dot: 'bg-stone-400', text: 'Kursy z ostatnich danych' },
     mock: { dot: 'bg-stone-400', text: 'Kursy symulowane' },
     loading: { dot: 'bg-blue-500 animate-pulse', text: 'Pobieranie…' },
     error: { dot: 'bg-red-500', text: 'Błąd notowań' },

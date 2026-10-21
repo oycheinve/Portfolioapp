@@ -1,5 +1,7 @@
-// Moduł notowań: Yahoo Finance (GPW .WA, ETF-y z giełd zagranicznych) + kursy walut NBP,
-// z łańcuchem awaryjnym: proxy deweloperskie -> zewnętrzne proxy CORS -> dane mockowane.
+// Moduł notowań: Yahoo Finance (GPW .WA, ETF-y z giełd zagranicznych) + kursy walut NBP.
+// Trasy do Yahoo (serwer aplikacji → proxy z ustawień → publiczne proxy CORS) w yahooFetch.js.
+// Gdy Yahoo jest niedostępne: ostatnie znane notowanie albo cena z transakcji – bez losowych danych i bez komunikatów o błędach.
+import { fetchYahooJson, mapLimited, normalizeYahooSymbol, yahooSymbolFor } from './yahooFetch.js';
 
 const TIMEOUT_MS = 7000;
 const FX_CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF'];
@@ -19,19 +21,6 @@ async function fetchJson(url) {
 
 function yahooChartPath(symbol) {
   return `/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
-}
-
-function buildYahooUrls(symbol, corsProxy) {
-  const path = yahooChartPath(symbol);
-  const urls = [{ url: `/api/yahoo${path}`, via: 'proxy lokalne' }];
-  if (corsProxy) {
-    const full = `https://query1.finance.yahoo.com${path}`;
-    const url = corsProxy.includes('{url}')
-      ? corsProxy.replace('{url}', encodeURIComponent(full))
-      : `${corsProxy}${encodeURIComponent(full)}`;
-    urls.push({ url, via: 'proxy CORS' });
-  }
-  return urls;
 }
 
 function parseYahooChart(json) {
@@ -60,16 +49,8 @@ function parseYahooChart(json) {
 }
 
 export async function fetchYahooQuote(symbol, corsProxy) {
-  const errors = [];
-  for (const { url, via } of buildYahooUrls(symbol, corsProxy)) {
-    try {
-      const json = await fetchJson(url);
-      return { ...parseYahooChart(json), source: `Yahoo (${via})` };
-    } catch (e) {
-      errors.push(`${via}: ${e.message}`);
-    }
-  }
-  throw new Error(errors.join('; '));
+  const { json, via } = await fetchYahooJson(yahooChartPath(normalizeYahooSymbol(symbol)), { corsProxy, validate: parseYahooChart });
+  return { ...parseYahooChart(json), source: `Yahoo (${via})` };
 }
 
 // Kursy średnie NBP (tabela A) – API NBP obsługuje CORS
@@ -119,14 +100,32 @@ export function mockFx(previous) {
   return { rates, source: 'Mock (symulacja)' };
 }
 
+const DEFAULT_FX = { PLN: 1, USD: 3.65, EUR: 4.25, GBP: 4.88, CHF: 4.55 };
+
+function isRealQuote(q) {
+  return q && Number.isFinite(q.price) && q.source && !/mock|symul|rekonstr/i.test(q.source);
+}
+
+// Cena z transakcji: ostatnia cena zakupu/sprzedaży instrumentu, a w razie braku – cena zapisana w instrumencie
+function reconstructedPrice(instrument, trades) {
+  let last = null;
+  for (const t of trades) {
+    if (t.instrumentId !== instrument.id || !(Number(t.price) > 0)) continue;
+    if (!last || t.date > last.date) last = t;
+  }
+  if (last) return Number(last.price);
+  const manual = Number(instrument.mockPrice);
+  return manual > 0 ? manual : null;
+}
+
 // Główna funkcja odświeżania: zwraca nowe notowania + kursy + dziennik zdarzeń.
-// mode: 'auto' (live z fallbackiem do mock) | 'mock' (wyłącznie symulacja)
-export async function refreshAllPrices({ instruments, previous, corsProxy, mode = 'auto' }) {
+// mode: 'auto' (Yahoo/NBP, a przy braku sieci ostatnie znane dane lub ceny z transakcji) | 'mock' (wyłącznie symulacja)
+export async function refreshAllPrices({ instruments, previous, corsProxy, mode = 'auto', trades = [] }) {
   const log = [];
   const now = new Date().toISOString();
   const quotes = {};
   let liveCount = 0;
-  let mockCount = 0;
+  let fallbackCount = 0;
 
   let fx;
   if (mode === 'mock') {
@@ -135,43 +134,58 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
     try {
       fx = await fetchNbpRates();
     } catch (e) {
-      log.push({ level: 'warn', message: `NBP niedostępne (${e.message}) – próba Yahoo FX` });
+      log.push({ level: 'info', message: `NBP niedostępne (${e.message}) – próba Yahoo FX` });
       try {
         fx = await fetchYahooFx(corsProxy);
-      } catch (e2) {
-        log.push({ level: 'warn', message: `Yahoo FX niedostępne – kursy symulowane` });
-        fx = mockFx(previous?.fx);
+      } catch {
+        // Ostatnie znane kursy (bez losowania); przy pierwszym uruchomieniu – kursy domyślne
+        const prev = previous?.fx;
+        fx = prev?.rates && prev.source && !/mock/i.test(prev.source) ? { rates: prev.rates, source: `${prev.source.replace(/ \(ostatnie znane\)$/, '')} (ostatnie znane)` } : { rates: { ...DEFAULT_FX, ...(prev?.rates || {}) }, source: 'kursy domyślne' };
+        log.push({ level: 'info', message: 'Kursy walut z ostatnich znanych danych' });
       }
     }
   }
   fx = { ...fx, updatedAt: now };
 
-  const tasks = instruments.map(async (inst) => {
+  await mapLimited(instruments, 4, async (inst) => {
     const prev = previous?.quotes?.[inst.id];
-    if (mode !== 'mock' && inst.yahooSymbol) {
+    if (mode === 'mock') {
+      quotes[inst.id] = { ...mockQuote(inst, prev), updatedAt: now };
+      fallbackCount += 1;
+      return;
+    }
+    const symbol = yahooSymbolFor(inst);
+    if (symbol) {
       try {
-        const q = await fetchYahooQuote(inst.yahooSymbol, corsProxy);
+        const q = await fetchYahooQuote(symbol, corsProxy);
         quotes[inst.id] = { ...q, currency: q.currency || inst.currency, updatedAt: now };
         liveCount += 1;
         return;
       } catch (e) {
-        log.push({ level: 'warn', message: `${inst.ticker}: ${e.message}` });
+        log.push({ level: 'info', message: `${inst.ticker} (${symbol}): ${e.message}` });
       }
     }
-    quotes[inst.id] = { ...mockQuote(inst, prev), updatedAt: now };
-    mockCount += 1;
+    fallbackCount += 1;
+    if (isRealQuote(prev)) {
+      // Ostatnie znane notowanie – bez zmiany dziennej, z zachowaniem daty pobrania
+      quotes[inst.id] = { ...prev, prevClose: prev.price, stale: true, source: `${prev.source.replace(/ \(ostatnie znane\)$/, '')} (ostatnie znane)` };
+      return;
+    }
+    const price = reconstructedPrice(inst, trades);
+    if (price) quotes[inst.id] = { price, prevClose: price, currency: inst.currency, source: 'Rekonstrukcja z transakcji', updatedAt: now };
   });
-  await Promise.all(tasks);
 
-  const status = liveCount > 0 && mockCount === 0 ? 'live' : liveCount > 0 ? 'partial' : 'mock';
+  const status = mode === 'mock' ? 'mock' : liveCount > 0 && fallbackCount === 0 ? 'live' : liveCount > 0 ? 'partial' : 'offline';
   log.unshift({
     level: status === 'live' ? 'info' : 'warn',
     message:
       status === 'live'
         ? `Pobrano ${liveCount} notowań na żywo`
         : status === 'partial'
-          ? `Na żywo: ${liveCount}, symulowane: ${mockCount}`
-          : `Brak dostępu do Yahoo Finance – użyto danych symulowanych (${mockCount})`,
+          ? `Na żywo: ${liveCount}, z ostatnich danych: ${fallbackCount}`
+          : status === 'mock'
+            ? `Dane symulowane (${fallbackCount})`
+            : 'Yahoo Finance niedostępne – ceny z ostatnich danych i transakcji',
   });
 
   return { quotes, fx, status, lastRefresh: now, log: log.slice(0, 30) };
@@ -201,57 +215,32 @@ function parseYahooHistory(json) {
 }
 
 export async function fetchYahooHistory(symbol, corsProxy, { range = '5y', interval = '1wk' } = {}) {
-  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&events=div`;
-  const urls = [{ url: `/api/yahoo${path}`, via: 'proxy lokalne' }];
-  if (corsProxy) {
-    const full = `https://query1.finance.yahoo.com${path}`;
-    urls.push({
-      url: corsProxy.includes('{url}') ? corsProxy.replace('{url}', encodeURIComponent(full)) : `${corsProxy}${encodeURIComponent(full)}`,
-      via: 'proxy CORS',
-    });
-  }
-  const errors = [];
-  for (const { url, via } of urls) {
-    try {
-      const json = await fetchJson(url);
-      return { ...parseYahooHistory(json), source: `Yahoo (${via})` };
-    } catch (e) {
-      errors.push(`${via}: ${e.message}`);
-    }
-  }
-  throw new Error(errors.join('; '));
+  const path = `/v8/finance/chart/${encodeURIComponent(normalizeYahooSymbol(symbol))}?range=${range}&interval=${interval}&events=div`;
+  const { json, via } = await fetchYahooJson(path, { corsProxy, validate: parseYahooHistory });
+  return { ...parseYahooHistory(json), source: `Yahoo (${via})` };
 }
 
 // Historia dywidend z Yahoo Finance (dzień dywidendy = data zdarzenia, kwota na akcję w walucie notowań)
+function parseYahooDividends(json) {
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error('Brak danych');
+  let currency = result.meta?.currency || null;
+  const divisor = currency === 'GBp' || currency === 'GBX' ? 100 : 1;
+  if (divisor === 100) currency = 'GBP';
+  const events = Object.values(result.events?.dividends || {})
+    .map((d) => {
+      const dt = new Date(d.date * 1000);
+      return {
+        exDate: `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`,
+        amount: d.amount / divisor,
+      };
+    })
+    .sort((a, b) => (a.exDate < b.exDate ? -1 : 1));
+  return { events, currency };
+}
+
 export async function fetchYahooDividends(symbol, corsProxy) {
-  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1mo&events=div`;
-  const urls = [{ url: `/api/yahoo${path}`, via: 'proxy lokalne' }];
-  if (corsProxy) {
-    const full = `https://query1.finance.yahoo.com${path}`;
-    urls.push({ url: corsProxy.includes('{url}') ? corsProxy.replace('{url}', encodeURIComponent(full)) : `${corsProxy}${encodeURIComponent(full)}`, via: 'proxy CORS' });
-  }
-  const errors = [];
-  for (const { url, via } of urls) {
-    try {
-      const json = await fetchJson(url);
-      const result = json?.chart?.result?.[0];
-      if (!result) throw new Error('Brak danych');
-      let currency = result.meta?.currency || null;
-      const divisor = currency === 'GBp' || currency === 'GBX' ? 100 : 1;
-      if (divisor === 100) currency = 'GBP';
-      const events = Object.values(result.events?.dividends || {})
-        .map((d) => {
-          const dt = new Date(d.date * 1000);
-          return {
-            exDate: `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`,
-            amount: d.amount / divisor,
-          };
-        })
-        .sort((a, b) => (a.exDate < b.exDate ? -1 : 1));
-      return { events, currency, source: `Yahoo (${via})` };
-    } catch (e) {
-      errors.push(`${via}: ${e.message}`);
-    }
-  }
-  throw new Error(errors.join('; '));
+  const path = `/v8/finance/chart/${encodeURIComponent(normalizeYahooSymbol(symbol))}?range=5y&interval=1mo&events=div`;
+  const { json, via } = await fetchYahooJson(path, { corsProxy, validate: parseYahooDividends });
+  return { ...parseYahooDividends(json), source: `Yahoo (${via})` };
 }

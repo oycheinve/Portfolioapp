@@ -2,6 +2,7 @@
 // z łańcuchem awaryjnym: historia Yahoo → rekonstrukcja z transakcji (interpolacja geometryczna) → kurs bieżący.
 import { BENCHMARKS, FX_HISTORY_SYMBOLS, benchmarkDefs } from './constants.js';
 import { fetchYahooHistory } from './prices.js';
+import { mapLimited } from './yahooFetch.js';
 import { fxToPLN, isoDay } from './engine.js';
 import { getCpiTable } from './bonds.js';
 
@@ -57,16 +58,15 @@ export async function fetchAllHistory(state) {
   const series = {};
   const log = [];
   const now = new Date().toISOString();
-  await Promise.all(
-    symbols.map(async (sym) => {
-      try {
-        const h = await fetchYahooHistory(sym, state.settings.corsProxy);
-        series[sym] = { ...h, updatedAt: now };
-      } catch (e) {
-        log.push({ level: 'warn', message: `${sym}: ${e.message}` });
-      }
-    }),
-  );
+  // Najwyżej 3 zapytania naraz – publiczne proxy CORS ograniczają liczbę równoległych połączeń
+  await mapLimited(symbols, 3, async (sym) => {
+    try {
+      const h = await fetchYahooHistory(sym, state.settings.corsProxy);
+      series[sym] = { ...h, updatedAt: now };
+    } catch (e) {
+      log.push({ level: 'warn', message: `${sym}: ${e.message}` });
+    }
+  });
   const ok = Object.keys(series).length;
   const status = ok === symbols.length ? 'live' : ok > 0 ? 'partial' : 'offline';
   log.unshift({

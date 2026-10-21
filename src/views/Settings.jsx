@@ -320,15 +320,15 @@ function PricesSection() {
       <div className="space-y-3">
         <Field label="Tryb notowań">
           <Select value={s.priceMode} onChange={(e) => actions.updateSettings({ priceMode: e.target.value })}>
-            <option value="auto">Na żywo (Yahoo + NBP) z fallbackiem do symulacji</option>
+            <option value="auto">Na żywo (Yahoo + NBP), bez sieci – ostatnie dane i ceny z transakcji</option>
             <option value="mock">Tylko dane symulowane (offline)</option>
           </Select>
         </Field>
         <Field
-          label="Proxy CORS dla Yahoo Finance"
-          hint="Yahoo blokuje bezpośrednie zapytania z przeglądarki. W trybie deweloperskim działa wbudowane proxy Vite (/api/yahoo). Prefiks URL lub szablon z {url}. Puste = wyłączone."
+          label="Własne proxy CORS (opcjonalnie)"
+          hint="Kolejność pobierania: serwer aplikacji (/api/yahoo – funkcja Vercel lub serwer deweloperski) → to proxy → publiczne proxy (corsproxy.io, allorigins, codetabs). Prefiks URL lub szablon z {url}. Puste = tylko trasy wbudowane."
         >
-          <Input value={s.corsProxy || ''} onChange={(e) => actions.updateSettings({ corsProxy: e.target.value })} placeholder="https://corsproxy.io/?url=" />
+          <Input value={s.corsProxy || ''} onChange={(e) => actions.updateSettings({ corsProxy: e.target.value })} placeholder="np. https://moje-proxy.example.com/?url=" />
         </Field>
         <Field label="Automatyczne odświeżanie">
           <Select value={s.autoRefreshMinutes || 0} onChange={(e) => actions.updateSettings({ autoRefreshMinutes: Number(e.target.value) })}>
