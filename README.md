@@ -28,6 +28,14 @@ npm run preview  # podgląd buildu (również z proxy /api/yahoo)
 
 Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logika w `src/lib/allocation.js`.
 
+## Etap 3 – Wykresy i Obligacje
+
+- **Centrum wykresów**: zakres 1M / YTD / 1 rok / Max / wybrany rok; filtr kont, klas aktywów i porównanie wybranych instrumentów; benchmarki S&P 500 (PLN), WIG20TR, WIG, MSCI World (PLN), inflacja CPI.
+- 5 wykresów: wartość vs wkład (z symulacją „gdyby wpłaty szły w benchmark”), zysk w czasie (PLN z rozbiciem lub % TWR), dywidendy miesięczne (r/r), dywidendy roczne ze średnią miesięczną, drawdown.
+- Historia cen: Yahoo Finance (tygodniowo, 5 lat) → offline rekonstrukcja z cen transakcji; dla całego portfela wartości z dziennych migawek (`src/lib/history.js`, `src/lib/series.js`).
+- **Obligacje skarbowe**: formularz transz EDO/COI/TOS/ROR (konto z Belką 19% lub IKE 0%, odczyty inflacji per rok, opcjonalna wpłata nominału), narosłe odsetki na dziś, kupony, harmonogram i daty wykupu. Inflacja COI/EDO z tabeli CPI (`settings.cpiOverrides` nadpisuje odczyty).
+- **Konto oszczędnościowe**: saldo, oprocentowanie, kapitalizacja, odsetki netto po Belce, automatyczne księgowanie odsetek za każdy okres kapitalizacji; karta dochodu pasywnego (12 mies.).
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |
@@ -42,6 +50,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 | `goals` | Cele roczne (kolejne etapy) |
 | `snapshots` | Dzienne migawki wartości i wkładu per konto (historia, TWR, start okresów YTD/1M) |
 | `prices` | Notowania, kursy walut, status i dziennik odświeżania |
+| `priceHistory` | Tygodniowa historia cen instrumentów, benchmarków i walut (Etap 3) |
 
 **Prawdziwy Zysk Total** = Wartość portfela − wartość na początku okresu − wpłaty netto w okresie
 = zysk kursowy + dywidendy netto + odsetki netto (wypłacone i naliczone w obligacjach).

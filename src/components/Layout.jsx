@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ArrowLeftRight, LayoutDashboard, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Wallet } from 'lucide-react';
+import { ArrowLeftRight, LayoutDashboard, LineChart, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -7,6 +7,7 @@ import { computeAllocation } from '../lib/allocation.js';
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard },
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
+  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i Obligacje', icon: LineChart },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];

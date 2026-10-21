@@ -218,6 +218,11 @@ export function createDemoState(today = new Date()) {
     log: [{ level: 'info', message: 'Załadowano dane demonstracyjne' }],
   };
 
+  // Etap 3: automatyczne odsetki na koncie oszczędnościowym od bieżącego okresu kapitalizacji
+  const sav = state.accounts.find((a) => a.id === 'acc_sav');
+  sav.autoInterest = true;
+  sav.autoInterestFrom = isoDay(new Date(today.getFullYear(), today.getMonth(), 1));
+
   // Wagi docelowe (Etap 2)
   state.settings.allocation = {
     ...state.settings.allocation,

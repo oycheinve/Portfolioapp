@@ -176,3 +176,48 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
 
   return { quotes, fx, status, lastRefresh: now, log: log.slice(0, 30) };
 }
+
+// Etap 3: historia notowań (domyślnie tygodniowa, 5 lat) – kurs skorygowany o dywidendy, jeśli dostępny
+function parseYahooHistory(json) {
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error('Brak danych historycznych');
+  const ts = result.timestamp || [];
+  const adj = result.indicators?.adjclose?.[0]?.adjclose;
+  const close = result.indicators?.quote?.[0]?.close || [];
+  let currency = result.meta?.currency || null;
+  const divisor = currency === 'GBp' || currency === 'GBX' ? 100 : 1;
+  if (divisor === 100) currency = 'GBP';
+  const points = [];
+  for (let i = 0; i < ts.length; i += 1) {
+    const v = Number.isFinite(adj?.[i]) ? adj[i] : close[i];
+    if (!Number.isFinite(v)) continue;
+    const d = new Date(ts[i] * 1000);
+    const iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    if (points.length && points[points.length - 1][0] === iso) points[points.length - 1][1] = v / divisor;
+    else points.push([iso, v / divisor]);
+  }
+  if (points.length < 2) throw new Error('Za mało punktów historii');
+  return { points, currency };
+}
+
+export async function fetchYahooHistory(symbol, corsProxy, { range = '5y', interval = '1wk' } = {}) {
+  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&events=div`;
+  const urls = [{ url: `/api/yahoo${path}`, via: 'proxy lokalne' }];
+  if (corsProxy) {
+    const full = `https://query1.finance.yahoo.com${path}`;
+    urls.push({
+      url: corsProxy.includes('{url}') ? corsProxy.replace('{url}', encodeURIComponent(full)) : `${corsProxy}${encodeURIComponent(full)}`,
+      via: 'proxy CORS',
+    });
+  }
+  const errors = [];
+  for (const { url, via } of urls) {
+    try {
+      const json = await fetchJson(url);
+      return { ...parseYahooHistory(json), source: `Yahoo (${via})` };
+    } catch (e) {
+      errors.push(`${via}: ${e.message}`);
+    }
+  }
+  throw new Error(errors.join('; '));
+}

@@ -47,6 +47,7 @@ export function defaultSettings() {
       note: 'Parametry OKI do uzupełnienia po wejściu w życie ustawy.',
     },
     allocation: defaultAllocation(),
+    cpiOverrides: {}, // Etap 3: ręczne odczyty CPI r/r { 'RRRR-MM': % }
     priceMode: 'auto', // 'auto' | 'mock'
     corsProxy: 'https://corsproxy.io/?url=',
     autoRefreshMinutes: 0,
@@ -71,6 +72,13 @@ export function createEmptyState() {
     otherAssets: [],
     goals: [],
     snapshots: [],
+    // Etap 3: tygodniowa historia cen instrumentów, benchmarków i kursów walut
+    priceHistory: {
+      series: {}, // { [symbol]: { points: [[RRRR-MM-DD, close]], currency, source, updatedAt } }
+      status: 'idle',
+      updatedAt: null,
+      log: [],
+    },
     prices: {
       quotes: {},
       fx: { rates: { PLN: 1, USD: 3.65, EUR: 4.25, GBP: 4.88, CHF: 4.55 }, source: 'domyślne', updatedAt: null },
@@ -102,6 +110,11 @@ export function migrateState(raw) {
     },
   };
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
+  out.priceHistory = {
+    ...base.priceHistory,
+    ...(raw.priceHistory || {}),
+    series: { ...(raw.priceHistory?.series || {}) },
+  };
   out.prices = {
     ...base.prices,
     ...(raw.prices || {}),

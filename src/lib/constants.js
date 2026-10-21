@@ -149,3 +149,33 @@ export const INCOME_TYPES = {
 };
 
 export const SUPPORTED_CURRENCIES = ['PLN', 'USD', 'EUR', 'GBP', 'CHF'];
+
+// Etap 3: inflacja CPI w Polsce (r/r, %, GUS). Odczyty oznaczone jako szacunek należy zweryfikować –
+// można je nadpisać w module Obligacji (settings.cpiOverrides).
+const CPI_RAW = {
+  2023: [16.6, 18.4, 16.1, 14.7, 13.0, 11.5, 10.8, 10.1, 8.2, 6.6, 6.6, 6.2],
+  2024: [3.7, 2.8, 2.0, 2.4, 2.5, 2.6, 4.2, 4.3, 4.9, 5.0, 4.7, 4.7],
+  2025: [4.9, 4.9, 4.9, 4.3, 4.0, 4.1, 3.1, 2.9, 2.9, 2.8, 2.6, 2.5],
+  2026: [2.5, 2.4, 2.4, 2.5, 2.6, 2.6, 2.7, 2.7, 2.8],
+};
+const CPI_ESTIMATE_FROM = '2025-11';
+
+export const CPI_PL_YOY = Object.fromEntries(
+  Object.entries(CPI_RAW).flatMap(([year, values]) =>
+    values.map((v, i) => {
+      const key = `${year}-${String(i + 1).padStart(2, '0')}`;
+      return [key, { value: v, estimate: key >= CPI_ESTIMATE_FROM }];
+    }),
+  ),
+);
+
+// Benchmarki: symbol Yahoo + waluta; proxy = symbol instrumentu z portfela użyty offline do rekonstrukcji
+export const BENCHMARKS = {
+  SP500: { id: 'SP500', label: 'S&P 500 (PLN)', yahooSymbol: '^GSPC', currency: 'USD', proxySymbols: ['CSPX.L', 'SXR8.DE', 'VUAA.DE'] },
+  WIG20TR: { id: 'WIG20TR', label: 'WIG20TR', yahooSymbol: 'ETFBW20TR.WA', currency: 'PLN', proxySymbols: ['ETFBW20TR.WA'] },
+  WIG: { id: 'WIG', label: 'WIG', yahooSymbol: 'WIG.WA', currency: 'PLN', proxySymbols: ['ETFBW20TR.WA'] },
+  MSCI_WORLD: { id: 'MSCI_WORLD', label: 'MSCI World (PLN)', yahooSymbol: 'IWDA.AS', currency: 'EUR', proxySymbols: ['IWDA.AS', 'VWCE.DE', 'SWDA.L'] },
+  CPI: { id: 'CPI', label: 'Inflacja CPI', yahooSymbol: null, currency: 'PLN', proxySymbols: [] },
+};
+
+export const FX_HISTORY_SYMBOLS = { USD: 'USDPLN=X', EUR: 'EURPLN=X', GBP: 'GBPPLN=X', CHF: 'CHFPLN=X' };

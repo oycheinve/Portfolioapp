@@ -34,7 +34,8 @@ export function formatAxisPLN(value) {
   const v = Number.isFinite(value) ? value : 0;
   const abs = Math.abs(v);
   if (abs >= 1e6) return `${(v / 1e6).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} mln`;
-  if (abs >= 1e3) return `${Math.round(v / 1e3).toLocaleString('pl-PL')} tys.`;
+  if (abs >= 1e4) return `${Math.round(v / 1e3).toLocaleString('pl-PL')} tys.`;
+  if (abs >= 1e3) return `${(v / 1e3).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} tys.`;
   return Math.round(v).toLocaleString('pl-PL');
 }
 

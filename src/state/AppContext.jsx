@@ -4,6 +4,8 @@ import { STORAGE_KEY, migrateState, validateImported } from './schema.js';
 import { createDemoState } from './demoData.js';
 import { buildSnapshot, isoDay, livePriceLookup } from '../lib/engine.js';
 import { refreshAllPrices } from '../lib/prices.js';
+import { fetchAllHistory } from '../lib/history.js';
+import { pendingSavingsInterest } from '../lib/savings.js';
 import { uid } from '../lib/format.js';
 
 const AppContext = createContext(null);
@@ -68,6 +70,13 @@ export function AppProvider({ children }) {
     dispatch({ type: 'UPSERT_SNAPSHOT', payload: snap });
   }, [state.accounts, state.trades, state.cashflows, state.income, state.bonds, state.prices, state.settings]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Etap 3: automatyczne księgowanie odsetek na kontach oszczędnościowych (za zakończone okresy kapitalizacji)
+  useEffect(() => {
+    if (!state.accounts.some((a) => a.type === 'SAVINGS' && a.autoInterest)) return;
+    const pending = pendingSavingsInterest(state);
+    if (pending.length) dispatch({ type: 'ADD_MANY', payload: { collection: 'income', items: pending } });
+  }, [state.accounts, state.cashflows, state.income]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!toast) return undefined;
     const t = setTimeout(() => setToast(null), 4000);
@@ -95,6 +104,31 @@ export function AppProvider({ children }) {
         notify(`Błąd aktualizacji: ${e.message}`, 'error');
       } finally {
         setRefreshing(false);
+      }
+    },
+    [notify],
+  );
+
+  // Etap 3: historia notowań do wykresów
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const refreshHistory = useCallback(
+    async ({ silent = false } = {}) => {
+      const s = stateRef.current;
+      if (s.settings.priceMode === 'mock') {
+        if (!silent) notify('Tryb „Tylko symulacja” – wykresy korzystają z rekonstrukcji z transakcji', 'warn');
+        return;
+      }
+      setHistoryLoading(true);
+      dispatch({ type: 'SET_PRICE_HISTORY', payload: { status: 'loading' } });
+      try {
+        const result = await fetchAllHistory(s);
+        dispatch({ type: 'SET_PRICE_HISTORY', payload: result });
+        if (!silent) notify(result.log[0]?.message || 'Pobrano historię', result.status === 'live' ? 'success' : 'warn');
+      } catch (e) {
+        dispatch({ type: 'SET_PRICE_HISTORY', payload: { status: 'offline', updatedAt: new Date().toISOString() } });
+        if (!silent) notify(`Błąd pobierania historii: ${e.message}`, 'error');
+      } finally {
+        setHistoryLoading(false);
       }
     },
     [notify],
@@ -151,15 +185,17 @@ export function AppProvider({ children }) {
           return false;
         }
       },
+      addMany: (collection, items) => dispatch({ type: 'ADD_MANY', payload: { collection, items } }),
       refreshPrices,
+      refreshHistory,
       notify,
     }),
-    [refreshPrices, notify],
+    [refreshPrices, refreshHistory, notify],
   );
 
   const value = useMemo(
-    () => ({ state, actions, isDark, refreshing, toast, dismissToast: () => setToast(null) }),
-    [state, actions, isDark, refreshing, toast],
+    () => ({ state, actions, isDark, refreshing, historyLoading, toast, dismissToast: () => setToast(null) }),
+    [state, actions, isDark, refreshing, historyLoading, toast],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

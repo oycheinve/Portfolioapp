@@ -19,6 +19,26 @@ export function reducer(state, action) {
       return touch({ ...state, [collection]: next });
     }
 
+    case 'ADD_MANY': {
+      // Etap 3: wsadowe dodanie rekordów (np. automatyczne odsetki), z pominięciem istniejących id
+      const { collection, items } = action.payload;
+      if (!COLLECTIONS.includes(collection) || !items?.length) return state;
+      const existing = new Set(state[collection].map((x) => x.id));
+      const fresh = items.filter((x) => !existing.has(x.id));
+      if (fresh.length === 0) return state;
+      return touch({ ...state, [collection]: [...state[collection], ...fresh] });
+    }
+
+    case 'SET_PRICE_HISTORY':
+      return {
+        ...state,
+        priceHistory: {
+          ...state.priceHistory,
+          ...action.payload,
+          series: { ...state.priceHistory.series, ...(action.payload.series || {}) },
+        },
+      };
+
     case 'DELETE': {
       const { collection, id } = action.payload;
       if (!COLLECTIONS.includes(collection)) return state;

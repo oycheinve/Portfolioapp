@@ -1,6 +1,6 @@
 // Silnik obliczeń portfela: księga zdarzeń kont, pozycje, wycena, Prawdziwy Zysk Total, TWR, CAGR.
 import { ACCOUNT_TYPES } from './constants.js';
-import { valueBond } from './bonds.js';
+import { getCpiTable, valueBond } from './bonds.js';
 import { belkaRateForAccount, computeIncomeTax, limitForAccount } from './tax.js';
 
 const DAY = 86400000;
@@ -51,10 +51,11 @@ export function livePriceLookup(state) {
 export function bondIncomeEvents(state, asOf) {
   const events = [];
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  const cpi = getCpiTable(state.settings);
   for (const bond of state.bonds) {
     const account = accountsById[bond.accountId];
     const rate = belkaRateForAccount(account, state.settings);
-    const v = valueBond(bond, asOf, rate);
+    const v = valueBond(bond, asOf, rate, cpi);
     for (const c of v.coupons) {
       events.push({
         id: `${bond.id}_${c.date}`,
@@ -178,11 +179,12 @@ export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
     };
   });
 
+  const cpi = getCpiTable(state.settings);
   const bonds = state.bonds
     .filter((b) => inFilter(accountIds, b.accountId) && b.purchaseDate <= day)
     .map((b) => {
       const acc = accountsById[b.accountId];
-      const v = valueBond(b, day, belkaRateForAccount(acc, state.settings));
+      const v = valueBond(b, day, belkaRateForAccount(acc, state.settings), cpi);
       return { ...b, account: acc, valuation: v, value: v.netValue };
     });
 
@@ -375,11 +377,12 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   // Odsetki naliczone (skapitalizowane) w obligacjach w okresie
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   let bondAccrualDelta = 0;
+  const cpi = getCpiTable(state.settings);
   for (const b of state.bonds) {
     if (!accountIds.includes(b.accountId)) continue;
     const rate = belkaRateForAccount(accountsById[b.accountId], state.settings);
-    const endAcc = valueBond(b, todayIso, rate).accruedNet;
-    const startAcc = startDate && b.purchaseDate <= startDate ? valueBond(b, startDate, rate).accruedNet : 0;
+    const endAcc = valueBond(b, todayIso, rate, cpi).accruedNet;
+    const startAcc = startDate && b.purchaseDate <= startDate ? valueBond(b, startDate, rate, cpi).accruedNet : 0;
     bondAccrualDelta += endAcc - startAcc;
   }
   const interestNet = interestCashNet + bondAccrualDelta;
