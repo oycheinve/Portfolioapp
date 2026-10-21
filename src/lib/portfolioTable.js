@@ -1,6 +1,6 @@
 // Tabela „Portfel”: wszystkie pozycje majątku pogrupowane w kategorie z podsumowaniami
 import { getCpiTable, valueBond } from './bonds.js';
-import { fxToPLN, isoDay, livePriceLookup, netFlows, valuePortfolio } from './engine.js';
+import { bondIncomeEvents, fxToPLN, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, tradeAmounts, valuePortfolio } from './engine.js';
 import { belkaRateForAccount } from './tax.js';
 import { OTHER_ASSET_CATEGORIES } from './constants.js';
 
@@ -14,12 +14,20 @@ export const PORTFOLIO_CATEGORIES = [
   { id: 'OTHER', label: 'Nieruchomości i inne', short: 'Nieruchomości' },
 ];
 
+function sortOps(ops) {
+  return ops.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
 export function buildPortfolioRows(state) {
   const today = isoDay(new Date());
   const v = valuePortfolio(state, { asOf: today, accountIds: null, priceLookup: livePriceLookup(state) });
   const quotes = state.prices?.quotes || {};
   const fx = state.prices?.fx;
   const rows = [];
+  const income = [...incomeEventsWithTax(state), ...bondIncomeEvents(state, today)].filter((i) => i.date <= today);
+  const accById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
+  const firstDate = (ops) => ops.reduce((m, o) => (!m || o.date < m ? o.date : m), null);
 
   // Konta gotówkowe: konta oszczędnościowe oraz wolna gotówka na rachunkach maklerskich
   for (const a of state.accounts) {
@@ -29,8 +37,14 @@ export function buildPortfolioRows(state) {
     const contrib = savings ? netFlows(state, [a.id], null, today) : null;
     const belka = belkaRateForAccount(a, state.settings);
     const dayChange = savings ? cash * ((Number(a.interestRate) || 0) / 100 / 365) * (1 - belka) : 0;
+    const ops = sortOps([
+      ...state.cashflows.filter((c) => c.accountId === a.id).map((c) => ({ date: c.date, type: c.type === 'DEPOSIT' ? 'Wpłata' : 'Wypłata', amount: (c.type === 'DEPOSIT' ? 1 : -1) * Number(c.amount), note: c.note })),
+      ...(savings ? income.filter((i) => i.accountId === a.id && i.type === 'INTEREST').map((i) => ({ date: i.date, type: 'Odsetki netto', amount: i.net, note: i.note })) : []),
+    ]);
     rows.push({
       id: `cash_${a.id}`,
+      ops,
+      since: firstDate(ops),
       category: 'CASH',
       name: savings ? a.name : `Gotówka – ${a.name}`,
       sub: savings ? `${Number(a.interestRate) || 0}% · kapitalizacja` : 'wolne środki',
@@ -52,8 +66,29 @@ export function buildPortfolioRows(state) {
     const foreign = ccy !== 'PLN';
     const category = inst.kind === 'ETF' ? (foreign ? 'ETF_FOREIGN' : 'ETF_PL') : foreign ? 'STOCK_FOREIGN' : 'STOCK_PL';
     const dayPct = q && q.prevClose ? q.price / q.prevClose - 1 : 0;
+    const trades = state.trades.filter((t) => t.accountId === p.accountId && t.instrumentId === p.instrumentId);
+    const ops = sortOps([
+      ...trades.map((t) => {
+        const amt = tradeAmounts(t, accById[t.accountId], instById[t.instrumentId]);
+        return {
+          date: t.date,
+          type: t.side === 'BUY' ? 'Kupno' : 'Sprzedaż',
+          quantity: Number(t.quantity),
+          price: Number(t.price),
+          currency: t.currency || inst.currency,
+          amount: t.side === 'BUY' ? -amt.buyCost : amt.sellProceeds,
+          note: [amt.fee ? `prowizja ${amt.fee.toFixed(2)} zł` : '', amt.fxFee ? `przewalutowanie ${amt.fxFee.toFixed(2)} zł` : ''].filter(Boolean).join(' · '),
+        };
+      }),
+      ...income.filter((i) => i.type === 'DIVIDEND' && i.accountId === p.accountId && i.instrumentId === p.instrumentId).map((i) => ({ date: i.date, type: 'Dywidenda netto', amount: i.net, note: i.note })),
+    ]);
+    const buys = trades.filter((t) => t.side === 'BUY').map((t) => t.date).sort();
     rows.push({
       id: p.key,
+      ops,
+      since: buys[0] || firstDate(ops),
+      avgPricePLN: p.quantity > 0 ? p.costPLN / p.quantity : null,
+      currentPricePLN: p.quantity > 0 ? p.value / p.quantity : null,
       category,
       name: inst.ticker,
       sub: inst.name,
@@ -77,8 +112,16 @@ export function buildPortfolioRows(state) {
     const belka = belkaRateForAccount(b.account, state.settings);
     const val = valueBond(b, today, belka, cpi);
     const coupons = val.coupons.reduce((s, c) => s + c.gross, 0) * (1 - belka);
+    const ops = sortOps([
+      { date: b.purchaseDate, type: 'Zakup obligacji', quantity: Number(b.quantity), price: 100, currency: 'PLN', amount: -Number(b.quantity) * 100, note: b.series },
+      ...val.coupons.map((c) => ({ date: c.date, type: 'Kupon netto', amount: c.gross * (1 - belka), note: `${(c.rate * 100).toFixed(2)}%` })),
+    ]);
     rows.push({
       id: `bond_${b.id}`,
+      ops,
+      since: b.purchaseDate,
+      avgPricePLN: 100,
+      currentPricePLN: (Number(b.quantity) || 0) > 0 ? val.netValue / Number(b.quantity) : null,
       category: 'BONDS',
       name: b.series,
       sub: `${b.type} · ${(val.currentRate * 100).toFixed(2)}% · wykup ${val.maturityDate}`,
@@ -100,6 +143,8 @@ export function buildPortfolioRows(state) {
       if (!o.includeInNetWorth) continue;
       rows.push({
         id: `other_${o.id}`,
+        ops: [],
+        since: null,
         category: 'OTHER',
         name: o.name,
         sub: `${OTHER_ASSET_CATEGORIES[o.category] || 'Inne'}${Number(o.liabilities) > 0 ? ` · zobowiązania ${Math.round(o.liabilities).toLocaleString('pl-PL')} zł` : ''}`,

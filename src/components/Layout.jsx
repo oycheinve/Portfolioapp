@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, BarChart3, BookOpen, Coins, FileText, Flame, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, Radio, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X, Zap } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, BookOpen, Coins, FileText, FlaskConical, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -9,17 +9,15 @@ import { upcomingReminders } from '../lib/dividends.js';
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard, mobile: true },
   { id: 'portfolio', label: 'Portfel', longLabel: 'Portfel', icon: Table2, mobile: true },
-  { id: 'stats', label: 'Statystyki', longLabel: 'Statystyki', icon: BarChart3 },
-  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy', icon: LineChart, mobile: true },
+  { id: 'stats', label: 'Statystyki', longLabel: 'Statystyki', icon: BarChart3, mobile: true },
+  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i notowania', icon: LineChart, mobile: true },
   { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins, mobile: true },
+  { id: 'simulations', label: 'Symulacje', longLabel: 'Symulacje i kalkulator', icon: FlaskConical },
   { id: 'safe', label: 'Bezpieczne', longLabel: 'Kapitał bezpieczny', icon: Shield },
-  { id: 'quotes', label: 'Notowania', longLabel: 'Notowania', icon: Radio },
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
-  { id: 'fire', label: 'FIRE', longLabel: 'FIRE 2055', icon: Flame, mobile: true },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText },
   { id: 'journal', label: 'Dziennik', longLabel: 'Dziennik decyzji', icon: BookOpen },
-  { id: 'stress', label: 'Co jeśli', longLabel: 'Symulator „Co jeśli”', icon: Zap },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];

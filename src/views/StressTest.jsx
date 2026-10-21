@@ -28,37 +28,10 @@ export default function StressTestView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Wynik */}
-      <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-neutral-900">
-        <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-          <Zap size={16} className="text-amber-500" /> Symulator „Co jeśli” – majątek całkowity po szoku
-        </div>
-        <div className="mt-2 grid gap-4 sm:grid-cols-3">
-          <div>
-            <div className="text-xs text-stone-500">Przed</div>
-            <div className="text-2xl font-semibold tabular">{formatPLN(result.before)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-stone-500">Po szoku</div>
-            <div className="text-2xl font-semibold tabular">{formatPLN(result.after)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-stone-500">Zmiana</div>
-            <div className={`text-2xl font-semibold tabular ${signClass(result.delta)}`}>
-              {formatPLN(result.delta, { sign: true })} <span className="text-base">({formatPercent(result.deltaPct, { sign: true })})</span>
-            </div>
-          </div>
-        </div>
-        <div className="mt-3 text-xs text-stone-500 dark:text-stone-400">
-          Udział aktywów bezpiecznych: {formatPercent(result.safeShareBefore, { digits: 1 })} → <strong>{formatPercent(result.safeShareAfter, { digits: 1 })}</strong> · portfel inwestycyjny{' '}
-          {formatPLN(result.portfolioBefore, { compact: true })} → {formatPLN(result.portfolioAfter, { compact: true })}
-        </div>
-      </section>
-
-      <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
-        <Card title="Scenariusz" subtitle="Suwaki nagłych zdarzeń rynkowych i walutowych" icon={Activity}>
-          <div className="space-y-5">
-            <div className="flex flex-wrap gap-2">
+      {/* 1. Dane wejściowe */}
+      <Card title="Scenariusz stresu rynkowego" subtitle="Suwaki nagłych zdarzeń rynkowych i walutowych" icon={Activity}>
+          <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-3">
               {STRESS_PRESETS.map((p) => (
                 <button
                   key={p.id}
@@ -80,13 +53,13 @@ export default function StressTestView() {
             <Slider label="Kurs USD/PLN" value={shock.usd} onChange={(v) => set({ usd: v })} min={-10} max={10} step={1} format={pctLabel} accent={seriesColor(6, isDark)} hint="+ = słabszy złoty (zysk na aktywach w USD)" />
             <Slider label="Kurs EUR/PLN" value={shock.eur} onChange={(v) => set({ eur: v })} min={-10} max={10} step={1} format={pctLabel} accent={seriesColor(1, isDark)} />
             <Slider label="Nieruchomości / inne aktywa" value={shock.other} onChange={(v) => set({ other: v })} min={-30} max={10} step={1} format={pctLabel} accent={seriesColor(4, isDark)} hint={state.settings.includeOtherAssets ? 'Działa na wartość brutto – kredyt bez zmian' : 'Kategoria wyłączona z majątku w ustawieniach'} />
-            <button type="button" className="text-xs text-blue-600 hover:underline dark:text-blue-400" onClick={() => { setShock(DEFAULT_SHOCK); setLinked(true); }}>
+            <button type="button" className="self-end justify-self-start text-xs text-blue-600 hover:underline dark:text-blue-400" onClick={() => { setShock(DEFAULT_SHOCK); setLinked(true); }}>
               Przywróć domyślne (−15%)
             </button>
           </div>
-        </Card>
+      </Card>
 
-        <div className="min-w-0 space-y-4 sm:space-y-6">
+      {/* 2. Wykres wynikowy */}
           <Card title="Klasy aktywów: przed i po" subtitle="Wykres bez nieruchomości – ich zmiana w zestawieniu poniżej" icon={Layers}>
             <Legend
               items={[
@@ -118,6 +91,33 @@ export default function StressTestView() {
             </ul>
           </Card>
 
+      {/* 3. Wyniki liczbowe */}
+      {/* Wynik */}
+      <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
+          <Zap size={16} className="text-amber-500" /> Symulator „Co jeśli” – majątek całkowity po szoku
+        </div>
+        <div className="mt-2 grid gap-4 sm:grid-cols-3">
+          <div>
+            <div className="text-xs text-stone-500">Przed</div>
+            <div className="text-2xl font-semibold tabular">{formatPLN(result.before)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500">Po szoku</div>
+            <div className="text-2xl font-semibold tabular">{formatPLN(result.after)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-stone-500">Zmiana</div>
+            <div className={`text-2xl font-semibold tabular ${signClass(result.delta)}`}>
+              {formatPLN(result.delta, { sign: true })} <span className="text-base">({formatPercent(result.deltaPct, { sign: true })})</span>
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 text-xs text-stone-500 dark:text-stone-400">
+          Udział aktywów bezpiecznych: {formatPercent(result.safeShareBefore, { digits: 1 })} → <strong>{formatPercent(result.safeShareAfter, { digits: 1 })}</strong> · portfel inwestycyjny{' '}
+          {formatPLN(result.portfolioBefore, { compact: true })} → {formatPLN(result.portfolioAfter, { compact: true })}
+        </div>
+      </section>
           <Card title="Wpływ na konta" icon={Briefcase} bodyClassName="p-0 sm:p-0">
             <ul className="divide-y divide-stone-100 dark:divide-white/5">
               {result.accounts.map((a) => {
@@ -172,8 +172,6 @@ export default function StressTestView() {
           <p className="text-[11px] text-stone-500 dark:text-stone-500">
             Symulacja natychmiastowa: zmiana ceny w walucie notowań × zmiana kursu waluty. Obligacje skarbowe i gotówka bez zmian. To uproszczony test warunków skrajnych, nie prognoza.
           </p>
-        </div>
-      </div>
     </div>
   );
 }

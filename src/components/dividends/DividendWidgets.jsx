@@ -135,7 +135,7 @@ export function RemindersCard() {
   return (
     <Card
       title="Przypomnienia"
-      subtitle={`Ex-Date, wypłaty i wydarzenia spółek w ciągu ${days} dni`}
+      subtitle={`Dni dywidendy i wypłaty w ciągu ${days} dni`}
       icon={Bell}
       actions={
         <>
@@ -164,7 +164,7 @@ export function RemindersCard() {
       bodyClassName="p-0 sm:p-0"
     >
       {reminders.length === 0 ? (
-        <EmptyState icon={Bell} title="Brak nadchodzących terminów" description="Dodaj ogłoszone dywidendy lub daty raportów/WZA spółek." />
+        <EmptyState icon={Bell} title="Brak nadchodzących terminów" description="Synchronizacja dywidend uzupełni terminy automatycznie." />
       ) : (
         <ul className="divide-y divide-stone-100 dark:divide-white/5">
           {reminders.map((r) => (

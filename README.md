@@ -69,6 +69,15 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Kapitał bezpieczny** (nowa): obligacje, konta oszczędnościowe i gotówka na rachunkach w jednym module + odczyty CPI.
 - **Notowania** (nowa): kursy, waluty i przelicznik. **FIRE** zawiera kartę dochodu pasywnego. **Raport na X** – sam generator.
 
+## Przebudowa zakładek (Portfel, Wykresy, Dywidendy, Symulacje)
+
+- **Portfel**: filtr w rozwijanym przycisku „Filtruj portfel”; tabela w zwijalnych sekcjach z kolumnami: Walor, Operacje (historia w oknie), Zmiana dzienna, Liczba jednostek, Śr. cena zakupu [PLN], Cena aktualna [PLN], Okres inwestycji, Wartość waloru [PLN], Udział [%], Stopa zwrotu [%], Zysk [PLN].
+- **Pulpit**: tylko Majątek Całkowity z wykresem kołowym i podsumowanie kont.
+- **Wykresy i notowania**: wybór wykresu z listy (wartość vs wkład, zysk, drawdown, dywidendy, mapa cieplna, notowania i waluty), obok wybór aktywów i benchmarków.
+- **Dywidendy**: automatyczna synchronizacja (historia dywidend z Yahoo Finance; offline – prognoza z historii wypłat), opcjonalne automatyczne księgowanie wypłat; usunięto sekcję raportów/WZA (`src/lib/dividendSync.js`).
+- **Symulacje i kalkulator** (nowa zakładka): Symulacja FIRE (opcje celu w zwijanym panelu, dochód pasywny), Stress test / Co jeśli, Kalkulator inwestycyjny (`src/lib/calculator.js`) – układ: dane wejściowe → wykres → wyniki.
+- Dolny pasek na telefonie: Pulpit, Portfel, Statystyki, Wykresy, Dywidendy, Więcej. Stare adresy `#/fire`, `#/stress`, `#/quotes` przekierowują do nowych miejsc.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

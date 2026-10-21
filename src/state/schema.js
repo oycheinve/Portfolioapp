@@ -73,7 +73,7 @@ export function defaultSettings() {
     limitsPolicy: { autoUpdate: true, growthPct: 6, projectedWages: {} },
     contributionLimitsMeta: {}, // { rok: 'official' | 'manual' | 'wage' | 'estimate' }
     goalsReview: { reviewedYears: [] }, // lata, dla których wykonano zamknięcie roku i przeniesienie celów
-    dividendPrefs: { dgr: 6, years: 10, drip: true, reminderDays: 30 }, // Etap 4
+    dividendPrefs: { dgr: 6, years: 10, drip: true, reminderDays: 30, autoSync: true, autoBook: false, lastSync: null }, // Etap 4 (+ automatyczne dane dywidend)
     cpiOverrides: {}, // Etap 3: ręczne odczyty CPI r/r { 'RRRR-MM': % }
     priceMode: 'auto', // 'auto' | 'mock'
     corsProxy: 'https://corsproxy.io/?url=',

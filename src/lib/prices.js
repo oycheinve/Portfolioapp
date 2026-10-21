@@ -221,3 +221,37 @@ export async function fetchYahooHistory(symbol, corsProxy, { range = '5y', inter
   }
   throw new Error(errors.join('; '));
 }
+
+// Historia dywidend z Yahoo Finance (dzień dywidendy = data zdarzenia, kwota na akcję w walucie notowań)
+export async function fetchYahooDividends(symbol, corsProxy) {
+  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1mo&events=div`;
+  const urls = [{ url: `/api/yahoo${path}`, via: 'proxy lokalne' }];
+  if (corsProxy) {
+    const full = `https://query1.finance.yahoo.com${path}`;
+    urls.push({ url: corsProxy.includes('{url}') ? corsProxy.replace('{url}', encodeURIComponent(full)) : `${corsProxy}${encodeURIComponent(full)}`, via: 'proxy CORS' });
+  }
+  const errors = [];
+  for (const { url, via } of urls) {
+    try {
+      const json = await fetchJson(url);
+      const result = json?.chart?.result?.[0];
+      if (!result) throw new Error('Brak danych');
+      let currency = result.meta?.currency || null;
+      const divisor = currency === 'GBp' || currency === 'GBX' ? 100 : 1;
+      if (divisor === 100) currency = 'GBP';
+      const events = Object.values(result.events?.dividends || {})
+        .map((d) => {
+          const dt = new Date(d.date * 1000);
+          return {
+            exDate: `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`,
+            amount: d.amount / divisor,
+          };
+        })
+        .sort((a, b) => (a.exDate < b.exDate ? -1 : 1));
+      return { events, currency, source: `Yahoo (${via})` };
+    } catch (e) {
+      errors.push(`${via}: ${e.message}`);
+    }
+  }
+  throw new Error(errors.join('; '));
+}

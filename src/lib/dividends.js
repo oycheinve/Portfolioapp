@@ -84,6 +84,7 @@ export function dividendPositions(state, today = isoDay(new Date())) {
 // Status pozycji harmonogramu
 export function scheduleStatus(item, today = isoDay(new Date())) {
   if (item.bookedAt) return 'PAID';
+  if (item.estimated) return 'FORECAST';
   if (item.exDate && item.exDate <= today) return 'PENDING';
   return 'ANNOUNCED';
 }
@@ -235,20 +236,20 @@ export function dividendKpis(state, today = isoDay(new Date())) {
 }
 
 // Przypomnienia: Ex-Date, wypłaty i wydarzenia spółek (raport/WZA) w najbliższych N dniach
-export function upcomingReminders(state, days = 30, today = isoDay(new Date())) {
+export function upcomingReminders(state, days = 30, today = isoDay(new Date()), { includeEvents = false } = {}) {
   const out = [];
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
   for (const s of state.dividendSchedule) {
     if (s.bookedAt) continue;
     const inst = instById[s.instrumentId];
     if (s.exDate && s.exDate >= today && daysUntil(s.exDate, today) <= days) {
-      out.push({ id: `${s.id}-ex`, date: s.exDate, kind: 'EX', title: `${inst?.ticker || '—'}: Dzień dywidendy (Ex-Date)`, detail: `Kup najpóźniej sesję wcześniej, aby otrzymać ${Number(s.dps).toFixed(2)} ${s.currency || inst?.currency || 'PLN'}/akcję`, instrument: inst, scheduleId: s.id });
+      out.push({ id: `${s.id}-ex`, date: s.exDate, kind: 'EX', estimated: !!s.estimated, title: `${inst?.ticker || '—'}: Dzień dywidendy (Ex-Date)${s.estimated ? ' – prognoza' : ''}`, detail: `Kup najpóźniej sesję wcześniej, aby otrzymać ${Number(s.dps).toFixed(2)} ${s.currency || inst?.currency || 'PLN'}/akcję`, instrument: inst, scheduleId: s.id });
     }
     if (s.payDate && s.payDate >= today && daysUntil(s.payDate, today) <= days) {
-      out.push({ id: `${s.id}-pay`, date: s.payDate, kind: 'PAY', title: `${inst?.ticker || '—'}: wypłata dywidendy`, detail: `${Number(s.dps).toFixed(2)} ${s.currency || inst?.currency || 'PLN'}/akcję`, instrument: inst, scheduleId: s.id });
+      out.push({ id: `${s.id}-pay`, date: s.payDate, kind: 'PAY', estimated: !!s.estimated || !!s.payDateEstimated, title: `${inst?.ticker || '—'}: wypłata dywidendy${s.estimated || s.payDateEstimated ? ' (szac.)' : ''}`, detail: `${Number(s.dps).toFixed(2)} ${s.currency || inst?.currency || 'PLN'}/akcję`, instrument: inst, scheduleId: s.id });
     }
   }
-  for (const inst of state.instruments) {
+  for (const inst of includeEvents ? state.instruments : []) {
     const ev = inst.dividend?.nextEvent;
     if (ev?.date && ev.date >= today && daysUntil(ev.date, today) <= days) {
       out.push({ id: `${inst.id}-event`, date: ev.date, kind: 'EVENT', title: `${inst.ticker}: ${ev.label || 'wydarzenie'}`, detail: inst.name, instrument: inst });

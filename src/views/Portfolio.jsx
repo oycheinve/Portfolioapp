@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Filter, Table2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, ListOrdered, SlidersHorizontal, Table2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { PORTFOLIO_CATEGORIES, buildPortfolioRows, groupRows } from '../lib/portfolioTable.js';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
-import { formatMoney, formatNumber, formatPLN, formatPercent, signClass } from '../lib/format.js';
-import { Card, EmptyState } from '../components/ui.jsx';
+import { formatDate, formatMoney, formatNumber, formatPLN, formatPercent, signClass } from '../lib/format.js';
+import { Card, Dropdown, EmptyState, Modal } from '../components/ui.jsx';
 
 const PREFS_KEY = 'wealth-app-portfolio-filters';
+
+// Kwoty w tabeli zawsze z dwoma miejscami po przecinku
+const fmt2Formatter = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt2 = (v) => (Number.isFinite(v) ? fmt2Formatter.format(v) : '—');
 
 function readPrefs() {
   try {
@@ -16,40 +20,50 @@ function readPrefs() {
   }
 }
 
-function CheckChip({ checked, onChange, label, color, count }) {
+// Okres inwestycji: „2 l. 9 mies.” / „4 mies.” / „12 dni”
+export function holdingPeriod(since, today = new Date()) {
+  if (!since) return '—';
+  const [y, m, d] = since.split('-').map(Number);
+  const start = new Date(y, m - 1, d);
+  const days = Math.max(0, Math.round((today - start) / 86400000));
+  if (days < 31) return `${days} dni`;
+  let months = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+  if (today.getDate() < start.getDate()) months -= 1;
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  if (years === 0) return `${rest} mies.`;
+  return rest ? `${years} l. ${rest} mies.` : `${years} l.`;
+}
+
+function CheckRow({ checked, onChange, label, color, count }) {
   return (
-    <label
-      className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors select-none ${
-        checked
-          ? 'border-blue-600 bg-blue-50 text-blue-800 dark:border-blue-400 dark:bg-blue-500/10 dark:text-blue-200'
-          : 'border-stone-200 text-stone-500 hover:bg-stone-100 dark:border-white/10 dark:text-stone-400 dark:hover:bg-white/5'
-      }`}
-    >
-      <input type="checkbox" className="h-3.5 w-3.5 accent-blue-600" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      {color && <span className="h-2 w-2 rounded-full" style={{ background: color }} />}
-      {label}
-      {count !== undefined && <span className="opacity-60">{count}</span>}
+    <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-stone-100 dark:hover:bg-white/5">
+      <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {color && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {count !== undefined && <span className="text-xs text-stone-400 tabular">{count}</span>}
     </label>
   );
 }
 
-function Delta({ value, pct, digits = 2, stack = false }) {
-  if (value === null || value === undefined) return <span className="text-stone-400">—</span>;
-  if (stack) {
-    return (
-      <span className={`inline-flex flex-col items-end leading-tight ${signClass(value)}`}>
-        <span className="whitespace-nowrap">{formatPLN(value, { sign: true })}</span>
-        {pct !== null && pct !== undefined && <span className="text-[11px] opacity-90">{formatPercent(pct, { sign: true, digits })}</span>}
-      </span>
-    );
-  }
-  return (
-    <span className={signClass(value)}>
-      {formatPLN(value, { sign: true })}
-      {pct !== null && pct !== undefined && <span className="ml-1 text-[11px]">({formatPercent(pct, { sign: true, digits })})</span>}
-    </span>
-  );
+function Signed({ value, kind = 'pln', digits = 2 }) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return <span className="text-stone-400">—</span>;
+  return <span className={signClass(value)}>{kind === 'pct' ? formatPercent(value, { sign: true, digits }) : formatPLN(value, { sign: true })}</span>;
 }
+
+const COLS = [
+  { key: 'name', label: 'Walor', align: 'left' },
+  { key: 'ops', label: 'Operacje', align: 'center' },
+  { key: 'day', label: 'Zmiana dzienna', align: 'right' },
+  { key: 'qty', label: 'Liczba jednostek', align: 'right' },
+  { key: 'avg', label: 'Śr. cena zakupu [PLN]', align: 'right' },
+  { key: 'price', label: 'Cena aktualna [PLN]', align: 'right' },
+  { key: 'period', label: 'Okres inwestycji', align: 'right' },
+  { key: 'value', label: 'Wartość waloru [PLN]', align: 'right' },
+  { key: 'share', label: 'Udział w portfelu [%]', align: 'right' },
+  { key: 'rate', label: 'Stopa zwrotu [%]', align: 'right' },
+  { key: 'gain', label: 'Zysk [PLN]', align: 'right' },
+];
 
 export default function PortfolioView() {
   const { state } = useApp();
@@ -60,11 +74,14 @@ export default function PortfolioView() {
   const [categories, setCategories] = useState(() => (saved?.categories || allCats).filter((c) => allCats.includes(c)));
   const [hiddenAccounts, setHiddenAccounts] = useState(() => saved?.hiddenAccounts || []);
   const [collapsed, setCollapsed] = useState({});
+  const [opsFor, setOpsFor] = useState(null);
 
   const accounts = allAccs.filter((id) => !hiddenAccounts.includes(id));
   const data = useMemo(() => groupRows(rows, { categories, accounts }), [rows, categories, accounts]);
   const present = new Set(rows.map((r) => r.category));
   const counts = Object.fromEntries(PORTFOLIO_CATEGORIES.map((c) => [c.id, rows.filter((r) => r.category === c.id).length]));
+  const presentCats = PORTFOLIO_CATEGORIES.filter((c) => present.has(c.id));
+  const activeFilters = presentCats.filter((c) => !categories.includes(c.id)).length + hiddenAccounts.length;
 
   const persist = (cats, hidden) => {
     try {
@@ -73,136 +90,181 @@ export default function PortfolioView() {
       // brak localStorage – filtr nie zostanie zapamiętany
     }
   };
-  const toggleCat = (id, on) => {
-    const next = on ? [...new Set([...categories, id])] : categories.filter((c) => c !== id);
-    setCategories(next);
-    persist(next, hiddenAccounts);
-  };
-  const toggleAcc = (id, on) => {
-    const next = on ? hiddenAccounts.filter((x) => x !== id) : [...hiddenAccounts, id];
-    setHiddenAccounts(next);
-    persist(categories, next);
-  };
-  const preset = (cats, hidden = []) => {
+  const apply = (cats, hidden) => {
     setCategories(cats);
     setHiddenAccounts(hidden);
     persist(cats, hidden);
   };
-  const allOn = categories.length === allCats.length && hiddenAccounts.length === 0;
+  const toggleCat = (id, on) => apply(on ? [...new Set([...categories, id])] : categories.filter((c) => c !== id), hiddenAccounts);
+  const toggleAcc = (id, on) => apply(categories, on ? hiddenAccounts.filter((x) => x !== id) : [...hiddenAccounts, id]);
+  const allOn = activeFilters === 0;
+
+  const toggleSection = (id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
+  const allCollapsed = data.groups.length > 0 && data.groups.every((g) => collapsed[g.id]);
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <Card title="Co pokazać w tabeli" subtitle="Zaznacz kategorie i konta – podsumowania przeliczą się od razu" icon={Filter}>
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <CheckChip checked={allOn} onChange={(v) => (v ? preset(allCats) : preset([]))} label="Wszystko naraz" />
-            <button type="button" onClick={() => preset(['STOCK_PL', 'STOCK_FOREIGN', 'ETF_PL', 'ETF_FOREIGN'])} className="rounded-full border border-dashed border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:border-white/15 dark:text-stone-300 dark:hover:bg-white/5">
-              Tylko akcje i ETF
-            </button>
-            <button type="button" onClick={() => preset(['CASH', 'BONDS'])} className="rounded-full border border-dashed border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:border-white/15 dark:text-stone-300 dark:hover:bg-white/5">
-              Kapitał bezpieczny
-            </button>
-          </div>
-          <div>
-            <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Kategorie</div>
-            <div className="flex flex-wrap gap-2">
-              {PORTFOLIO_CATEGORIES.filter((c) => present.has(c.id)).map((c) => (
-                <CheckChip key={c.id} checked={categories.includes(c.id)} onChange={(v) => toggleCat(c.id, v)} label={c.label} count={counts[c.id]} />
+    <div className="space-y-4">
+      {/* Pasek: filtr + podsumowanie */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Dropdown label="Filtruj portfel" icon={SlidersHorizontal} badge={activeFilters || null}>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: 'Wszystko', cats: allCats },
+                { label: 'Akcje i ETF', cats: ['STOCK_PL', 'STOCK_FOREIGN', 'ETF_PL', 'ETF_FOREIGN'] },
+                { label: 'Kapitał bezpieczny', cats: ['CASH', 'BONDS'] },
+              ].map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => apply(p.cats, [])}
+                  className="rounded-full border border-stone-200 px-3 py-1 text-xs font-medium hover:bg-stone-100 dark:border-white/10 dark:hover:bg-white/5"
+                >
+                  {p.label}
+                </button>
               ))}
             </div>
-          </div>
-          <div>
-            <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Konta</div>
-            <div className="flex flex-wrap gap-2">
+            <div>
+              <div className="mb-1 px-2 text-[11px] font-semibold tracking-wide text-stone-500 uppercase">Kategorie</div>
+              {presentCats.map((c) => (
+                <CheckRow key={c.id} checked={categories.includes(c.id)} onChange={(v) => toggleCat(c.id, v)} label={c.label} count={counts[c.id]} />
+              ))}
+            </div>
+            <div className="border-t border-stone-100 pt-2 dark:border-white/5">
+              <div className="mb-1 px-2 text-[11px] font-semibold tracking-wide text-stone-500 uppercase">Konta</div>
               {state.accounts.map((a) => (
-                <CheckChip key={a.id} checked={!hiddenAccounts.includes(a.id)} onChange={(v) => toggleAcc(a.id, v)} label={a.name} color={ACCOUNT_TYPES[a.type]?.color} />
+                <CheckRow key={a.id} checked={!hiddenAccounts.includes(a.id)} onChange={(v) => toggleAcc(a.id, v)} label={a.name} color={ACCOUNT_TYPES[a.type]?.color} />
               ))}
             </div>
+            {!allOn && (
+              <button type="button" onClick={() => apply(allCats, [])} className="w-full rounded-lg bg-stone-100 py-2 text-xs font-medium hover:bg-stone-200 dark:bg-white/5 dark:hover:bg-white/10">
+                Pokaż wszystko
+              </button>
+            )}
           </div>
+        </Dropdown>
+        <button
+          type="button"
+          onClick={() => setCollapsed(allCollapsed ? {} : Object.fromEntries(data.groups.map((g) => [g.id, true])))}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5"
+        >
+          {allCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />} {allCollapsed ? 'Rozwiń sekcje' : 'Zwiń sekcje'}
+        </button>
+        <div className="ml-auto flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm tabular">
+          <span>
+            <span className="text-xs text-stone-500">Wartość </span>
+            <strong>{formatPLN(data.total)}</strong>
+          </span>
+          <span>
+            <span className="text-xs text-stone-500">Zysk </span>
+            <strong className={signClass(data.gain)}>
+              {formatPLN(data.gain, { sign: true })} ({formatPercent(data.gainPct, { sign: true })})
+            </strong>
+          </span>
+          <span>
+            <span className="text-xs text-stone-500">Dziś </span>
+            <strong className={signClass(data.dayChange)}>
+              {formatPLN(data.dayChange, { sign: true })} ({formatPercent(data.dayPct, { sign: true })})
+            </strong>
+          </span>
         </div>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Wartość (widoczne)" value={formatPLN(data.total)} sub={`${data.count} pozycji`} />
-        <Tile label="Zysk" value={formatPLN(data.gain, { sign: true })} sub={formatPercent(data.gainPct, { sign: true })} tone={signClass(data.gain)} />
-        <Tile label="Zmiana dzienna" value={formatPLN(data.dayChange, { sign: true })} sub={formatPercent(data.dayPct, { sign: true })} tone={signClass(data.dayChange)} />
-        <Tile label="Kategorie" value={`${data.groups.length}`} sub={data.groups.map((g) => g.short).join(' · ') || '—'} />
       </div>
 
       {data.groups.length === 0 ? (
         <Card>
-          <EmptyState icon={Table2} title="Nic nie zaznaczono" description="Zaznacz kategorie lub konta w filtrze powyżej." />
+          <EmptyState icon={Table2} title="Nic nie zaznaczono" description="Otwórz „Filtruj portfel” i zaznacz kategorie lub konta." />
         </Card>
       ) : (
         <section className="min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900">
           {/* Tabela – desktop */}
           <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[1080px] text-[13px]">
               <thead>
-                <tr className="border-b border-stone-200 bg-stone-50 text-left text-xs text-stone-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-stone-400">
-                  <th className="px-4 py-2.5 font-medium">Pozycja</th>
-                  <th className="px-3 py-2.5 font-medium">Konto</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Ilość</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Kurs</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Wartość</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Koszt</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Zysk</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Dziś</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Udział</th>
+                <tr className="border-b border-stone-200 bg-stone-50 text-[11px] text-stone-500 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-400">
+                  {COLS.map((c) => (
+                    <th
+                      key={c.key}
+                      className={`px-2.5 py-2.5 leading-tight font-medium ${c.key === 'name' ? 'sticky left-0 z-10 bg-stone-50 pl-4 dark:bg-neutral-800' : ''} ${
+                        c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'
+                      }`}
+                    >
+                      {c.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               {data.groups.map((g) => {
                 const isOpen = !collapsed[g.id];
                 return (
                   <tbody key={g.id} className="tabular">
-                    <tr className="cursor-pointer border-b border-stone-200 bg-stone-100/70 font-semibold dark:border-white/10 dark:bg-white/[0.05]" onClick={() => setCollapsed((c) => ({ ...c, [g.id]: !c[g.id] }))}>
-                      <td className="px-4 py-2" colSpan={4}>
-                        <span className="inline-flex items-center gap-1.5">
+                    <tr className="cursor-pointer border-b border-stone-200 bg-stone-100 font-semibold dark:border-white/10 dark:bg-neutral-800" onClick={() => toggleSection(g.id)}>
+                      <td className="sticky left-0 z-10 bg-stone-100 py-2 pr-2.5 pl-4 dark:bg-neutral-800">
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                           {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                           {g.label} <span className="font-normal text-stone-500">({g.rows.length})</span>
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right">{formatPLN(g.value)}</td>
-                      <td className="px-3 py-2" />
-                      <td className="px-3 py-2 text-right">
-                        <Delta value={g.gain} pct={g.gainPct} stack />
+                      <td />
+                      <td className="px-2.5 py-2 text-right">
+                        <Signed value={g.dayChange} />
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <Delta value={g.dayChange} pct={g.dayPct} stack />
+                      <td colSpan={4} />
+                      <td className="px-2.5 py-2 text-right">{fmt2(g.value)}</td>
+                      <td className="px-2.5 py-2 text-right">{formatPercent(g.share, { digits: 2 })}</td>
+                      <td className="px-2.5 py-2 text-right">
+                        <Signed value={g.gainPct} kind="pct" />
                       </td>
-                      <td className="px-4 py-2 text-right">{formatPercent(g.share, { digits: 1 })}</td>
+                      <td className="px-2.5 py-2 text-right">
+                        <Signed value={g.gain} />
+                      </td>
                     </tr>
                     {isOpen &&
                       g.rows.map((r) => (
-                        <tr key={r.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50 dark:border-white/5 dark:hover:bg-white/[0.02]">
-                          <td className="px-4 py-2">
-                            <div className="font-medium">{r.name}</div>
-                            <div className="max-w-[14rem] truncate text-[11px] text-stone-500 dark:text-stone-400">
-                              {r.sub}
-                              {r.fxFees > 0 && ` · przewalutowanie ${formatPLN(r.fxFees)}`}
+                        <tr key={r.id} className="group border-b border-stone-100 last:border-0 dark:border-white/5">
+                          <td className="sticky left-0 z-10 max-w-[15rem] bg-white py-2 pr-2.5 pl-4 group-hover:bg-stone-50 dark:bg-neutral-900 dark:group-hover:bg-neutral-800">
+                            <div className="truncate font-medium">{r.name}</div>
+                            <div className="flex items-center gap-1 truncate text-[11px] text-stone-500 dark:text-stone-400">
+                              {r.account && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: ACCOUNT_TYPES[r.account.type]?.color }} />}
+                              <span className="truncate">{r.account ? r.account.name : r.sub}</span>
                             </div>
                           </td>
-                          <td className="px-3 py-2">
-                            {r.account ? (
-                              <span className="inline-flex items-center gap-1.5 text-xs">
-                                <span className="h-2 w-2 rounded-full" style={{ background: ACCOUNT_TYPES[r.account.type]?.color }} />
-                                <span className="max-w-[8.5rem] truncate">{r.account.name}</span>
-                              </span>
+                          <td className="px-2.5 py-2 text-center group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
+                            {r.ops?.length ? (
+                              <button
+                                type="button"
+                                onClick={() => setOpsFor(r)}
+                                className="inline-flex items-center gap-1 rounded-md border border-stone-200 px-2 py-0.5 text-[11px] font-medium hover:bg-stone-100 dark:border-white/10 dark:hover:bg-white/5"
+                                title="Historia operacji"
+                              >
+                                <ListOrdered size={12} /> {r.ops.length}
+                              </button>
                             ) : (
-                              <span className="text-xs text-stone-400">—</span>
+                              <span className="text-stone-400">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-right">{r.quantity ? formatNumber(r.quantity, 4) : '—'}</td>
-                          <td className="px-3 py-2 text-right">{r.price ? formatMoney(r.price, r.currency || 'PLN') : '—'}</td>
-                          <td className="px-3 py-2 text-right font-semibold">{formatPLN(r.value)}</td>
-                          <td className="px-3 py-2 text-right text-stone-500">{r.cost !== null && r.cost !== undefined ? formatPLN(r.cost) : '—'}</td>
-                          <td className="px-3 py-2 text-right">
-                            <Delta value={r.gain} pct={r.gainPct} stack />
+                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
+                            <div>
+                              <Signed value={r.dayChange || 0} />
+                            </div>
+                            <div className="text-[11px]">
+                              <Signed value={r.dayPct} kind="pct" />
+                            </div>
                           </td>
-                          <td className="px-3 py-2 text-right">
-                            <Delta value={r.dayChange || 0} pct={r.dayPct} stack />
+                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">{r.quantity ? formatNumber(r.quantity, 4) : '—'}</td>
+                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">{r.avgPricePLN ? fmt2(r.avgPricePLN) : '—'}</td>
+                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
+                            <div>{r.currentPricePLN ? fmt2(r.currentPricePLN) : '—'}</div>
+                            {r.currency && r.currency !== 'PLN' && r.price ? <div className="text-[11px] text-stone-500">{formatMoney(r.price, r.currency)}</div> : null}
                           </td>
-                          <td className="px-4 py-2 text-right text-stone-500">{formatPercent(r.share, { digits: 1 })}</td>
+                          <td className="px-2.5 py-2 text-right whitespace-nowrap text-stone-600 group-hover:bg-stone-50 dark:text-stone-300 dark:group-hover:bg-white/[0.02]">{holdingPeriod(r.since)}</td>
+                          <td className="px-2.5 py-2 text-right font-semibold group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">{fmt2(r.value)}</td>
+                          <td className="px-2.5 py-2 text-right text-stone-600 group-hover:bg-stone-50 dark:text-stone-300 dark:group-hover:bg-white/[0.02]">{formatPercent(r.share, { digits: 2 })}</td>
+                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
+                            <Signed value={r.gainPct} kind="pct" />
+                          </td>
+                          <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
+                            <Signed value={r.gain} />
+                          </td>
                         </tr>
                       ))}
                   </tbody>
@@ -210,18 +272,20 @@ export default function PortfolioView() {
               })}
               <tfoot>
                 <tr className="border-t-2 border-stone-300 font-semibold tabular dark:border-white/15">
-                  <td className="px-4 py-2.5" colSpan={4}>
-                    Razem
-                  </td>
-                  <td className="px-3 py-2.5 text-right">{formatPLN(data.total)}</td>
+                  <td className="sticky left-0 z-10 bg-white py-2.5 pl-4 dark:bg-neutral-900">Razem</td>
                   <td />
-                  <td className="px-3 py-2.5 text-right">
-                    <Delta value={data.gain} pct={data.gainPct} stack />
+                  <td className="px-2.5 py-2.5 text-right">
+                    <Signed value={data.dayChange} />
                   </td>
-                  <td className="px-3 py-2.5 text-right">
-                    <Delta value={data.dayChange} pct={data.dayPct} stack />
+                  <td colSpan={4} />
+                  <td className="px-2.5 py-2.5 text-right">{fmt2(data.total)}</td>
+                  <td className="px-2.5 py-2.5 text-right">100%</td>
+                  <td className="px-2.5 py-2.5 text-right">
+                    <Signed value={data.gainPct} kind="pct" />
                   </td>
-                  <td className="px-4 py-2.5 text-right">100%</td>
+                  <td className="px-2.5 py-2.5 text-right">
+                    <Signed value={data.gain} />
+                  </td>
                 </tr>
               </tfoot>
             </table>
@@ -233,14 +297,14 @@ export default function PortfolioView() {
               const isOpen = !collapsed[g.id];
               return (
                 <div key={g.id} className="border-b border-stone-200 last:border-0 dark:border-white/10">
-                  <button type="button" onClick={() => setCollapsed((c) => ({ ...c, [g.id]: !c[g.id] }))} className="flex w-full items-start gap-2 bg-stone-100/70 px-4 py-2.5 text-left dark:bg-white/[0.05]">
+                  <button type="button" onClick={() => toggleSection(g.id)} className="flex w-full items-start gap-2 bg-stone-100/80 px-4 py-2.5 text-left dark:bg-white/[0.05]">
                     {isOpen ? <ChevronDown size={16} className="mt-0.5 shrink-0" /> : <ChevronRight size={16} className="mt-0.5 shrink-0" />}
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold">
                         {g.label} <span className="font-normal text-stone-500">({g.rows.length})</span>
                       </div>
                       <div className="text-[11px] tabular">
-                        <Delta value={g.gain} pct={g.gainPct} /> · dziś <Delta value={g.dayChange} />
+                        <Signed value={g.gain} /> · <Signed value={g.gainPct} kind="pct" /> · dziś <Signed value={g.dayChange} />
                       </div>
                     </div>
                     <div className="text-right">
@@ -251,21 +315,23 @@ export default function PortfolioView() {
                   {isOpen && (
                     <ul className="divide-y divide-stone-100 dark:divide-white/5">
                       {g.rows.map((r) => (
-                        <li key={r.id} className="flex items-start gap-3 px-4 py-2.5">
-                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium">{r.name}</div>
-                            <div className="truncate text-[11px] text-stone-500">
-                              {r.quantity ? `${formatNumber(r.quantity, 4)} szt. · ` : ''}
-                              {r.account?.name || r.sub}
+                        <li key={r.id}>
+                          <button type="button" onClick={() => r.ops?.length && setOpsFor(r)} className="flex w-full items-start gap-3 px-4 py-2.5 text-left">
+                            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-medium">{r.name}</div>
+                              <div className="truncate text-[11px] text-stone-500">
+                                {r.quantity && r.avgPricePLN ? `${formatNumber(r.quantity, 4)} szt. · ${fmt2(r.avgPricePLN)} → ${fmt2(r.currentPricePLN)} zł · ` : ''}
+                                {holdingPeriod(r.since)}
+                              </div>
                             </div>
-                          </div>
-                          <div className="text-right tabular">
-                            <div className="text-sm font-semibold">{formatPLN(r.value)}</div>
-                            <div className="text-[11px]">
-                              <Delta value={r.gain} pct={r.gainPct} digits={1} />
+                            <div className="text-right tabular">
+                              <div className="text-sm font-semibold">{formatPLN(r.value)}</div>
+                              <div className="text-[11px]">
+                                <Signed value={r.gain} /> <Signed value={r.gainPct} kind="pct" digits={1} />
+                              </div>
                             </div>
-                          </div>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -281,19 +347,35 @@ export default function PortfolioView() {
         </section>
       )}
       <p className="text-[11px] text-stone-500 dark:text-stone-500">
-        Zysk akcji i ETF = wartość − koszt zakupu (z prowizjami i przewalutowaniem). Obligacje: odsetki narosłe i wypłacone netto. Konta oszczędnościowe: odsetki ponad wpłaty. Zmiana dzienna obligacji i oszczędności = odsetki naliczane za 1 dzień.
+        Ceny w PLN po bieżącym kursie walut. Śr. cena zakupu zawiera prowizje i przewalutowanie. Stopa zwrotu i zysk: akcje/ETF – wartość − koszt zakupu; obligacje – odsetki narosłe i wypłacone netto; konta oszczędnościowe – odsetki ponad wpłaty. Zmiana dzienna obligacji i
+        oszczędności = odsetki za 1 dzień. Kliknij liczbę operacji, aby zobaczyć historię.
       </p>
+
+      <Modal open={!!opsFor} onClose={() => setOpsFor(null)} title={`Operacje: ${opsFor?.name || ''}`}>
+        {opsFor && (
+          <div className="space-y-2">
+            <div className="text-xs text-stone-500">
+              {opsFor.account?.name || '—'} · {opsFor.ops.length} operacji · w portfelu od {formatDate(opsFor.since)}
+            </div>
+            <ul className="max-h-[55vh] divide-y divide-stone-100 overflow-y-auto rounded-xl border border-stone-200 dark:divide-white/5 dark:border-white/10">
+              {opsFor.ops.map((o, i) => (
+                <li key={`${o.date}-${i}`} className="flex items-start gap-3 px-3 py-2 text-sm">
+                  <div className="w-20 shrink-0 text-xs text-stone-500 tabular">{formatDate(o.date)}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{o.type}</div>
+                    <div className="truncate text-[11px] text-stone-500">
+                      {o.quantity ? `${formatNumber(o.quantity, 4)} × ${formatMoney(o.price, o.currency || 'PLN')}` : ''}
+                      {o.quantity && o.note ? ' · ' : ''}
+                      {o.note}
+                    </div>
+                  </div>
+                  <div className={`shrink-0 font-semibold tabular ${signClass(o.amount)}`}>{formatPLN(o.amount, { sign: true })}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
-
-function Tile({ label, value, sub, tone = '' }) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
-      <div className="truncate text-[11px] text-stone-500 sm:text-xs dark:text-stone-400">{label}</div>
-      <div className={`mt-1 truncate text-lg font-semibold tabular ${tone}`}>{value}</div>
-      {sub && <div className="truncate text-[11px] text-stone-500">{sub}</div>}
-    </div>
-  );
-}
-

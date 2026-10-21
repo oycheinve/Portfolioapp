@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CalendarCheck, Flag, Flame, Gauge, SlidersHorizontal, Target } from 'lucide-react';
+import { CalendarCheck, Flag, Flame, Gauge, Settings2, SlidersHorizontal, Target } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { SCENARIOS, coastFireNumber, fireProgress, requiredContribution, runScenarios } from '../lib/fire.js';
 import { dividendKpis } from '../lib/dividends.js';
@@ -10,7 +10,7 @@ import { isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../li
 import { belkaRateForAccount } from '../lib/tax.js';
 import { chartChrome, seriesColor } from '../lib/colors.js';
 import { formatAxisPLN, formatNumber, formatPLN, formatPercent } from '../lib/format.js';
-import { Card, Field, Input, Segmented, Slider, Toggle } from '../components/ui.jsx';
+import { Button, Card, Field, Input, Segmented, Slider, Toggle } from '../components/ui.jsx';
 import { Legend } from '../components/charts/chartUtils.jsx';
 import { PassiveIncomeCard } from '../components/bonds/SavingsSection.jsx';
 
@@ -39,6 +39,7 @@ function currentPassiveIncome(state) {
 export default function FireView() {
   const { state, actions, isDark } = useApp();
   const fire = state.settings.fire;
+  const [showGoals, setShowGoals] = useState(false);
   const setFire = (patch) => actions.updateSettings({ fire: { ...fire, ...patch } });
   const chrome = chartChrome(isDark);
 
@@ -99,70 +100,22 @@ export default function FireView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Wskaźnik bliskości FIRE */}
-      <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-neutral-900">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-              <Flame size={16} className="text-orange-500" /> Niezależność finansowa · cel {fire.targetYear}
+      {/* 1. Dane wejściowe */}
+      <Card
+        title="Parametry symulacji FIRE"
+        subtitle={`Cel: ${formatPLN(fire.targetMonthlyIncome)} / mies. i ${formatPLN(fire.targetNetWorth, { compact: true })} majątku do ${fire.targetYear} (w dzisiejszych zł)`}
+        icon={SlidersHorizontal}
+        actions={
+          <Button size="sm" variant={showGoals ? 'primary' : 'secondary'} icon={Settings2} onClick={() => setShowGoals((v) => !v)} aria-expanded={showGoals}>
+            {showGoals ? 'Ukryj opcje celu' : 'Opcje celu'}
+          </Button>
+        }
+      >
+        {showGoals && (
+          <div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <Target size={16} /> Cel FIRE <span className="font-normal text-stone-500">· kwoty w dzisiejszej sile nabywczej</span>
             </div>
-            <div className="mt-1 text-4xl font-semibold tracking-tight tabular sm:text-5xl">{formatPercent(progress.main, { digits: 1 })}</div>
-            <div className="text-sm text-stone-500 dark:text-stone-400">
-              {fire.criterion === 'INCOME' ? 'celu dochodu pasywnego' : fire.criterion === 'NETWORTH' ? 'celu majątkowego' : 'drogi do FIRE (słabszy z dwóch celów)'}
-            </div>
-          </div>
-          <div className={`rounded-xl px-4 py-3 text-right ${onTrack ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200'}`}>
-            <div className="flex items-center justify-end gap-1.5 text-xs">
-              <CalendarCheck size={14} /> Prognozowana data FIRE ({SCENARIOS[fire.scenario].label.toLowerCase()})
-            </div>
-            <div className="text-2xl font-semibold tabular">{formatWhen(sel.reached)}</div>
-            <div className="text-xs">
-              {sel.reached ? (onTrack ? `${fire.targetYear - sel.reached.year} lat przed celem` : `${sel.reached.year - fire.targetYear} lat po celu`) : 'cel poza horyzontem symulacji'}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5">
-          <div className="relative h-5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-white/5" role="progressbar" aria-valuenow={Math.round(mainPct * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="Postęp do FIRE">
-            <div className="h-full rounded-full bg-gradient-to-r from-orange-400 to-emerald-500 transition-all" style={{ width: `${mainPct * 100}%` }} />
-            {[0.25, 0.5, 0.75].map((m) => (
-              <span key={m} className="absolute top-0 h-full w-px bg-white/70 dark:bg-neutral-900/70" style={{ left: `${m * 100}%` }} />
-            ))}
-          </div>
-          <div className="mt-1 flex justify-between text-[11px] text-stone-500 tabular">
-            <span>0%</span>
-            <span>25%</span>
-            <span>50%</span>
-            <span>75%</span>
-            <span>FIRE</span>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <SubProgress
-            icon={Target}
-            label="Dochód pasywny / mies."
-            current={formatPLN(current.income.total / 12)}
-            target={formatPLN(fire.targetMonthlyIncome)}
-            value={progress.income}
-            color={incomeColor}
-            hint={`dywidendy ${formatPLN(current.income.dividends / 12)} · obligacje ${formatPLN(current.income.bonds / 12)} · oszczędności ${formatPLN(current.income.savings / 12)}`}
-          />
-          <SubProgress
-            icon={Flag}
-            label="Majątek"
-            current={formatPLN(current.value)}
-            target={formatPLN(fire.targetNetWorth)}
-            value={progress.worth}
-            color={valueColor}
-            hint={fire.includeOtherAssets ? `w tym nieruchomości/inne ${formatPLN(current.other)}` : 'inwestycje i gotówka (bez nieruchomości)'}
-          />
-        </div>
-      </section>
-
-      <div className="grid gap-4 sm:gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
-        <div className="space-y-4 sm:space-y-6">
-          <Card title="Cel FIRE" subtitle="Kwoty w dzisiejszej sile nabywczej" icon={Target}>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Rok docelowy">
@@ -191,10 +144,9 @@ export default function FireView() {
               </div>
               <Toggle checked={!!fire.includeOtherAssets} onChange={(v) => setFire({ includeOtherAssets: v })} label="Wliczaj nieruchomości i inne aktywa" />
             </div>
-          </Card>
-
-          <Card title="Suwaki symulacji" subtitle="Scenariusze stóp zwrotu i parametry" icon={SlidersHorizontal}>
-            <div className="space-y-5">
+          </div>
+        )}
+            <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
               <Slider
                 label="Miesięczna wpłata własna"
                 value={fire.monthlyContribution}
@@ -252,17 +204,9 @@ export default function FireView() {
                 accent={seriesColor(7, isDark)}
               />
             </div>
-          </Card>
-        </div>
+      </Card>
 
-        <div className="min-w-0 space-y-4 sm:space-y-6">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tile label={`Majątek w ${fire.targetYear}`} value={formatPLN(real ? atTarget?.valueReal : atTarget?.value, { compact: true })} sub={real ? 'w dzisiejszych zł' : 'nominalnie'} />
-            <Tile label={`Dochód pasywny ${fire.targetYear}`} value={formatPLN(real ? atTarget?.monthlyIncomeReal : atTarget?.monthlyIncome)} sub={real ? 'miesięcznie, w dzisiejszych zł' : 'miesięcznie, nominalnie'} />
-            <Tile label={`Wpłata na cel ${fire.targetYear}`} value={required === null ? 'nieosiągalne' : formatPLN(required)} sub={required !== null && required <= fire.monthlyContribution ? 'miesięcznie – obecna wpłata wystarcza' : 'miesięcznie, wybrany scenariusz'} tone={required !== null && required <= fire.monthlyContribution ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'} />
-            <Tile label="Coast FIRE" value={formatPLN(coast, { compact: true })} sub={current.value >= coast ? 'osiągnięte – cel majątku bez dalszych wpłat' : `brakuje ${formatPLN(coast - current.value, { compact: true })}`} />
-          </div>
-
+      {/* 2. Wykres wynikowy */}
           <Card
             title={`Ścieżka do ${fire.targetYear}`}
             subtitle="Lewa oś: majątek · prawa oś: miesięczny dochód pasywny"
@@ -340,6 +284,75 @@ export default function FireView() {
             </div>
           </Card>
 
+      {/* 3. Wyniki liczbowe */}
+      {/* Wskaźnik bliskości FIRE */}
+      <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
+              <Flame size={16} className="text-orange-500" /> Niezależność finansowa · cel {fire.targetYear}
+            </div>
+            <div className="mt-1 text-4xl font-semibold tracking-tight tabular sm:text-5xl">{formatPercent(progress.main, { digits: 1 })}</div>
+            <div className="text-sm text-stone-500 dark:text-stone-400">
+              {fire.criterion === 'INCOME' ? 'celu dochodu pasywnego' : fire.criterion === 'NETWORTH' ? 'celu majątkowego' : 'drogi do FIRE (słabszy z dwóch celów)'}
+            </div>
+          </div>
+          <div className={`rounded-xl px-4 py-3 text-right ${onTrack ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200'}`}>
+            <div className="flex items-center justify-end gap-1.5 text-xs">
+              <CalendarCheck size={14} /> Prognozowana data FIRE ({SCENARIOS[fire.scenario].label.toLowerCase()})
+            </div>
+            <div className="text-2xl font-semibold tabular">{formatWhen(sel.reached)}</div>
+            <div className="text-xs">
+              {sel.reached ? (onTrack ? `${fire.targetYear - sel.reached.year} lat przed celem` : `${sel.reached.year - fire.targetYear} lat po celu`) : 'cel poza horyzontem symulacji'}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="relative h-5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-white/5" role="progressbar" aria-valuenow={Math.round(mainPct * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="Postęp do FIRE">
+            <div className="h-full rounded-full bg-gradient-to-r from-orange-400 to-emerald-500 transition-all" style={{ width: `${mainPct * 100}%` }} />
+            {[0.25, 0.5, 0.75].map((m) => (
+              <span key={m} className="absolute top-0 h-full w-px bg-white/70 dark:bg-neutral-900/70" style={{ left: `${m * 100}%` }} />
+            ))}
+          </div>
+          <div className="mt-1 flex justify-between text-[11px] text-stone-500 tabular">
+            <span>0%</span>
+            <span>25%</span>
+            <span>50%</span>
+            <span>75%</span>
+            <span>FIRE</span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <SubProgress
+            icon={Target}
+            label="Dochód pasywny / mies."
+            current={formatPLN(current.income.total / 12)}
+            target={formatPLN(fire.targetMonthlyIncome)}
+            value={progress.income}
+            color={incomeColor}
+            hint={`dywidendy ${formatPLN(current.income.dividends / 12)} · obligacje ${formatPLN(current.income.bonds / 12)} · oszczędności ${formatPLN(current.income.savings / 12)}`}
+          />
+          <SubProgress
+            icon={Flag}
+            label="Majątek"
+            current={formatPLN(current.value)}
+            target={formatPLN(fire.targetNetWorth)}
+            value={progress.worth}
+            color={valueColor}
+            hint={fire.includeOtherAssets ? `w tym nieruchomości/inne ${formatPLN(current.other)}` : 'inwestycje i gotówka (bez nieruchomości)'}
+          />
+        </div>
+      </section>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Tile label={`Majątek w ${fire.targetYear}`} value={formatPLN(real ? atTarget?.valueReal : atTarget?.value, { compact: true })} sub={real ? 'w dzisiejszych zł' : 'nominalnie'} />
+            <Tile label={`Dochód pasywny ${fire.targetYear}`} value={formatPLN(real ? atTarget?.monthlyIncomeReal : atTarget?.monthlyIncome)} sub={real ? 'miesięcznie, w dzisiejszych zł' : 'miesięcznie, nominalnie'} />
+            <Tile label={`Wpłata na cel ${fire.targetYear}`} value={required === null ? 'nieosiągalne' : formatPLN(required)} sub={required !== null && required <= fire.monthlyContribution ? 'miesięcznie – obecna wpłata wystarcza' : 'miesięcznie, wybrany scenariusz'} tone={required !== null && required <= fire.monthlyContribution ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'} />
+            <Tile label="Coast FIRE" value={formatPLN(coast, { compact: true })} sub={current.value >= coast ? 'osiągnięte – cel majątku bez dalszych wpłat' : `brakuje ${formatPLN(coast - current.value, { compact: true })}`} />
+          </div>
+
           <Card title="Porównanie scenariuszy" icon={CalendarCheck} bodyClassName="p-0 sm:p-0">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[520px] text-sm">
@@ -373,8 +386,6 @@ export default function FireView() {
               Model: majątek rośnie o stopę zwrotu + wpłaty; dochód pasywny = obecny dochód rosnący o DGR + stopa dywidendy od nowych wpłat i reinwestowanych dywidend. Kwoty realne dyskontowane inflacją. To uproszczona symulacja, nie prognoza.
             </p>
           </Card>
-        </div>
-      </div>
 
       {/* Dochód pasywny – bieżąca baza dla celu FIRE */}
       <PassiveIncomeCard />

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AreaChart as AreaIcon, BarChart3, CalendarRange, Coins, Database, Filter, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarRange, Database, Layers, LineChart as LineIcon, RefreshCw, Scale } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES, BENCHMARKS } from '../../lib/constants.js';
 import { createPriceResolver, historyAgeDays } from '../../lib/history.js';
@@ -12,62 +12,70 @@ import {
   dividendsByYear,
   selectionAccountIds,
 } from '../../lib/series.js';
+import { isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
 import { formatDate, formatDateTime, formatPLN, formatPercent, signClass } from '../../lib/format.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
-import { Button, Card, Segmented, Select } from '../ui.jsx';
+import { Button, Card, Dropdown, Segmented, Select } from '../ui.jsx';
 import { DrawdownChart, ProfitChart, ValueChart } from './PortfolioCharts.jsx';
 import { DividendsMonthlyChart, DividendsYearlyChart } from './DividendCharts.jsx';
 import { benchmarkColor } from './chartUtils.jsx';
+import HeatmapCard from '../dashboard/HeatmapCard.jsx';
+import LivePricesCard from '../dashboard/LivePricesCard.jsx';
 
-const CHART_TABS = [
-  { id: 'value', label: 'Wartość vs wkład', icon: AreaIcon },
-  { id: 'profit', label: 'Zysk w czasie', icon: TrendingUp },
-  { id: 'divMonthly', label: 'Dywidendy – miesięcznie', icon: BarChart3 },
-  { id: 'divYearly', label: 'Dywidendy – rocznie', icon: Coins },
-  { id: 'drawdown', label: 'Drawdown', icon: TrendingDown },
+// Lista wykresów (wybór z rozwijanej listy zamiast poziomych zakładek)
+export const CHART_OPTIONS = [
+  { id: 'value', label: 'Wartość vs wkład', group: 'Portfel', kind: 'series' },
+  { id: 'profit', label: 'Zysk w czasie', group: 'Portfel', kind: 'series' },
+  { id: 'drawdown', label: 'Drawdown (obsunięcie)', group: 'Portfel', kind: 'series' },
+  { id: 'divMonthly', label: 'Dywidendy – miesięcznie', group: 'Dywidendy', kind: 'dividends' },
+  { id: 'divYearly', label: 'Dywidendy – rocznie', group: 'Dywidendy', kind: 'dividends' },
+  { id: 'heatmap', label: 'Mapa cieplna dnia', group: 'Rynek', kind: 'market' },
+  { id: 'quotes', label: 'Notowania i kursy walut', group: 'Rynek', kind: 'market' },
 ];
 
 const KIND_LABELS = { STOCK: 'Akcje', ETF: 'ETF', BONDS: 'Obligacje', CASH: 'Gotówka' };
+const CHART_KEY = 'wealth-app-chart-type';
 
-function Chip({ active, onClick, children, color }) {
+function CheckItem({ checked, onChange, label, color, disabled }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-        active
-          ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-500/10 dark:text-blue-300'
-          : 'border-stone-200 text-stone-600 hover:bg-stone-100 dark:border-white/10 dark:text-stone-300 dark:hover:bg-white/5'
-      }`}
-    >
-      {color && <span className="h-2 w-2 rounded-full" style={{ background: color }} />}
-      {children}
-    </button>
-  );
-}
-
-function CheckItem({ checked, onChange, label, color }) {
-  return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-stone-100 dark:hover:bg-white/5">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
+    <label className={`flex items-center gap-2 rounded-md px-1.5 py-1 text-sm ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-stone-100 dark:hover:bg-white/5'}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
       {color && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />}
       <span className="truncate">{label}</span>
     </label>
   );
 }
 
-export default function ChartsCenter() {
+function readChart(param) {
+  if (param && CHART_OPTIONS.some((c) => c.id === param)) return param;
+  try {
+    const v = localStorage.getItem(CHART_KEY);
+    return CHART_OPTIONS.some((c) => c.id === v) ? v : 'value';
+  } catch {
+    return 'value';
+  }
+}
+
+export default function ChartsCenter({ param }) {
   const { state, actions, isDark, historyLoading } = useApp();
+  const [chart, setChartState] = useState(() => readChart(param));
   const [range, setRange] = useState('1Y');
   const [selection, setSelection] = useState(defaultSelection);
   const [benchmarks, setBenchmarks] = useState(['SP500', 'CPI']);
-  const [tab, setTab] = useState('value');
   const [profitMode, setProfitMode] = useState('PLN');
   const [divNet, setDivNet] = useState(true);
   const [divYear, setDivYear] = useState(new Date().getFullYear());
   const [divCompare, setDivCompare] = useState(true);
-  const [showFilters, setShowFilters] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
+  const option = CHART_OPTIONS.find((c) => c.id === chart) || CHART_OPTIONS[0];
+
+  const setChart = (id) => {
+    setChartState(id);
+    try {
+      localStorage.setItem(CHART_KEY, id);
+    } catch {
+      // brak localStorage – wybór nie zostanie zapamiętany
+    }
+  };
 
   // Pierwsze wejście: spróbuj pobrać historię, jeśli jest starsza niż doba
   useEffect(() => {
@@ -82,6 +90,10 @@ export default function ChartsCenter() {
   const divEvents = useMemo(() => dividendEvents(state, selection, { net: divNet }), [state, selection, divNet]);
   const divMonthly = useMemo(() => dividendsByMonth(divEvents, divYear), [divEvents, divYear]);
   const divYearly = useMemo(() => dividendsByYear(divEvents), [divEvents]);
+  const valuation = useMemo(
+    () => (option.id === 'heatmap' ? valuePortfolio(state, { asOf: isoDay(new Date()), accountIds: null, priceLookup: livePriceLookup(state) }) : null),
+    [state, option.id],
+  );
 
   const years = useMemo(() => {
     const set = new Set([new Date().getFullYear()]);
@@ -93,6 +105,7 @@ export default function ChartsCenter() {
   const allAccounts = selection.accounts === 'ALL';
   const instColors = instrumentColorMap(state, isDark);
   const span = (new Date(series.end) - new Date(series.start)) / 86400000;
+  const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
 
   const setKinds = (kinds) => setSelection((s) => ({ ...s, kinds, instruments: [], compare: false }));
   const presets = [
@@ -105,7 +118,7 @@ export default function ChartsCenter() {
         apply: () => setSelection({ ...defaultSelection(), accounts: state.accounts.filter((a) => a.type === t).map((a) => a.id) }),
       })),
     { id: 'etf', label: 'Tylko ETF', apply: () => setSelection({ ...defaultSelection(), kinds: { STOCK: false, ETF: true, BONDS: false, CASH: false } }) },
-    { id: 'stock', label: 'Tylko Akcje', apply: () => setSelection({ ...defaultSelection(), kinds: { STOCK: true, ETF: false, BONDS: false, CASH: false } }) },
+    { id: 'stock', label: 'Tylko akcje', apply: () => setSelection({ ...defaultSelection(), kinds: { STOCK: true, ETF: false, BONDS: false, CASH: false } }) },
     { id: 'bonds', label: 'Obligacje', apply: () => setSelection({ ...defaultSelection(), kinds: { STOCK: false, ETF: false, BONDS: true, CASH: false } }) },
   ];
 
@@ -122,172 +135,185 @@ export default function ChartsCenter() {
     });
   const toggleBenchmark = (id) => setBenchmarks((b) => (b.includes(id) ? b.filter((x) => x !== id) : [...b, id]));
 
+  // Opis bieżącego wyboru aktywów (etykieta przycisku)
+  const selectionLabel = (() => {
+    if (compareIds.length) return `Porównanie: ${compareIds.map((id) => instById[id]?.ticker).join(', ')}`;
+    const kinds = Object.entries(selection.kinds)
+      .filter(([, v]) => v)
+      .map(([k]) => KIND_LABELS[k]);
+    const accLabel = allAccounts
+      ? ''
+      : state.accounts
+          .filter((a) => accountIds.includes(a.id))
+          .map((a) => a.name.split(' – ')[0])
+          .join(', ');
+    if (allAccounts && kinds.length === 4) return 'Cały majątek';
+    return [kinds.length === 4 ? 'Wszystkie klasy' : kinds.join(' + '), accLabel].filter(Boolean).join(' · ');
+  })();
+
   const sum = series.summary;
   const firstBench = benchmarks.find((b) => b !== 'CPI');
   const historyStatus = state.priceHistory.status;
   const reconstructed = Object.values(resolver.sources).includes('reconstructed');
+  const usesSelection = option.kind === 'series' || option.kind === 'dividends';
+  const usesBenchmarks = option.kind === 'series';
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Pasek filtrów czasu */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-neutral-900">
-        <CalendarRange size={16} className="text-stone-500" />
-        <Segmented options={RANGE_PRESETS} value={RANGE_PRESETS.some((r) => r.value === range) ? range : ''} onChange={setRange} ariaLabel="Zakres czasu" />
-        <Select value={/^Y\d{4}$/.test(range) ? range : ''} onChange={(e) => e.target.value && setRange(e.target.value)} className="w-auto" aria-label="Wybór roku">
-          <option value="">Rok…</option>
-          {years.map((y) => (
-            <option key={y} value={`Y${y}`}>
-              {y}
-            </option>
-          ))}
-        </Select>
-        <span className="text-xs text-stone-500 tabular dark:text-stone-400">
-          {formatDate(series.start)} – {formatDate(series.end)}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="ghost" icon={Filter} onClick={() => setShowFilters((v) => !v)}>
-            {showFilters ? 'Ukryj filtry' : 'Pokaż filtry'}
-          </Button>
-          <Button size="sm" icon={RefreshCw} onClick={() => actions.refreshHistory()} disabled={historyLoading}>
-            {historyLoading ? 'Pobieranie…' : 'Pobierz historię cen'}
-          </Button>
-        </div>
-      </div>
-
-      {showFilters && (
-        <Card title="Co wliczać do wykresu" subtitle="Szybki wybór, konta, klasy aktywów, porównanie instrumentów i benchmarki" icon={Filter}>
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {presets.map((p) => (
-                <Chip key={p.id} onClick={p.apply} active={false}>
-                  {p.label}
-                </Chip>
+      {/* Pasek wyboru: wykres · aktywa · benchmarki · zakres */}
+      <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1 basis-56 sm:max-w-[18rem]">
+            <LineIcon size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-blue-600 dark:text-blue-400" />
+            <Select value={chart} onChange={(e) => setChart(e.target.value)} aria-label="Wybierz wykres" className="pl-9 font-medium">
+              {['Portfel', 'Dywidendy', 'Rynek'].map((g) => (
+                <optgroup key={g} label={g}>
+                  {CHART_OPTIONS.filter((c) => c.group === g).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <div className="mb-1 text-xs font-semibold text-stone-500 dark:text-stone-400">Konta</div>
-                <div className="grid">
-                  {state.accounts.map((a) => (
-                    <CheckItem
-                      key={a.id}
-                      checked={allAccounts || accountIds.includes(a.id)}
-                      onChange={(on) => toggleAccount(a.id, on)}
-                      label={a.name}
-                      color={ACCOUNT_TYPES[a.type]?.color}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-semibold text-stone-500 dark:text-stone-400">Klasy aktywów</div>
-                <div className="grid">
-                  {Object.entries(KIND_LABELS).map(([k, label]) => (
-                    <CheckItem
-                      key={k}
-                      checked={selection.instruments.length === 0 && selection.kinds[k]}
-                      onChange={(on) => {
-                        const kinds = { ...selection.kinds, [k]: on };
-                        if (!Object.values(kinds).some(Boolean)) return;
-                        setKinds(kinds);
-                      }}
-                      label={label}
-                    />
-                  ))}
-                </div>
-                {selection.instruments.length > 0 && (
-                  <p className="mt-1 px-1.5 text-[11px] text-amber-700 dark:text-amber-400">Tryb porównania instrumentów – klasy nieaktywne.</p>
-                )}
-              </div>
-              <div>
-                <div className="mb-1 flex items-center justify-between text-xs font-semibold text-stone-500 dark:text-stone-400">
-                  <span>Porównaj instrumenty</span>
-                  {selection.instruments.length > 0 && (
-                    <button type="button" className="font-normal text-blue-600 hover:underline dark:text-blue-400" onClick={() => setSelection((s) => ({ ...s, instruments: [], compare: false }))}>
-                      wyczyść
+            </Select>
+          </div>
+
+          {usesSelection && (
+            <Dropdown label={selectionLabel} icon={Layers} title="Które portfolio / aktywa analizować" className="max-w-full sm:max-w-[20rem]">
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {presets.map((p) => (
+                    <button key={p.id} type="button" onClick={p.apply} className="rounded-full border border-stone-200 px-2.5 py-1 text-xs font-medium hover:bg-stone-100 dark:border-white/10 dark:hover:bg-white/5">
+                      {p.label}
                     </button>
-                  )}
-                </div>
-                <div className="grid max-h-56 overflow-y-auto">
-                  {state.instruments.map((i) => (
-                    <CheckItem
-                      key={i.id}
-                      checked={selection.instruments.includes(i.id)}
-                      onChange={(on) => toggleInstrument(i.id, on)}
-                      label={`${i.ticker} · ${i.kind === 'ETF' ? 'ETF' : 'akcja'}`}
-                      color={instColors[i.id]}
-                    />
                   ))}
                 </div>
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold tracking-wide text-stone-500 uppercase">Konta</div>
+                  {state.accounts.map((a) => (
+                    <CheckItem key={a.id} checked={allAccounts || accountIds.includes(a.id)} onChange={(on) => toggleAccount(a.id, on)} label={a.name} color={ACCOUNT_TYPES[a.type]?.color} />
+                  ))}
+                </div>
+                <div className="border-t border-stone-100 pt-2 dark:border-white/5">
+                  <div className="mb-1 text-[11px] font-semibold tracking-wide text-stone-500 uppercase">Klasy aktywów</div>
+                  <div className="grid grid-cols-2">
+                    {Object.entries(KIND_LABELS).map(([k, label]) => (
+                      <CheckItem
+                        key={k}
+                        checked={selection.instruments.length === 0 && selection.kinds[k]}
+                        disabled={selection.instruments.length > 0}
+                        onChange={(on) => {
+                          const kinds = { ...selection.kinds, [k]: on };
+                          if (!Object.values(kinds).some(Boolean)) return;
+                          setKinds(kinds);
+                        }}
+                        label={label}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t border-stone-100 pt-2 dark:border-white/5">
+                  <div className="mb-1 flex items-center justify-between text-[11px] font-semibold tracking-wide text-stone-500 uppercase">
+                    <span>Porównaj instrumenty</span>
+                    {selection.instruments.length > 0 && (
+                      <button type="button" className="font-normal normal-case text-blue-600 hover:underline dark:text-blue-400" onClick={() => setSelection((s) => ({ ...s, instruments: [], compare: false }))}>
+                        wyczyść
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2">
+                    {state.instruments.map((i) => (
+                      <CheckItem key={i.id} checked={selection.instruments.includes(i.id)} onChange={(on) => toggleInstrument(i.id, on)} label={i.ticker} color={instColors[i.id]} />
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="mb-1.5 text-xs font-semibold text-stone-500 dark:text-stone-400">Benchmarki</div>
-              <div className="flex flex-wrap gap-2">
+            </Dropdown>
+          )}
+
+          {usesBenchmarks && (
+            <Dropdown label={benchmarks.length ? `Benchmarki (${benchmarks.length})` : 'Benchmarki'} icon={Scale} title="Benchmarki do porównania">
+              <div className="space-y-1">
                 {Object.values(BENCHMARKS).map((b) => {
                   const info = resolver.benchmarkInfo[b.id];
                   return (
-                    <span key={b.id} title={info?.source}>
-                      <Chip active={benchmarks.includes(b.id)} onClick={() => info?.available && toggleBenchmark(b.id)} color={benchmarkColor(b.id, isDark)}>
-                        {b.label}
-                        {!info?.available && ' (brak danych)'}
-                      </Chip>
-                    </span>
+                    <div key={b.id}>
+                      <CheckItem checked={benchmarks.includes(b.id)} disabled={!info?.available} onChange={() => toggleBenchmark(b.id)} label={b.label} color={benchmarkColor(b.id, isDark)} />
+                      <div className="pl-8 text-[11px] text-stone-500">{info?.source}</div>
+                    </div>
                   );
                 })}
               </div>
-            </div>
-          </div>
-        </Card>
-      )}
+            </Dropdown>
+          )}
 
-      {/* Podsumowanie okresu */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Tile label="Wartość" value={formatPLN(sum.value)} />
-        <Tile label="Wkład netto" value={formatPLN(sum.contrib)} />
-        <Tile label="Zysk w okresie" value={formatPLN(sum.profit, { sign: true })} tone={signClass(sum.profit)} />
-        <Tile label="TWR w okresie" value={formatPercent(sum.twr, { sign: true })} tone={signClass(sum.twr)} sub={sum.annualized !== null ? `rocznie ${formatPercent(sum.annualized, { sign: true })}` : null} />
-        <Tile label="Maks. obsunięcie" value={formatPercent(sum.maxDrawdown)} tone={sum.maxDrawdown < 0 ? 'text-red-600 dark:text-red-400' : ''} sub={`obecnie ${formatPercent(sum.currentDrawdown)}`} />
-        <Tile
-          label="vs benchmarki"
-          value={
-            benchmarks.length
-              ? benchmarks
-                  .slice(0, 2)
-                  .map((id) => `${BENCHMARKS[id].label.split(' ')[0]} ${Number.isFinite(sum.benchmarks[id]?.pct) ? formatPercent(sum.benchmarks[id].pct, { sign: true, digits: 1 }) : '—'}`)
-                  .join(' · ')
-              : '—'
-          }
-          small
-        />
+          {option.kind === 'series' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <CalendarRange size={16} className="hidden text-stone-500 sm:block" />
+              <Segmented options={RANGE_PRESETS} value={RANGE_PRESETS.some((r) => r.value === range) ? range : ''} onChange={setRange} ariaLabel="Zakres czasu" size="sm" />
+              <Select value={/^Y\d{4}$/.test(range) ? range : ''} onChange={(e) => e.target.value && setRange(e.target.value)} className="h-8 w-auto text-xs" aria-label="Wybór roku">
+                <option value="">Rok…</option>
+                {years.map((y) => (
+                  <option key={y} value={`Y${y}`}>
+                    {y}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
+          <div className="ml-auto">
+            {option.kind === 'series' && (
+              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => actions.refreshHistory()} disabled={historyLoading} title="Pobierz historię cen z Yahoo Finance">
+                <span className="hidden sm:inline">{historyLoading ? 'Pobieranie…' : 'Historia cen'}</span>
+              </Button>
+            )}
+            {option.kind === 'market' && (
+              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => actions.refreshPrices()}>
+                Odśwież kursy
+              </Button>
+            )}
+          </div>
+        </div>
+        {option.kind === 'series' && (
+          <div className="mt-2 text-xs text-stone-500 tabular dark:text-stone-400">
+            {formatDate(series.start)} – {formatDate(series.end)}
+          </div>
+        )}
       </div>
 
-      <Card bodyClassName="p-0 sm:p-0">
-        <div className="flex gap-1 overflow-x-auto border-b border-stone-100 px-2 pt-2 dark:border-white/5" role="tablist" aria-label="Typ wykresu">
-          {CHART_TABS.map((t) => {
-            const Icon = t.icon;
-            const active = tab === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(t.id)}
-                className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
-                  active ? 'border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300' : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
-                }`}
-              >
-                <Icon size={15} /> {t.label}
-              </button>
-            );
-          })}
+      {/* Podsumowanie okresu (wykresy portfela) */}
+      {option.kind === 'series' && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Tile label="Wartość" value={formatPLN(sum.value)} />
+          <Tile label="Wkład netto" value={formatPLN(sum.contrib)} />
+          <Tile label="Zysk w okresie" value={formatPLN(sum.profit, { sign: true })} tone={signClass(sum.profit)} />
+          <Tile label="TWR w okresie" value={formatPercent(sum.twr, { sign: true })} tone={signClass(sum.twr)} sub={sum.annualized !== null ? `rocznie ${formatPercent(sum.annualized, { sign: true })}` : null} />
+          <Tile label="Maks. obsunięcie" value={formatPercent(sum.maxDrawdown)} tone={sum.maxDrawdown < 0 ? 'text-red-600 dark:text-red-400' : ''} sub={`obecnie ${formatPercent(sum.currentDrawdown)}`} />
+          <Tile
+            label="vs benchmarki"
+            value={
+              benchmarks.length
+                ? benchmarks
+                    .slice(0, 2)
+                    .map((id) => `${BENCHMARKS[id].label.split(' ')[0]} ${Number.isFinite(sum.benchmarks[id]?.pct) ? formatPercent(sum.benchmarks[id].pct, { sign: true, digits: 1 }) : '—'}`)
+                    .join(' · ')
+                : '—'
+            }
+            small
+          />
         </div>
-        <div className="p-4 sm:p-5">
-          {tab === 'value' && <ValueChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} />}
-          {tab === 'profit' && <ProfitChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} mode={compareIds.length ? 'PCT' : profitMode} onModeChange={setProfitMode} />}
-          {tab === 'drawdown' && <DrawdownChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} />}
-          {(tab === 'divMonthly' || tab === 'divYearly') && (
+      )}
+
+      {option.id === 'heatmap' && valuation && <HeatmapCard valuation={valuation} />}
+      {option.id === 'quotes' && <LivePricesCard />}
+
+      {option.kind !== 'market' && (
+        <Card title={option.label} bodyClassName="p-4 sm:p-5">
+          {chart === 'value' && <ValueChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} />}
+          {chart === 'profit' && <ProfitChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} mode={compareIds.length ? 'PCT' : profitMode} onModeChange={setProfitMode} />}
+          {chart === 'drawdown' && <DrawdownChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} />}
+          {option.kind === 'dividends' && (
             <div className="mb-3 flex justify-end">
               <Segmented
                 size="sm"
@@ -301,10 +327,10 @@ export default function ChartsCenter() {
               />
             </div>
           )}
-          {tab === 'divMonthly' && <DividendsMonthlyChart rows={divMonthly} year={divYear} years={years} onYearChange={setDivYear} compare={divCompare} onCompareChange={setDivCompare} />}
-          {tab === 'divYearly' && <DividendsYearlyChart rows={divYearly} />}
+          {chart === 'divMonthly' && <DividendsMonthlyChart rows={divMonthly} year={divYear} years={years} onYearChange={setDivYear} compare={divCompare} onCompareChange={setDivCompare} />}
+          {chart === 'divYearly' && <DividendsYearlyChart rows={divYearly} />}
 
-          {(tab === 'value' || tab === 'profit') && compareIds.length === 0 && (
+          {(chart === 'value' || chart === 'profit') && compareIds.length === 0 && (
             <div className="mt-4 grid grid-cols-2 gap-3 border-t border-stone-100 pt-4 text-sm sm:grid-cols-4 dark:border-white/5">
               <Tile plain label="Zysk kursowy" value={formatPLN(sum.profitPrice, { sign: true })} tone={signClass(sum.profitPrice)} />
               <Tile plain label="Dywidendy netto" value={formatPLN(sum.profitDividends, { sign: true })} tone={signClass(sum.profitDividends)} />
@@ -317,25 +343,28 @@ export default function ChartsCenter() {
                   sub={`Twój portfel ${formatPLN(sum.value - (sum.benchmarks[firstBench]?.value || 0), { sign: true })}`}
                 />
               ) : (
-                <Tile plain label="Benchmark" value="—" sub="wybierz w filtrach" />
+                <Tile plain label="Benchmark" value="—" sub="wybierz w „Benchmarki”" />
               )}
             </div>
           )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-stone-100 px-4 py-2.5 text-[11px] text-stone-500 sm:px-5 dark:border-white/5 dark:text-stone-500">
-          <Database size={12} />
-          <span>
-            Wartości: {series.valueSource === 'snapshots' ? 'zapisane migawki dzienne' : 'wycena historyczna pozycji'} · historia cen:{' '}
-            {historyStatus === 'live' ? 'Yahoo Finance' : historyStatus === 'partial' ? 'Yahoo (częściowo) + rekonstrukcja' : reconstructed ? 'rekonstrukcja z transakcji (offline)' : '—'}
-            {state.priceHistory.updatedAt && ` · ${formatDateTime(state.priceHistory.updatedAt)}`}
-          </span>
-          {benchmarks.map((id) => (
-            <span key={id}>
-              · {BENCHMARKS[id].label}: {resolver.benchmarkInfo[id]?.source}
-            </span>
-          ))}
-        </div>
-      </Card>
+          {option.kind === 'series' && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-stone-100 pt-3 text-[11px] text-stone-500 dark:border-white/5 dark:text-stone-500">
+              <Database size={12} />
+              <span>
+                Wartości: {series.valueSource === 'snapshots' ? 'zapisane migawki dzienne' : 'wycena historyczna pozycji'} · historia cen:{' '}
+                {historyStatus === 'live'
+                  ? 'Yahoo Finance'
+                  : historyStatus === 'partial'
+                    ? 'Yahoo (częściowo) + migawki/rekonstrukcja'
+                    : reconstructed
+                      ? 'migawki i rekonstrukcja z transakcji (offline)'
+                      : 'migawki dzienne'}
+                {state.priceHistory.updatedAt && ` · ${formatDateTime(state.priceHistory.updatedAt)}`}
+              </span>
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

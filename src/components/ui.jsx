@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, X } from 'lucide-react';
 
 export function Card({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '' }) {
   return (
@@ -261,6 +261,60 @@ export function Slider({ label, value, onChange, min = 0, max = 100, step = 1, f
         style={{ '--slider-fill': `${Math.max(0, Math.min(100, pct))}%`, '--slider-accent': accent }}
       />
       {hint && <div className="text-[11px] text-stone-500 dark:text-stone-500">{hint}</div>}
+    </div>
+  );
+}
+
+// Rozwijany panel (menu) pod przyciskiem – na telefonie jako arkusz u dołu ekranu.
+// children może być funkcją ({ close }) => JSX.
+export function Dropdown({ label, icon: Icon, badge, children, align = 'left', title, className = '', panelClassName = '' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  const close = () => setOpen(false);
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        title={title}
+        className={`inline-flex h-9 max-w-full items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
+          open
+            ? 'border-blue-500 bg-blue-50 text-blue-800 dark:border-blue-400 dark:bg-blue-500/10 dark:text-blue-200'
+            : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-200 dark:hover:bg-neutral-700'
+        }`}
+      >
+        {Icon && <Icon size={16} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+        {badge !== undefined && badge !== null && <span className="rounded-full bg-blue-600 px-1.5 text-[10px] leading-4 font-semibold text-white dark:bg-blue-500">{badge}</span>}
+        <ChevronDown size={15} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div
+          className={`fixed inset-x-3 bottom-20 z-50 max-h-[70vh] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-3 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:mt-2 sm:w-[24rem] sm:max-w-[calc(100vw-2rem)] dark:border-white/10 dark:bg-neutral-900 ${
+            align === 'right' ? 'sm:right-0' : 'sm:left-0'
+          } ${panelClassName}`}
+          role="dialog"
+        >
+          {typeof children === 'function' ? children({ close }) : children}
+        </div>
+      )}
     </div>
   );
 }

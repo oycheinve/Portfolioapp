@@ -6,7 +6,7 @@ import { bookingEntries, dividendPositions, evaluateScheduleItem, projectDividen
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatDate, formatNumber, formatPLN, formatPercent, todayISO } from '../../lib/format.js';
 import { SUPPORTED_CURRENCIES } from '../../lib/constants.js';
-import { Button, Card, ChartTooltip, EmptyState, Field, IconButton, Input, Modal, Segmented, Select, Slider, Toggle } from '../ui.jsx';
+import { Badge, Button, Card, ChartTooltip, EmptyState, Field, IconButton, Input, Modal, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
 import { CalendarButtons, StatusBadge } from './DividendWidgets.jsx';
 
@@ -21,7 +21,7 @@ export function ScheduleCard() {
     () =>
       state.dividendSchedule
         .map((item) => ({ item, ev: evaluateScheduleItem(state, item, today) }))
-        .sort((a, b) => ((a.item.exDate || '') < (b.item.exDate || '') ? 1 : -1)),
+        .sort((a, b) => (a.item.estimated === b.item.estimated ? ((a.item.exDate || '') < (b.item.exDate || '') ? 1 : -1) : a.item.estimated ? 1 : -1)),
     [state, today],
   );
   const held = state.instruments;
@@ -40,6 +40,8 @@ export function ScheduleCard() {
   const save = () => {
     const item = {
       ...form,
+      estimated: false,
+      source: form.source || 'MANUAL',
       dps: Number(String(form.dps).replace(',', '.')) || 0,
       withholdingPct: Number(form.withholdingPct) || 0,
     };
@@ -54,8 +56,8 @@ export function ScheduleCard() {
 
   return (
     <Card
-      title="Ogłoszone dywidendy"
-      subtitle="DPS, Dzień Dywidendy (Ex-Date) i wypłata · księgowanie do rejestru przychodów"
+      title="Harmonogram dywidend"
+      subtitle="Uzupełniany automatycznie (Yahoo / historia wypłat) · ręczne wpisy opcjonalne · księgowanie do rejestru"
       icon={Megaphone}
       actions={
         <Button variant="primary" size="sm" icon={Plus} onClick={newItem} disabled={held.length === 0}>
@@ -74,6 +76,9 @@ export function ScheduleCard() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{ev.instrument?.ticker || '—'}</span>
                   <StatusBadge status={ev.status} />
+                  <Badge tone={item.source === 'YAHOO' ? 'blue' : item.source === 'HISTORY' ? 'violet' : 'neutral'}>
+                    {item.source === 'YAHOO' ? 'Yahoo' : item.source === 'HISTORY' ? 'z historii' : 'ręcznie'}
+                  </Badge>
                 </div>
                 <div className="text-xs text-stone-500 tabular dark:text-stone-400">
                   {formatNumber(Number(item.dps), 4)} {item.currency} / akcję · Ex {formatDate(item.exDate)} · wypłata {formatDate(item.payDate)}
