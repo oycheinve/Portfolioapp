@@ -15,6 +15,7 @@ export const COLLECTIONS = [
   'goals', // cele roczne (etap późniejszy)
   'snapshots', // dzienne migawki wartości kont (historia, TWR)
   'dividendSchedule', // Etap 4: ogłoszone dywidendy (DPS, Ex-Date, data wypłaty, status księgowania)
+  'journal', // Etap 6: dziennik decyzji inwestycyjnych
 ];
 
 // Etap 2: wagi docelowe i ustawienia kalkulatora dopłat
@@ -68,6 +69,9 @@ export function defaultSettings() {
     },
     allocation: defaultAllocation(),
     fire: defaultFire(),
+    // Etap 6: polityka limitów IKE/IKZE – automatyczne uzupełnienie po Nowym Roku
+    limitsPolicy: { autoUpdate: true, growthPct: 6, projectedWages: {} },
+    contributionLimitsMeta: {}, // { rok: 'official' | 'manual' | 'wage' | 'estimate' }
     dividendPrefs: { dgr: 6, years: 10, drip: true, reminderDays: 30 }, // Etap 4
     cpiOverrides: {}, // Etap 3: ręczne odczyty CPI r/r { 'RRRR-MM': % }
     priceMode: 'auto', // 'auto' | 'mock'
@@ -94,6 +98,7 @@ export function createEmptyState() {
     otherAssets: [],
     goals: [],
     dividendSchedule: [],
+    journal: [],
     snapshots: [],
     // Etap 3: tygodniowa historia cen instrumentów, benchmarków i kursów walut
     priceHistory: {
@@ -137,6 +142,11 @@ export function migrateState(raw) {
       returns: { ...base.settings.fire.returns, ...(raw.settings?.fire?.returns || {}) },
     },
     dividendPrefs: { ...base.settings.dividendPrefs, ...(raw.settings?.dividendPrefs || {}) },
+    limitsPolicy: {
+      ...base.settings.limitsPolicy,
+      ...(raw.settings?.limitsPolicy || {}),
+      projectedWages: { ...(raw.settings?.limitsPolicy?.projectedWages || {}) },
+    },
   };
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
   out.priceHistory = {

@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { reducer } from './reducer.js';
-import { STORAGE_KEY, migrateState, validateImported } from './schema.js';
+import { COLLECTIONS, STATE_VERSION, STORAGE_KEY, migrateState, validateImported } from './schema.js';
 import { createDemoState } from './demoData.js';
 import { buildSnapshot, isoDay, livePriceLookup } from '../lib/engine.js';
 import { refreshAllPrices } from '../lib/prices.js';
 import { fetchAllHistory } from '../lib/history.js';
 import { pendingSavingsInterest } from '../lib/savings.js';
+import { computeLimitsForYear } from '../lib/tax.js';
 import { uid } from '../lib/format.js';
 
 const AppContext = createContext(null);
@@ -76,6 +77,22 @@ export function AppProvider({ children }) {
     const pending = pendingSavingsInterest(state);
     if (pending.length) dispatch({ type: 'ADD_MANY', payload: { collection: 'income', items: pending } });
   }, [state.accounts, state.cashflows, state.income]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Etap 6: po Nowym Roku automatycznie uzupełnij limity IKE/IKZE na bieżący rok (szacunek do czasu ogłoszenia)
+  useEffect(() => {
+    const year = new Date().getFullYear();
+    const s = state.settings;
+    if (!s.limitsPolicy?.autoUpdate || s.contributionLimits?.[year]) return;
+    const { source, ...limits } = computeLimitsForYear(s, year);
+    dispatch({
+      type: 'UPDATE_SETTINGS',
+      payload: {
+        contributionLimits: { ...s.contributionLimits, [year]: limits },
+        contributionLimitsMeta: { ...(s.contributionLimitsMeta || {}), [year]: source },
+      },
+    });
+    setToast({ type: 'info', message: `Ustawiono limity wpłat na ${year} r. (${source === 'wage' ? 'z prognozy wynagrodzenia' : 'szacunek'}) – zweryfikuj po ogłoszeniu.`, id: Date.now() });
+  }, [state.settings.limitsPolicy, state.settings.contributionLimits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -156,17 +173,29 @@ export function AppProvider({ children }) {
       resetEmpty: () => dispatch({ type: 'RESET_EMPTY' }),
       exportState: () => {
         const s = stateRef.current;
-        const payload = { ...s, meta: { ...s.meta, exportedAt: new Date().toISOString(), app: 'portfolioapp' } };
+        const now = new Date();
+        const stamp = `${isoDay(now)}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+        const counts = Object.fromEntries(COLLECTIONS.map((c) => [c, (s[c] || []).length]));
+        const payload = {
+          ...s,
+          meta: { ...s.meta, exportedAt: now.toISOString(), app: 'portfolioapp', schemaVersion: STATE_VERSION, counts },
+        };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `majatek-backup-${isoDay(new Date())}.json`;
+        a.download = `majatek-backup-${stamp}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-        notify('Wyeksportowano kopię danych do pliku JSON', 'success');
+        dispatch({ type: 'SET_META', payload: { lastBackupAt: now.toISOString() } });
+        notify(`Zapisano kopię: majatek-backup-${stamp}.json`, 'success');
+      },
+      // Etap 6: import z już sprawdzonego obiektu (podgląd i walidacja w Ustawieniach)
+      importRaw: (raw) => {
+        dispatch({ type: 'IMPORT_STATE', payload: raw });
+        notify('Zaimportowano dane z pliku', 'success');
       },
       importState: async (file) => {
         try {

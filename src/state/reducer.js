@@ -64,6 +64,10 @@ export function reducer(state, action) {
       });
     }
 
+    case 'SET_META':
+      // Etap 6: metadane (np. data ostatniej kopii zapasowej) – bez zmiany updatedAt
+      return { ...state, meta: { ...state.meta, ...action.payload } };
+
     case 'SET_PRICES':
       return { ...state, prices: { ...state.prices, ...action.payload } };
 

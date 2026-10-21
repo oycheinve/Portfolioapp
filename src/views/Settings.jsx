@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react';
-import { Building2, Database, Download, FileUp, Landmark, Pencil, Plus, Radio, RotateCcw, Scale, Trash2, Wallet } from 'lucide-react';
+import { useState } from 'react';
+import { Building2, Landmark, Pencil, Plus, Radio, Scale, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, ACCOUNT_TYPE_LIST, CAPITALIZATION, OTHER_ASSET_CATEGORIES, TAX_BRACKETS } from '../lib/constants.js';
 import { contributionLimitsForYear } from '../lib/tax.js';
 import { formatDateTime, formatPLN, todayISO } from '../lib/format.js';
 import { Badge, Button, Card, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
+import LimitsCard from '../components/settings/LimitsCard.jsx';
+import BackupCard from '../components/settings/BackupCard.jsx';
 
 export default function SettingsView() {
   return (
@@ -14,8 +16,9 @@ export default function SettingsView() {
         <TaxSection />
         <PricesSection />
       </div>
+      <LimitsCard />
       <OtherAssetsSection />
-      <DataSection />
+      <BackupCard />
     </div>
   );
 }
@@ -358,72 +361,6 @@ function OtherAssetsSection() {
             </div>
           </div>
         )}
-      </Modal>
-    </Card>
-  );
-}
-
-function DataSection() {
-  const { state, actions } = useApp();
-  const fileRef = useRef(null);
-  const [confirm, setConfirm] = useState(null);
-  const size = new Blob([JSON.stringify(state)]).size;
-
-  return (
-    <Card title="Dane i kopia zapasowa" subtitle="Cały stan aplikacji w jednym pliku JSON" icon={Database}>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="primary" icon={Download} onClick={actions.exportState}>
-          Eksportuj do JSON
-        </Button>
-        <Button icon={FileUp} onClick={() => fileRef.current?.click()}>
-          Importuj z JSON
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (file) await actions.importState(file);
-            e.target.value = '';
-          }}
-        />
-        <Button icon={RotateCcw} onClick={() => setConfirm('demo')}>
-          Wczytaj dane demo
-        </Button>
-        <Button variant="danger" icon={Trash2} onClick={() => setConfirm('empty')}>
-          Wyczyść wszystko
-        </Button>
-      </div>
-      <p className="mt-3 text-xs text-stone-500 dark:text-stone-400">
-        Konta: {state.accounts.length} · operacje gotówkowe: {state.cashflows.length} · transakcje: {state.trades.length} · przychody: {state.income.length} · obligacje:{' '}
-        {state.bonds.length} · migawki: {state.snapshots.length} · rozmiar ≈ {(size / 1024).toFixed(0)} KB · ostatnia zmiana {formatDateTime(state.meta.updatedAt)}
-      </p>
-      <Modal
-        open={!!confirm}
-        onClose={() => setConfirm(null)}
-        title={confirm === 'demo' ? 'Wczytać dane demonstracyjne?' : 'Wyczyścić wszystkie dane?'}
-        footer={
-          <>
-            <Button onClick={() => setConfirm(null)}>Anuluj</Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                if (confirm === 'demo') actions.loadDemo();
-                else actions.resetEmpty();
-                actions.notify(confirm === 'demo' ? 'Wczytano dane demo' : 'Wyczyszczono dane', 'info');
-                setConfirm(null);
-              }}
-            >
-              {confirm === 'demo' ? 'Zastąp danymi demo' : 'Wyczyść'}
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-stone-600 dark:text-stone-300">
-          Obecne dane zostaną nadpisane. Jeśli chcesz je zachować, najpierw wyeksportuj kopię do pliku JSON.
-        </p>
       </Modal>
     </Card>
   );

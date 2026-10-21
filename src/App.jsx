@@ -8,6 +8,9 @@ import ChartsBondsView from './views/ChartsBonds.jsx';
 import DividendsView from './views/Dividends.jsx';
 import FireView from './views/Fire.jsx';
 import ReportsView from './views/Reports.jsx';
+import GoalsView from './views/Goals.jsx';
+import JournalView from './views/Journal.jsx';
+import StressTestView from './views/StressTest.jsx';
 import SettingsView from './views/Settings.jsx';
 
 const VIEWS = {
@@ -17,6 +20,9 @@ const VIEWS = {
   dividends: DividendsView,
   fire: FireView,
   reports: ReportsView,
+  goals: GoalsView,
+  journal: JournalView,
+  stress: StressTestView,
   cash: CashRegister,
   settings: SettingsView,
 };

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, Coins, FileText, Flame, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, BookOpen, Coins, FileText, Flame, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Target, Wallet, X, Zap } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -13,6 +13,9 @@ export const NAV_ITEMS = [
   { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins, mobile: true },
   { id: 'fire', label: 'FIRE', longLabel: 'FIRE 2055', icon: Flame, mobile: true },
   { id: 'reports', label: 'Raporty', longLabel: 'Raporty i podsumowania', icon: FileText },
+  { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
+  { id: 'journal', label: 'Dziennik', longLabel: 'Dziennik decyzji', icon: BookOpen },
+  { id: 'stress', label: 'Co jeśli', longLabel: 'Symulator „Co jeśli”', icon: Zap },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
@@ -83,7 +86,7 @@ export function Layout({ view, onNavigate, children }) {
                 type="button"
                 onClick={() => onNavigate(item.id)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
                   active
                     ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
                     : 'text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5'

@@ -239,6 +239,27 @@ export function createDemoState(today = new Date()) {
   };
   state.instruments = state.instruments.map((i) => (events[i.id] ? { ...i, dividend: { ...(i.dividend || {}), nextEvent: events[i.id] } } : i));
 
+  // Etap 6: cele roczne i dziennik decyzji
+  const y = today.getFullYear();
+  state.goals = [
+    { id: 'goal_ike', year: y, category: 'FINANCIAL', name: 'Wypełnić limit IKE', target: 28260, current: 0, unit: 'zł', step: 100, source: 'IKE_LIMIT' },
+    { id: 'goal_ikze', year: y, category: 'FINANCIAL', name: 'Wypełnić limit IKZE', target: 11304, current: 0, unit: 'zł', step: 100, source: 'IKZE_LIMIT' },
+    { id: 'goal_div', year: y, category: 'FINANCIAL', name: 'Dywidendy netto w roku', target: 3000, current: 0, unit: 'zł', step: 100, source: 'DIVIDENDS' },
+    { id: 'goal_nw', year: y, category: 'FINANCIAL', name: 'Majątek 750 tys. zł', target: 750000, current: 0, unit: 'zł', step: 1000, source: 'NET_WORTH' },
+    { id: 'goal_books', year: y, category: 'GROWTH', name: 'Przeczytać książki o inwestowaniu', target: 5, current: 2, unit: 'książek', step: 1, source: 'MANUAL' },
+    { id: 'goal_course', year: y, category: 'GROWTH', name: 'Kurs analizy sprawozdań finansowych', target: 12, current: 9, unit: 'modułów', step: 1, source: 'MANUAL' },
+    { id: 'goal_emergency', year: y, category: 'OTHER', name: 'Poduszka 6 miesięcy wydatków', target: 6, current: 4, unit: 'mies.', step: 1, source: 'MANUAL' },
+    { id: 'goal_journal', year: y, category: 'OTHER', name: 'Wpis w dzienniku po każdej decyzji', target: 12, current: 7, unit: 'wpisów', step: 1, source: 'MANUAL' },
+  ];
+  const firstTrade = (instId, accId) => state.trades.find((t) => t.instrumentId === instId && t.accountId === accId);
+  const sellCdr = state.trades.find((t) => t.instrumentId === 'inst_cdr' && t.side === 'SELL');
+  state.journal = [
+    { id: 'jr_1', date: '2024-01-05', title: 'Start IKE – strategia pasywna', instrumentId: 'inst_vwce', accountId: 'acc_ike', tradeId: firstTrade('inst_vwce', 'acc_ike')?.id || null, tags: ['#strategia', '#zakup'], body: 'Wybrałem VWCE jako trzon portfela: globalna dywersyfikacja, niski TER, akumulacja. Plan: co miesiąc stała wpłata, bez market timingu.' },
+    { id: 'jr_2', date: '2024-02-07', title: 'Koszyk spółek dywidendowych GPW', instrumentId: 'inst_pko', accountId: 'acc_brok', tradeId: firstTrade('inst_pko', 'acc_brok')?.id || null, tags: ['#zakup', '#dywidenda'], body: 'Kupiłem PKO, PZU i Orlen pod przyszły dochód pasywny. Akceptuję podatek Belki – IKE zostawiam na ETF-y akumulujące.' },
+    { id: 'jr_3', date: '2025-08-19', title: 'Częściowa realizacja zysku na CDR', instrumentId: 'inst_cdr', accountId: 'acc_brok', tradeId: sellCdr?.id || null, tags: ['#sprzedaż', '#emocje'], body: 'Pozycja urosła ponad wagę docelową. Sprzedałem część, żeby wrócić do planu – trochę FOMO, ale trzymam się zasad rebalancingu.' },
+    { id: 'jr_4', date: '2025-12-10', title: 'Roczna wpłata na IKZE', instrumentId: 'inst_cspx', accountId: 'acc_ikze', tradeId: null, tags: ['#strategia', '#podatki'], body: 'Wpłata przed końcem roku = zwrot z PIT w kwietniu. Od 2026 przechodzę na wpłaty miesięczne, żeby uśrednić cenę.' },
+  ];
+
   // Wagi docelowe (Etap 2)
   state.settings.allocation = {
     ...state.settings.allocation,

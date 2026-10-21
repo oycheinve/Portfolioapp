@@ -33,14 +33,63 @@ export function computeIncomeTax({ gross, foreignTax = 0 }, account, settings) {
   return { tax: total, polishTax, foreignTax: foreign, net: g - total };
 }
 
-export function contributionLimitsForYear(settings, year) {
-  const all = { ...DEFAULT_CONTRIBUTION_LIMITS, ...(settings?.contributionLimits || {}) };
-  if (all[year]) return all[year];
+// Etap 6: limity wpłat. Kolejność: zapisane (oficjalne / ręczne) → z prognozowanego przeciętnego
+// wynagrodzenia (IKE 3×, IKZE 1,2×, IKZE JDG 1,8×) → ekstrapolacja ostatniego znanego roku o % wzrostu.
+export const LIMIT_MULTIPLIERS = { ike: 3, ikze: 1.2, ikzeSelfEmployed: 1.8 };
+
+function round2(v) {
+  return Math.round(v * 100) / 100;
+}
+
+export function knownLimits(settings) {
+  return { ...DEFAULT_CONTRIBUTION_LIMITS, ...(settings?.contributionLimits || {}) };
+}
+
+export function limitsSource(settings, year) {
+  const meta = settings?.contributionLimitsMeta?.[year];
+  const stored = settings?.contributionLimits?.[year];
+  const official = DEFAULT_CONTRIBUTION_LIMITS[year];
+  if (stored && official && ['ike', 'ikze', 'ikzeSelfEmployed'].every((k) => Number(stored[k]) === official[k])) return 'official';
+  if (stored) return meta || 'manual';
+  if (DEFAULT_CONTRIBUTION_LIMITS[year]) return 'official';
+  if (settings?.limitsPolicy?.projectedWages?.[year]) return 'wage';
+  return 'estimate';
+}
+
+export function computeLimitsForYear(settings, year) {
+  const all = knownLimits(settings);
+  if (all[year]) return { ...all[year], source: limitsSource(settings, year) };
+  const policy = settings?.limitsPolicy || {};
+  const okiFallback = Object.values(all).at(-1)?.oki || 0;
+  const wage = Number(policy.projectedWages?.[year]);
+  if (wage > 0) {
+    return {
+      ike: round2(wage * LIMIT_MULTIPLIERS.ike),
+      ikze: round2(wage * LIMIT_MULTIPLIERS.ikze),
+      ikzeSelfEmployed: round2(wage * LIMIT_MULTIPLIERS.ikzeSelfEmployed),
+      oki: okiFallback,
+      source: 'wage',
+    };
+  }
   const years = Object.keys(all)
     .map(Number)
     .sort((a, b) => a - b);
-  const last = years[years.length - 1];
-  return all[last];
+  const base = years.filter((y) => y < year).at(-1) ?? years[0];
+  const growth = (Number(policy.growthPct ?? 6) || 0) / 100;
+  const k = Math.pow(1 + growth, Math.max(0, year - base));
+  const b = all[base];
+  return {
+    ike: round2(b.ike * k),
+    ikze: round2(b.ikze * k),
+    ikzeSelfEmployed: round2(b.ikzeSelfEmployed * k),
+    oki: b.oki || 0,
+    source: 'estimate',
+  };
+}
+
+export function contributionLimitsForYear(settings, year) {
+  const { source, ...limits } = computeLimitsForYear(settings, year);
+  return limits;
 }
 
 export function limitForAccount(account, settings, year) {
