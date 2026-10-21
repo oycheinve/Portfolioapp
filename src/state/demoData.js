@@ -223,6 +223,22 @@ export function createDemoState(today = new Date()) {
   sav.autoInterest = true;
   sav.autoInterestFrom = isoDay(new Date(today.getFullYear(), today.getMonth(), 1));
 
+  // Etap 4: harmonogram ogłoszonych dywidend (daty względem dziś, aby demo zawsze pokazywało statusy)
+  const rel = (days) => isoDay(new Date(today.getFullYear(), today.getMonth(), today.getDate() + days));
+  state.dividendSchedule = [
+    { id: 'dsch_cdr', instrumentId: 'inst_cdr', dps: 1.0, currency: 'PLN', exDate: rel(-7), payDate: rel(7), withholdingPct: 0, note: 'Dywidenda z zysku (demo)' },
+    { id: 'dsch_pkn', instrumentId: 'inst_pkn', dps: 2.0, currency: 'PLN', exDate: rel(12), payDate: rel(28), withholdingPct: 0, note: 'Zaliczka na poczet dywidendy (demo)' },
+    { id: 'dsch_pzu', instrumentId: 'inst_pzu', dps: 1.2, currency: 'PLN', exDate: rel(45), payDate: rel(60), withholdingPct: 0, note: 'Dywidenda zaliczkowa (demo)' },
+  ];
+  const events = {
+    inst_pko: { date: rel(14), label: 'Raport kwartalny' },
+    inst_cdr: { date: rel(36), label: 'Raport kwartalny' },
+    inst_pzu: { date: rel(37), label: 'Raport kwartalny' },
+    inst_pkn: { date: rel(9), label: 'Raport kwartalny' },
+    inst_dnp: { date: rel(20), label: 'Raport kwartalny' },
+  };
+  state.instruments = state.instruments.map((i) => (events[i.id] ? { ...i, dividend: { ...(i.dividend || {}), nextEvent: events[i.id] } } : i));
+
   // Wagi docelowe (Etap 2)
   state.settings.allocation = {
     ...state.settings.allocation,

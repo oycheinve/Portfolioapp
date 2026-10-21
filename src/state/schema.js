@@ -14,6 +14,7 @@ export const COLLECTIONS = [
   'otherAssets', // nieruchomości / inne aktywa
   'goals', // cele roczne (etap późniejszy)
   'snapshots', // dzienne migawki wartości kont (historia, TWR)
+  'dividendSchedule', // Etap 4: ogłoszone dywidendy (DPS, Ex-Date, data wypłaty, status księgowania)
 ];
 
 // Etap 2: wagi docelowe i ustawienia kalkulatora dopłat
@@ -32,6 +33,25 @@ export function defaultAllocation() {
   };
 }
 
+// Etap 4: parametry symulacji FIRE (kwoty docelowe w dzisiejszej sile nabywczej)
+export function defaultFire() {
+  return {
+    targetYear: 2055,
+    targetMonthlyIncome: 8000,
+    targetNetWorth: 3000000,
+    criterion: 'BOTH', // 'INCOME' | 'NETWORTH' | 'BOTH'
+    monthlyContribution: 3000,
+    contributionIndexed: true, // wpłata rośnie co roku o inflację
+    scenario: 'BASE',
+    returns: { PESSIMISTIC: 4, BASE: 7, OPTIMISTIC: 9 },
+    dividendYield: 3.5,
+    dgr: 5,
+    inflation: 3,
+    includeOtherAssets: false,
+    realValues: true,
+  };
+}
+
 export function defaultSettings() {
   return {
     theme: 'system', // 'light' | 'dark' | 'system'
@@ -47,6 +67,8 @@ export function defaultSettings() {
       note: 'Parametry OKI do uzupełnienia po wejściu w życie ustawy.',
     },
     allocation: defaultAllocation(),
+    fire: defaultFire(),
+    dividendPrefs: { dgr: 6, years: 10, drip: true, reminderDays: 30 }, // Etap 4
     cpiOverrides: {}, // Etap 3: ręczne odczyty CPI r/r { 'RRRR-MM': % }
     priceMode: 'auto', // 'auto' | 'mock'
     corsProxy: 'https://corsproxy.io/?url=',
@@ -71,6 +93,7 @@ export function createEmptyState() {
     bonds: [],
     otherAssets: [],
     goals: [],
+    dividendSchedule: [],
     snapshots: [],
     // Etap 3: tygodniowa historia cen instrumentów, benchmarków i kursów walut
     priceHistory: {
@@ -108,6 +131,12 @@ export function migrateState(raw) {
       instrumentTargets: { ...(raw.settings?.allocation?.instrumentTargets || {}) },
       calculator: { ...base.settings.allocation.calculator, ...(raw.settings?.allocation?.calculator || {}) },
     },
+    fire: {
+      ...base.settings.fire,
+      ...(raw.settings?.fire || {}),
+      returns: { ...base.settings.fire.returns, ...(raw.settings?.fire?.returns || {}) },
+    },
+    dividendPrefs: { ...base.settings.dividendPrefs, ...(raw.settings?.dividendPrefs || {}) },
   };
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
   out.priceHistory = {

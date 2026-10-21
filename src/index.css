@@ -31,3 +31,50 @@ body {
 .recharts-surface {
   outline: none;
 }
+
+/* Etap 4: suwaki */
+.slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--slider-accent) var(--slider-fill), var(--color-stone-200) var(--slider-fill));
+}
+.dark .slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--slider-accent) var(--slider-fill), var(--color-neutral-700) var(--slider-fill));
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -7px;
+  height: 20px;
+  width: 20px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--slider-accent);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+}
+.slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-stone-200);
+}
+.dark .slider::-moz-range-track {
+  background: var(--color-neutral-700);
+}
+.slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--slider-accent);
+}
+.slider::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--slider-accent);
+}
+.slider:focus-visible {
+  outline: none;
+}
+.slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgb(42 120 214 / 0.3);
+}

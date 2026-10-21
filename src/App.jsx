@@ -5,12 +5,16 @@ import Dashboard from './views/Dashboard.jsx';
 import CashRegister from './views/CashRegister.jsx';
 import AllocationView from './views/Allocation.jsx';
 import ChartsBondsView from './views/ChartsBonds.jsx';
+import DividendsView from './views/Dividends.jsx';
+import FireView from './views/Fire.jsx';
 import SettingsView from './views/Settings.jsx';
 
 const VIEWS = {
   dashboard: Dashboard,
   allocation: AllocationView,
   charts: ChartsBondsView,
+  dividends: DividendsView,
+  fire: FireView,
   cash: CashRegister,
   settings: SettingsView,
 };

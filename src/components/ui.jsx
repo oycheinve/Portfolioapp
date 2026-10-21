@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 export function Card({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '' }) {
   return (
     <section
-      className={`rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900 ${className}`}
+      className={`min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900 ${className}`}
     >
       {(title || actions) && (
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
@@ -236,6 +236,31 @@ export function ChartTooltip({ active, payload, label, formatter, labelFormatter
           <span className="ml-auto pl-3 font-medium tabular">{formatter ? formatter(p.value, p) : p.value}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Etap 4: suwak z etykietą, wartością i opcjonalnym polem liczbowym (wygodny na ekranach dotykowych)
+export function Slider({ label, value, onChange, min = 0, max = 100, step = 1, format = (v) => v, hint, accent = '#2a78d6' }) {
+  const pct = ((Number(value) - min) / (max - min)) * 100;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-xs font-medium text-stone-600 dark:text-stone-400">{label}</span>
+        <span className="text-sm font-semibold tabular">{format(Number(value))}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={label}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="slider h-6 w-full cursor-pointer appearance-none bg-transparent"
+        style={{ '--slider-fill': `${Math.max(0, Math.min(100, pct))}%`, '--slider-accent': accent }}
+      />
+      {hint && <div className="text-[11px] text-stone-500 dark:text-stone-500">{hint}</div>}
     </div>
   );
 }

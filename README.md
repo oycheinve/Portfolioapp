@@ -36,6 +36,13 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Obligacje skarbowe**: formularz transz EDO/COI/TOS/ROR (konto z Belką 19% lub IKE 0%, odczyty inflacji per rok, opcjonalna wpłata nominału), narosłe odsetki na dziś, kupony, harmonogram i daty wykupu. Inflacja COI/EDO z tabeli CPI (`settings.cpiOverrides` nadpisuje odczyty).
 - **Konto oszczędnościowe**: saldo, oprocentowanie, kapitalizacja, odsetki netto po Belce, automatyczne księgowanie odsetek za każdy okres kapitalizacji; karta dochodu pasywnego (12 mies.).
 
+## Etap 4 – Dywidendy i FIRE 2055
+
+- **Dywidendy**: kafelki (suma netto w roku, średnia miesięczna, „w drodze”, stopa dywidendy portfela + YoC), kalendarz 12 miesięcy (wypłacona / w drodze / ogłoszona / prognoza), przypomnienia o Ex-Date, wypłatach i raportach, ogłoszone dywidendy z księgowaniem do rejestru, prognoza 5–10 lat z suwakiem DGR i DRIP, daty raportów/WZA z eksportem do Kalendarza Google i pliku .ics (Apple/Outlook).
+- **FIRE 2055**: cel dochodu pasywnego i majątku (w dzisiejszych zł), kryterium (oba / dochód / majątek), suwaki wpłaty, stóp zwrotu dla 3 scenariuszy, stopy dywidendy, DGR i inflacji; wskaźnik postępu, prognozowana data FIRE, wymagana wpłata, Coast FIRE i dwuosiowy wykres ścieżki do roku docelowego.
+- Nawigacja mobilna: 4 główne zakładki + arkusz „Więcej”.
+- Logika: `src/lib/dividends.js`, `src/lib/fire.js`, `src/lib/calendarExport.js`; stan: `dividendSchedule`, `settings.fire`, `settings.dividendPrefs`, `instrument.dividend` (DPS, najbliższe wydarzenie).
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |
@@ -48,6 +55,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 | `bonds` | Obligacje EDO/COI/TOS/ROR: data zakupu, sztuki, oprocentowanie 1. roku, marża, inflacja |
 | `otherAssets` | Nieruchomości/inne z przełącznikiem uwzględniania w majątku |
 | `goals` | Cele roczne (kolejne etapy) |
+| `dividendSchedule` | Ogłoszone dywidendy: DPS, Ex-Date, wypłata, podatek u źródła, status księgowania (Etap 4) |
 | `snapshots` | Dzienne migawki wartości i wkładu per konto (historia, TWR, start okresów YTD/1M) |
 | `prices` | Notowania, kursy walut, status i dziennik odświeżania |
 | `priceHistory` | Tygodniowa historia cen instrumentów, benchmarków i walut (Etap 3) |

@@ -1,13 +1,17 @@
-import { useMemo } from 'react';
-import { ArrowLeftRight, LayoutDashboard, LineChart, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Wallet } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowLeftRight, Coins, Flame, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Sun, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
+import { upcomingReminders } from '../lib/dividends.js';
 
+// mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 export const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard },
+  { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard, mobile: true },
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
-  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i Obligacje', icon: LineChart },
+  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i Obligacje', icon: LineChart, mobile: true },
+  { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins, mobile: true },
+  { id: 'fire', label: 'FIRE', longLabel: 'FIRE 2055', icon: Flame, mobile: true },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
@@ -42,11 +46,17 @@ export function Layout({ view, onNavigate, children }) {
   const theme = state.settings.theme;
   const ThemeIcon = THEME_ICON[theme] || Monitor;
   const current = NAV_ITEMS.find((n) => n.id === view);
+  const [moreOpen, setMoreOpen] = useState(false);
   // Liczba pozycji przekraczających próg odchylenia – znaczek przy zakładce alokacji
   const badges = useMemo(() => {
     if (state.accounts.length === 0) return {};
+    const out = {};
     const count = computeAllocation(state).alerts.length;
-    return count > 0 ? { allocation: count } : {};
+    if (count > 0) out.allocation = count;
+    // Etap 4: terminy dywidendowe w najbliższym tygodniu
+    const soon = upcomingReminders(state, 7).length;
+    if (soon > 0) out.dividends = soon;
+    return out;
   }, [state]);
 
   return (
@@ -143,33 +153,80 @@ export function Layout({ view, onNavigate, children }) {
         className="fixed inset-x-0 bottom-0 z-40 flex border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden dark:border-white/10 dark:bg-neutral-900/95"
         aria-label="Nawigacja dolna"
       >
-        {NAV_ITEMS.map((item) => {
-          const active = item.id === view;
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onNavigate(item.id)}
-              aria-current={active ? 'page' : undefined}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${
-                active ? 'text-blue-600 dark:text-blue-400' : 'text-stone-500 dark:text-stone-400'
-              }`}
-            >
-              <span className="relative">
-                <Icon size={20} />
-                {badges[item.id] && (
-                  <span className="absolute -top-1 -right-2 min-w-4 rounded-full bg-red-600 px-1 text-[9px] leading-4 font-semibold text-white">
-                    {badges[item.id]}
-                  </span>
-                )}
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
+        {NAV_ITEMS.filter((n) => n.mobile).map((item) => (
+          <BottomTab key={item.id} item={item} active={item.id === view} badge={badges[item.id]} onClick={() => onNavigate(item.id)} />
+        ))}
+        <BottomTab
+          item={{ id: 'more', label: 'Więcej', icon: Menu }}
+          active={!NAV_ITEMS.find((n) => n.id === view)?.mobile}
+          badge={NAV_ITEMS.filter((n) => !n.mobile).reduce((s2, n) => s2 + (badges[n.id] || 0), 0) || null}
+          onClick={() => setMoreOpen(true)}
+        />
       </nav>
+
+      {/* Arkusz „Więcej” – mobile */}
+      {moreOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm md:hidden" onClick={() => setMoreOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Więcej sekcji"
+            className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-stone-200 bg-white p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:border-white/10 dark:bg-neutral-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between px-2">
+              <span className="text-sm font-semibold">Więcej</span>
+              <button type="button" onClick={() => setMoreOpen(false)} aria-label="Zamknij" className="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-white/5">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid gap-1">
+              {NAV_ITEMS.filter((n) => !n.mobile).map((item) => {
+                const Icon = item.icon;
+                const active = item.id === view;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onNavigate(item.id);
+                    }}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium ${
+                      active ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : 'hover:bg-stone-100 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    {item.longLabel}
+                    {badges[item.id] && <span className="ml-auto rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function BottomTab({ item, active, badge, onClick }) {
+  const Icon = item.icon;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${active ? 'text-blue-600 dark:text-blue-400' : 'text-stone-500 dark:text-stone-400'}`}
+    >
+      <span className="relative">
+        <Icon size={20} />
+        {badge && (
+          <span className="absolute -top-1 -right-2 min-w-4 rounded-full bg-red-600 px-1 text-[9px] leading-4 font-semibold text-white">{badge}</span>
+        )}
+      </span>
+      {item.label}
+    </button>
   );
 }
 
