@@ -128,6 +128,12 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Tickery**: automatyczna normalizacja – GPW `.WA`, Xetra `.DE`, Londyn `.L`, USA bez końcówki; końcówki XTB (`.PL`, `.UK`, `.US`, `.NL`…) zamieniane przy pobieraniu; instrument bez symbolu → ticker + `.WA` dla PLN.
 - **Bez sieci**: ostatnie znane notowanie (bez zmiany dziennej) albo cena z ostatniej transakcji; kursy walut z ostatnich danych. Brak komunikatów o błędach – tylko status w nagłówku („Kursy z ostatnich danych”). Wykresy korzystają z migawek i rekonstrukcji z transakcji. Tryb „Tylko dane symulowane” działa jak dotąd.
 
+## Kwoty dywidend z rejestru (naprawa „0 zł”)
+
+- Import raportu XTB z arkuszem „Open Positions” pobiera też dywidendy, podatki u źródła i odsetki z arkusza „Cash Operations” (opcja zaznaczona domyślnie) – rejestr wypłat nie jest pusty. Spółki już sprzedane dostają instrumenty, aby ich dywidendy trafiły do historii.
+- Przy każdej dywidendzie z XTB zapisywana jest stawka na akcję z komentarza („DIG.PL PLN 5.0/ SHR”). DPS = brutto / liczba sztuk z transakcji, a gdy liczby sztuk nie da się odtworzyć – zapisana stawka (przeliczona na PLN), więc prognoza 12 mies., stopa dywidendy i prognoza z historii nie spadają do 0.
+- Wpisy harmonogramu z Yahoo bez kwoty są pomijane, a prognoza opiera się wtedy na rejestrze wypłat; sumy w kalendarzu i kafelkach odporne na brakujące wartości. „Średnia miesięczna” liczona z ostatnich 12 miesięcy.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

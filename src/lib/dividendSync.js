@@ -60,9 +60,11 @@ export function planDividendSync(state, histories, { autoBook = false, today = i
   for (const inst of dividendInstruments(state)) {
     const firstBuy = state.trades.filter((t) => t.instrumentId === inst.id && t.side === 'BUY').reduce((m, t) => (!m || t.date < m ? t.date : m), null);
     const h = histories[inst.id];
-    if (h && h.events.length) {
+    // Yahoo bez kwot (puste stawki) → prognoza z rejestru wypłat, jak przy braku Yahoo
+    const yahooEvents = (h?.events || []).filter((e) => Number(e.amount) > 0 && e.exDate);
+    if (yahooEvents.length) {
       // 1) Dywidendy z Yahoo, których nie ma w rejestrze: sztuki posiadane w dniu przed dniem dywidendy
-      for (const ev of h.events) {
+      for (const ev of yahooEvents) {
         if (!firstBuy || ev.exDate <= firstBuy || ev.exDate > today) continue;
         const held = Object.values(sharesAt(state, inst.id, addDays(ev.exDate, -1))).reduce((s, q) => s + q, 0);
         if (held <= 0) continue;
@@ -71,7 +73,7 @@ export function planDividendSync(state, histories, { autoBook = false, today = i
         newItems.push({ id: id(inst, ev.exDate, 'y'), instrumentId: inst.id, dps: ev.amount, currency: h.currency || inst.currency, exDate: ev.exDate, payDate: addDays(ev.exDate, 14), payDateEstimated: true, withholdingPct: 0, source: 'YAHOO', note: 'Dane z Yahoo Finance' });
       }
       // 2) Prognoza: powtórzenie wypłat z ostatnich 13 miesięcy za rok, z ostatnią kwotą
-      const recent = h.events.filter((e) => e.exDate > addDays(today, -395) && e.exDate <= today);
+      const recent = yahooEvents.filter((e) => e.exDate > addDays(today, -395) && e.exDate <= today);
       for (const ev of recent) {
         const next = addYears(ev.exDate, 1);
         if (next <= today || next > horizon || hasNearby([...schedule, ...newItems], inst.id, next, 30)) continue;

@@ -25,13 +25,19 @@ export function sharesAt(state, instrumentId, date) {
   return out;
 }
 
-// Historia DPS instrumentu: wypłaty pogrupowane po dacie, DPS = brutto / liczba sztuk (w PLN)
+// Historia DPS instrumentu: wypłaty pogrupowane po dacie, DPS = brutto / liczba sztuk (w PLN).
+// Gdy liczby sztuk nie da się odtworzyć z transakcji (pozycja sprzedana, import samych otwartych pozycji),
+// używana jest stawka na akcję zapisana przy wypłacie (np. z komentarza XTB „5.0/ SHR”).
 export function dividendHistory(state, instrumentId) {
+  const fx = state.prices?.fx;
   const byDate = new Map();
   for (const i of state.income) {
     if (i.type !== 'DIVIDEND' || i.instrumentId !== instrumentId) continue;
-    const row = byDate.get(i.date) || { date: i.date, gross: 0, shares: 0 };
-    row.gross += Number(i.gross) || 0;
+    const gross = Number(i.gross);
+    if (!Number.isFinite(gross)) continue;
+    const row = byDate.get(i.date) || { date: i.date, gross: 0, shares: 0, recordedDpsPLN: null };
+    row.gross += gross;
+    if (Number(i.dps) > 0 && row.recordedDpsPLN === null) row.recordedDpsPLN = Number(i.dps) * fxToPLN(fx, i.dpsCurrency || 'PLN');
     byDate.set(i.date, row);
   }
   const rows = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -39,7 +45,8 @@ export function dividendHistory(state, instrumentId) {
     // sztuki dzień przed wypłatą (Ex-Date zwykle wcześniej – przybliżenie)
     const shares = Object.values(sharesAt(state, instrumentId, addDays(r.date, -1))).reduce((s, q) => s + q, 0);
     r.shares = shares;
-    r.dpsPLN = shares > 0 ? r.gross / shares : 0;
+    r.dpsPLN = shares > 0 ? r.gross / shares : r.recordedDpsPLN || 0;
+    if (!(shares > 0) && r.recordedDpsPLN) r.shares = r.gross / r.recordedDpsPLN;
   }
   return rows;
 }
@@ -163,7 +170,7 @@ export function buildCalendar(state, year, today = isoDay(new Date())) {
 
   // 2) harmonogram niezaksięgowany (w drodze / ogłoszona) – miesiąc wypłaty
   for (const item of state.dividendSchedule) {
-    if (item.bookedAt) continue;
+    if (item.bookedAt || !(Number(item.dps) > 0)) continue;
     const date = item.payDate || item.exDate;
     if (!date || Number(date.slice(0, 4)) !== year) continue;
     const m = Number(date.slice(5, 7)) - 1;
@@ -201,6 +208,8 @@ export function buildCalendar(state, year, today = isoDay(new Date())) {
   }
 
   for (const m of months) {
+    // Pozycje bez kwoty (np. pusta stawka z Yahoo) nie zerują ani nie psują sum
+    m.items = m.items.filter((it) => Number.isFinite(it.net));
     m.items.sort((a, b) => (a.date < b.date ? -1 : 1));
     m.totalNet = m.items.reduce((s, it) => s + it.net, 0);
   }
@@ -211,21 +220,23 @@ export function buildCalendar(state, year, today = isoDay(new Date())) {
 export function dividendKpis(state, today = isoDay(new Date())) {
   const year = today.slice(0, 4);
   const income = incomeEventsWithTax(state).filter((i) => i.type === 'DIVIDEND');
-  const ytdNet = income.filter((i) => i.date.startsWith(year) && i.date <= today).reduce((s, i) => s + i.net, 0);
+  const ytdNet = income.filter((i) => i.date.startsWith(year) && i.date <= today).reduce((s, i) => s + (Number.isFinite(i.net) ? i.net : 0), 0);
   const ytdGross = income.filter((i) => i.date.startsWith(year) && i.date <= today).reduce((s, i) => s + (Number(i.gross) || 0), 0);
+  const last12Net = income.filter((i) => i.date > addDays(today, -365) && i.date <= today).reduce((s, i) => s + (Number.isFinite(i.net) ? i.net : 0), 0);
   const pending = state.dividendSchedule
     .filter((s) => scheduleStatus(s, today) === 'PENDING')
     .map((s) => evaluateScheduleItem(state, s, today));
   const positions = dividendPositions(state, today);
   const marketValue = positions.reduce((s, p) => s + p.value, 0);
-  const forwardGross = positions.reduce((s, p) => s + p.annualGross, 0);
-  const forwardNet = positions.reduce((s, p) => s + p.annualNet, 0);
+  const forwardGross = positions.reduce((s, p) => s + (Number.isFinite(p.annualGross) ? p.annualGross : 0), 0);
+  const forwardNet = positions.reduce((s, p) => s + (Number.isFinite(p.annualNet) ? p.annualNet : 0), 0);
   const cost = positions.reduce((s, p) => s + p.costPLN, 0);
   return {
     ytdNet,
     ytdGross,
-    monthlyAvg: ytdNet / 12,
-    pendingNet: pending.reduce((s, p) => s + p.net, 0),
+    last12Net,
+    monthlyAvg: last12Net / 12,
+    pendingNet: pending.reduce((s, p) => s + (Number.isFinite(p.net) ? p.net : 0), 0),
     pendingCount: pending.length,
     yield: marketValue > 0 ? forwardGross / marketValue : 0,
     yieldOnCost: cost > 0 ? forwardGross / cost : 0,

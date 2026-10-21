@@ -4,7 +4,7 @@ import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES } from '../../lib/constants.js';
 import { accountFxPct } from '../../lib/engine.js';
 import { readSpreadsheet } from '../../lib/xlsx.js';
-import { KIND_LABELS, analyzeXtb, analyzeXtbOpenPositions, buildXtbImport, buildXtbOpenImport, findOpenPositionsSheet } from '../../lib/xtbImport.js';
+import { KIND_LABELS, analyzeXtb, analyzeXtbOpenPositions, buildXtbImport, buildXtbIncomeImport, buildXtbOpenImport, findOpenPositionsSheet } from '../../lib/xtbImport.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
 import { Badge, Button, Card, Input, Select } from '../ui.jsx';
 
@@ -48,7 +48,15 @@ export default function XtbImportCard() {
       // Raport XTB z arkuszem „Open Positions” → import wyłącznie otwartych pozycji; inaczej historia operacji gotówkowych
       if (findOpenPositionsSheet(sheets)) {
         const a = analyzeXtbOpenPositions(sheets, { state });
-        setAnalysis(a);
+        // Ten sam raport zwykle zawiera arkusz „Cash Operations” – z niego dywidendy, podatki i odsetki
+        let cashOps = null;
+        try {
+          const c = analyzeXtb(sheets.filter((sh) => !/open\s*position/i.test(sh.name)), { state, accountId });
+          if (c.ops.some((o) => o.kind === 'DIVIDEND' || o.kind === 'INTEREST')) cashOps = c;
+        } catch {
+          cashOps = null;
+        }
+        setAnalysis({ ...a, cashOps });
         setMapping(a.symbols);
       } else {
         const a = analyzeXtb(sheets, { state, accountId });
@@ -347,7 +355,12 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
   const hasOther = state.trades.some((t) => t.accountId === account.id && !String(t.id).startsWith(`xtbpos_${account.id}_`));
   const [fundCash, setFundCash] = useState(true);
   const [replaceAccount, setReplaceAccount] = useState(hasOther);
+  const [withIncome, setWithIncome] = useState(!!analysis.cashOps);
   const plan = useMemo(() => buildXtbOpenImport(analysis, mapping, { state, account, fundCash, replaceAccount }), [analysis, mapping, state, account, fundCash, replaceAccount]);
+  const incomePlan = useMemo(
+    () => (analysis.cashOps && withIncome ? buildXtbIncomeImport(analysis.cashOps, mapping, { state, account, fxPct: accountFxPct(account) }) : null),
+    [analysis, mapping, state, account, withIncome],
+  );
   const t = analysis.totals;
 
   const run = () => {
@@ -356,6 +369,14 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
     actions.removeMany('cashflows', [...plan.removeCashflows, ...plan.cashflows.map((x) => x.id)]);
     actions.addMany('trades', plan.trades);
     if (plan.cashflows.length) actions.addMany('cashflows', plan.cashflows);
+    if (incomePlan) {
+      const known = new Set([...state.instruments.map((i) => i.id), ...plan.newInstruments.map((i) => i.id)]);
+      const extra = incomePlan.newInstruments.filter((i) => !known.has(i.id));
+      if (extra.length) actions.addMany('instruments', extra);
+      // Przy zastąpieniu historii konta: dywidendy/odsetki konta spoza raportu są usuwane, z raportu – dodawane bez duplikatów
+      if (replaceAccount) actions.removeMany('income', state.income.filter((i) => i.accountId === account.id && !incomePlan.allIds.has(i.id)).map((i) => i.id));
+      if (incomePlan.income.length) actions.addMany('income', incomePlan.income);
+    }
     if (Object.keys(plan.quotes).length) actions.mergeQuotes(plan.quotes);
     actions.clearSnapshots();
     actions.notify(`Zaimportowano otwarte pozycje XTB na „${account.name}”: ${analysis.groups.length} walorów, ${plan.trades.length} transz`, 'success');
@@ -455,6 +476,19 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
             Dodaj wpłaty pokrywające koszt zakupu każdej transzy <span className="text-stone-500">(gotówka konta = 0 zł, wkład = koszt pozycji – bez ujemnego salda)</span>
           </span>
         </label>
+        {analysis.cashOps && (
+          <label className="flex items-start gap-2">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={withIncome} onChange={(e) => setWithIncome(e.target.checked)} />
+            <span>
+              Importuj także dywidendy, podatki i odsetki z arkusza „{analysis.cashOps.sheetName}”{' '}
+              <span className="text-stone-500">
+                {incomePlan
+                  ? `(${incomePlan.dividends} dywidend · ${formatPLN(incomePlan.gross)} brutto${incomePlan.tax > 0 ? ` · podatek ${formatPLN(incomePlan.tax)}` : ''}${incomePlan.interest ? ` · ${incomePlan.interest} wypłat odsetek` : ''})`
+                  : '(rejestr wypłat dywidend dla zakładki Dywidendy)'}
+              </span>
+            </span>
+          </label>
+        )}
         <label className="flex items-start gap-2">
           <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={replaceAccount} onChange={(e) => setReplaceAccount(e.target.checked)} />
           <span>

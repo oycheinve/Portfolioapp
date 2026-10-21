@@ -10,6 +10,7 @@ const HEADER_ALIASES = {
   comment: ['comment', 'komentarz', 'opis'],
   symbol: ['ticker', 'symbol', 'instrument'],
   amount: ['amount', 'kwota', 'wartość', 'wartosc'],
+  name: ['instrument', 'nazwa instrumentu', 'nazwa'],
 };
 
 // Znane ETF-y (symbol bez sufiksu giełdy) – pozostałe instrumenty traktowane jako akcje (można zmienić przed importem)
@@ -132,6 +133,14 @@ export function parseTradeComment(comment) {
   return Number.isFinite(quantity) && Number.isFinite(price) && quantity > 0 && price > 0 ? { quantity, price } : null;
 }
 
+// „KTY.PL PLN 16.32/ SHR” → { dps: 16.32, currency: 'PLN' }
+export function parseDividendRate(comment) {
+  const m = /\b([A-Z]{3})\s+([\d.,]+)\s*\/\s*SHR/i.exec(String(comment || ''));
+  if (!m) return null;
+  const dps = parseNumber(m[2]);
+  return dps > 0 ? { dps, currency: m[1].toUpperCase() } : null;
+}
+
 export function describeSymbol(symbol) {
   const raw = String(symbol || '').trim().toUpperCase();
   const [base, suffix] = raw.includes('.') ? [raw.slice(0, raw.lastIndexOf('.')), raw.slice(raw.lastIndexOf('.') + 1)] : [raw, 'PL'];
@@ -175,7 +184,8 @@ export function analyzeXtb(sheets, { state, accountId }) {
     // Symbol z kolumny albo z komentarza (np. „XTB.PL PLN WHT 19%” przy podatku bez symbolu)
     const symbol = (col.symbol !== undefined ? String(row[col.symbol] ?? '').trim() : '') || (/^([A-Z0-9]+\.[A-Z]{2})\b/.exec(comment.trim()) || [])[1] || '';
     const xtbId = col.id !== undefined && row[col.id] !== '' ? String(row[col.id]).trim() : `${date}_${r}`;
-    ops.push({ row: r + 1, xtbId, type: String(type), kind: classifyOperation(type, comment, amount), date, amount, comment, symbol });
+    const name = col.name !== undefined && col.name !== col.symbol ? String(row[col.name] ?? '').trim() : '';
+    ops.push({ row: r + 1, xtbId, type: String(type), kind: classifyOperation(type, comment, amount), date, amount, comment, symbol, name });
   }
 
   const symbols = {};
@@ -184,7 +194,7 @@ export function analyzeXtb(sheets, { state, accountId }) {
     if (!symbols[o.symbol.toUpperCase()]) {
       const info = describeSymbol(o.symbol);
       const existing = matchInstrument(state, info);
-      symbols[info.symbol] = { ...info, instrumentId: existing?.id || null, existingLabel: existing ? `${existing.ticker} · ${existing.name}` : null };
+      symbols[info.symbol] = { ...info, name: o.name || info.ticker, instrumentId: existing?.id || null, existingLabel: existing ? `${existing.ticker} · ${existing.name}` : null };
     }
   }
 
@@ -253,7 +263,20 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
         source: 'XTB',
       });
     } else if (o.kind === 'DIVIDEND') {
-      income.push({ id, accountId, instrumentId: instIdFor[sym] || null, date: o.date, type: 'DIVIDEND', gross: Math.round(o.amount * 100) / 100, foreignTax: 0, note: `XTB: ${o.comment || o.type}`, source: 'XTB' });
+      // Stawka na akcję z komentarza XTB („DIG.PL PLN 5.0/ SHR”) – podstawa DPS, gdy nie da się odtworzyć liczby sztuk
+      const rate = parseDividendRate(o.comment);
+      income.push({
+        id,
+        accountId,
+        instrumentId: instIdFor[sym] || null,
+        date: o.date,
+        type: 'DIVIDEND',
+        gross: Math.round(o.amount * 100) / 100,
+        foreignTax: 0,
+        ...(rate ? { dps: rate.dps, dpsCurrency: rate.currency } : {}),
+        note: `XTB: ${o.comment || o.type}`,
+        source: 'XTB',
+      });
     } else if (o.kind === 'INTEREST') {
       income.push({ id, accountId, date: o.date, type: 'INTEREST', gross: Math.round(o.amount * 100) / 100, foreignTax: 0, note: `XTB: ${o.type}`, source: 'XTB' });
     } else if (o.kind === 'TAX' || o.kind === 'INTEREST_TAX') {
@@ -292,6 +315,7 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
   };
   return {
     newInstruments,
+    allIncome: income,
     ...fresh,
     duplicates: cashflows.length + trades.length + income.length - fresh.cashflows.length - fresh.trades.length - fresh.income.length,
     skipped,
@@ -537,5 +561,32 @@ export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash
     removeTrades,
     removeCashflows,
     otherTrades: state.trades.filter((t) => t.accountId === accountId && !String(t.id).startsWith(tradePrefix)).length,
+  };
+}
+
+// Dywidendy, podatki i odsetki z arkusza „Cash Operations” tego samego raportu – uzupełnienie importu otwartych pozycji.
+// Instrumenty otwartych pozycji mapowane tak samo; spółki już sprzedane dostają własne instrumenty (dla historii dywidend).
+export function buildXtbIncomeImport(cashAnalysis, openMapping, { state, account, fxPct = 0 }) {
+  const mapping = {};
+  for (const [sym, s] of Object.entries(cashAnalysis.symbols)) {
+    if (!cashAnalysis.ops.some((o) => o.symbol.toUpperCase() === sym && (o.kind === 'DIVIDEND' || o.kind === 'TAX'))) continue;
+    mapping[sym] = openMapping[sym] ? { ...openMapping[sym] } : { ...s };
+  }
+  const incomeOnly = { ...cashAnalysis, ops: cashAnalysis.ops.filter((o) => ['DIVIDEND', 'INTEREST', 'TAX', 'INTEREST_TAX'].includes(o.kind)) };
+  const plan = buildXtbImport(incomeOnly, mapping, { state, account, fxPct });
+  // Pełna lista (także już zaimportowane) – przy zastępowaniu historii konta nie mogą zostać usunięte
+  const all = [...plan.allIncome];
+  const existing = new Set(state.income.map((i) => i.id));
+  const allIds = new Set(all.map((i) => i.id));
+  return {
+    income: all,
+    newInstruments: plan.newInstruments,
+    duplicates: plan.duplicates,
+    dividends: all.filter((i) => i.type === 'DIVIDEND').length,
+    interest: all.filter((i) => i.type === 'INTEREST').length,
+    gross: all.filter((i) => i.type === 'DIVIDEND').reduce((sum, i) => sum + i.gross, 0),
+    tax: all.reduce((sum, i) => sum + (i.foreignTax || 0), 0),
+    allIds,
+    existingCount: [...allIds].filter((id) => existing.has(id)).length,
   };
 }

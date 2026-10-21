@@ -23,7 +23,7 @@ export function DividendKpis() {
   const year = new Date().getFullYear();
   const tiles = [
     { label: `Dywidendy ${year} (netto)`, value: formatPLN(k.ytdNet), sub: `brutto ${formatPLN(k.ytdGross)}`, icon: Wallet, tone: 'text-emerald-700 dark:text-emerald-400' },
-    { label: 'Średnia miesięczna', value: formatPLN(k.monthlyAvg), sub: 'suma roczna / 12', icon: CalendarDays },
+    { label: 'Średnia miesięczna (12 mies.)', value: formatPLN(k.monthlyAvg), sub: `${formatPLN(k.last12Net)} netto w ostatnich 12 mies.`, icon: CalendarDays },
     { label: 'W drodze', value: formatPLN(k.pendingNet), sub: k.pendingCount ? `${k.pendingCount} po Dniu Dywidendy, przed wypłatą` : 'brak ogłoszonych po Ex-Date', icon: Clock, tone: k.pendingNet > 0 ? 'text-amber-700 dark:text-amber-400' : '' },
     { label: 'Stopa dywidendy portfela', value: formatPercent(k.yield), sub: `YoC ${formatPercent(k.yieldOnCost)} · ${formatPLN(k.forwardNet)}/rok netto`, icon: Sparkles },
   ];
