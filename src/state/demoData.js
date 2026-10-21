@@ -1,5 +1,5 @@
 // Dane demonstracyjne: kompletna historia wpłat, transakcji, dywidend, obligacji i migawek wyceny.
-import { buildSnapshot, isoDay } from '../lib/engine.js';
+import { accountFxPct, buildSnapshot, isoDay } from '../lib/engine.js';
 import { createEmptyState } from './schema.js';
 
 const DEMO_START = '2024-01-02';
@@ -30,8 +30,7 @@ const ACCOUNTS = [
   { id: 'acc_ike', name: 'IKE – XTB', type: 'IKE', institution: 'XTB', currency: 'PLN', openedAt: '2024-01-02', fxConversionPct: 0.05 },
   { id: 'acc_ikze', name: 'IKZE – XTB', type: 'IKZE', institution: 'XTB', currency: 'PLN', openedAt: '2024-01-02' },
   { id: 'acc_brok', name: 'Konto maklerskie – mBank', type: 'BROKERAGE', institution: 'mBank eMakler', currency: 'PLN', openedAt: '2024-02-01' },
-  { id: 'acc_bonds', name: 'Obligacje skarbowe – PKO BP', type: 'BROKERAGE', institution: 'PKO BP', currency: 'PLN', openedAt: '2024-03-01' },
-  { id: 'acc_oki', name: 'OKI – (w przygotowaniu)', type: 'OKI', institution: '—', currency: 'PLN', openedAt: '2026-01-02', archived: false },
+  { id: 'acc_bonds', name: 'Obligacje skarbowe – PKO BP', type: 'BONDS', institution: 'PKO BP', currency: 'PLN', openedAt: '2024-03-01' },
   { id: 'acc_sav', name: 'Konto oszczędnościowe – ING', type: 'SAVINGS', institution: 'ING', currency: 'PLN', openedAt: '2024-01-02', interestRate: 4.0, capitalization: 'MONTHLY' },
 ];
 
@@ -90,7 +89,7 @@ export function createDemoState(today = new Date()) {
     const qty = Math.floor((budget - fee) / (price * fx));
     if (qty <= 0) return;
     state.trades.push({ id: id('tr'), accountId, instrumentId: instId, date, side: 'BUY', quantity: qty, price, fxRate: fx, fee });
-    const fxPct = inst.currency !== 'PLN' ? (ACCOUNTS.find((a) => a.id === accountId)?.fxConversionPct || 0) / 100 : 0;
+    const fxPct = inst.currency !== 'PLN' ? accountFxPct(ACCOUNTS.find((a) => a.id === accountId)) / 100 : 0;
     cash[accountId] = (cash[accountId] || 0) - qty * price * fx * (1 + fxPct) - fee;
   };
   const sell = (accountId, instId, date, qty, fee = 0) => {
@@ -99,7 +98,8 @@ export function createDemoState(today = new Date()) {
     const price = demoPrice(inst, date, todayIso);
     const fx = FX[inst.currency];
     state.trades.push({ id: id('tr'), accountId, instrumentId: instId, date, side: 'SELL', quantity: qty, price, fxRate: fx, fee });
-    cash[accountId] = (cash[accountId] || 0) + qty * price * fx - fee;
+    const fxPct = inst.currency !== 'PLN' ? accountFxPct(ACCOUNTS.find((a) => a.id === accountId)) / 100 : 0;
+    cash[accountId] = (cash[accountId] || 0) + qty * price * fx * (1 - fxPct) - fee;
   };
 
   // IKE: comiesięczne wpłaty i zakupy ETF (VWCE, co trzeci miesiąc WIG20TR)

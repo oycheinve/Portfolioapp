@@ -318,3 +318,61 @@ export function Dropdown({ label, icon: Icon, badge, children, align = 'left', t
     </div>
   );
 }
+
+// Akordeon sekcji: lista zwijanych pozycji, rozwinięte zapamiętywane w localStorage (klucz storageKey).
+// items: [{ id, title, subtitle, icon, badge, render: () => węzeł }] – treść renderowana tylko po rozwinięciu.
+export function Accordion({ items, storageKey, defaultOpen = [] }) {
+  const [open, setOpen] = useState(() => {
+    try {
+      const saved = storageKey ? JSON.parse(localStorage.getItem(storageKey) || 'null') : null;
+      return Array.isArray(saved) ? saved : defaultOpen;
+    } catch {
+      return defaultOpen;
+    }
+  });
+  const toggle = (id) => {
+    const next = open.includes(id) ? open.filter((x) => x !== id) : [...open, id];
+    setOpen(next);
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {
+      // brak localStorage – stan rozwinięcia nie zostanie zapamiętany
+    }
+  };
+  return (
+    <div className="space-y-2.5">
+      {items.map((item) => {
+        const isOpen = open.includes(item.id);
+        const Icon = item.icon;
+        return (
+          <div key={item.id} className="min-w-0">
+            <button
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() => toggle(item.id)}
+              className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left shadow-sm transition-colors sm:px-5 ${
+                isOpen
+                  ? 'border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10'
+                  : 'border-stone-200 bg-white hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-900 dark:hover:bg-neutral-800'
+              }`}
+            >
+              {Icon && (
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-white/5 dark:text-stone-300">
+                  <Icon size={16} />
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{item.title}</span>
+                {item.subtitle && <span className="block truncate text-xs text-stone-500 dark:text-stone-400">{item.subtitle}</span>}
+              </span>
+              {item.badge}
+              <ChevronDown size={18} className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isOpen && <div className="mt-2.5 space-y-4 sm:space-y-6">{item.render()}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

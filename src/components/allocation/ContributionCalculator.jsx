@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, Calculator, Check, ClipboardCopy, Droplets, Info } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { planContribution } from '../../lib/allocation.js';
-import { computeLimitUsage, fxConversionPct, isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
+import { accountFxPct, computeLimitUsage, fxConversionPct, isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
 import { ACCOUNT_TYPES } from '../../lib/constants.js';
 import { formatDate, formatMoney, formatNumber, formatPLN, formatPercent, todayISO } from '../../lib/format.js';
 import { Badge, Button, Card, Field, Input, Select, Toggle } from '../ui.jsx';
@@ -51,11 +51,14 @@ export function buildPlanText({ plan, account, instrumentsById, fractional }) {
       const q = inst?.quote;
       const qtyText = fractional ? formatNumber(o.qty, 4) : formatNumber(o.qty, 0);
       const priceText = q && q.currency !== 'PLN' ? `${formatMoney(q.price, q.currency)} ≈ ${formatPLN(o.price)}` : formatPLN(o.price);
-      lines.push(`${idx + 1}. ${inst?.ticker || o.id}${inst?.yahooSymbol ? ` (${inst.yahooSymbol})` : ''} – ${qtyText} szt. × ${priceText} = ${formatPLN(o.amount)}`);
+      lines.push(
+        `${idx + 1}. ${inst?.ticker || o.id}${inst?.yahooSymbol ? ` (${inst.yahooSymbol})` : ''} – ${qtyText} szt. × ${priceText} = ${formatPLN(o.amount)}${o.fxFee > 0 ? ` (w tym przewalutowanie ${formatPLN(o.fxFee)})` : ''}`,
+      );
     });
   }
   lines.push('');
   lines.push(`Razem: ${formatPLN(plan.spent)} · pozostaje: ${formatPLN(plan.leftover)}`);
+  if (plan.fxTotal > 0) lines.push(`Przewalutowanie (wliczone w kwoty): ${formatPLN(plan.fxTotal)}`);
   lines.push(`Maks. odchylenie od celu: ${formatNumber(plan.maxDevBefore, 2)} pp → ${formatNumber(plan.maxDevAfter, 2)} pp`);
   return lines.join('\n');
 }
@@ -69,7 +72,7 @@ export default function ContributionCalculator({ analysis }) {
 
   const setCalc = (patch) => actions.updateSettings({ allocation: { ...alloc, calculator: { ...calc, ...patch } } });
 
-  const accounts = state.accounts.filter((a) => a.type !== 'SAVINGS');
+  const accounts = state.accounts.filter((a) => a.type !== 'SAVINGS' && a.type !== 'BONDS');
   const accountId = accounts.some((a) => a.id === calc.accountId) ? calc.accountId : accounts[0]?.id;
   const account = state.accounts.find((a) => a.id === accountId);
 
@@ -92,11 +95,16 @@ export default function ContributionCalculator({ analysis }) {
 
   const plan = useMemo(() => {
     // Cena efektywna: kurs × (1 + przewalutowanie konta), gdy instrument jest w walucie obcej
+    const fxById = {};
     const items = analysis.instruments.map((r) => {
       const fxPct = fxConversionPct(account, r.instrument);
+      fxById[r.key] = fxPct;
       return { id: r.key, value: r.value, target: r.target, pricePLN: Number.isFinite(r.price.pricePLN) ? r.price.pricePLN * (1 + fxPct) : r.price.pricePLN };
     });
-    return planContribution({ items, amount: investable, minOrder: Number(calc.minOrder) || 0, fractional: !!calc.fractional });
+    const result = planContribution({ items, amount: investable, minOrder: Number(calc.minOrder) || 0, fractional: !!calc.fractional });
+    // Prowizja za przewalutowanie zawarta w kwocie zlecenia: kwota × pct / (1 + pct)
+    const orders = result.orders.map((o) => ({ ...o, fxFee: (o.amount * (fxById[o.id] || 0)) / (1 + (fxById[o.id] || 0)) }));
+    return { ...result, orders, fxTotal: orders.reduce((s, o) => s + o.fxFee, 0) };
   }, [analysis.instruments, investable, calc.minOrder, calc.fractional, account]);
 
   const rowsById = Object.fromEntries(plan.rows.map((r) => [r.id, r]));
@@ -205,7 +213,7 @@ export default function ContributionCalculator({ analysis }) {
           <div className="min-w-0 space-y-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Mini label="Do zainwestowania" value={formatPLN(investable)} />
-              <Mini label="W zleceniach" value={formatPLN(plan.spent)} />
+              <Mini label={plan.fxTotal > 0 ? `W zleceniach (w tym FX ${formatPLN(plan.fxTotal)})` : 'W zleceniach'} value={formatPLN(plan.spent)} />
               <Mini label="Reszta gotówki" value={formatPLN(plan.leftover)} />
               <Mini
                 label="Maks. odchylenie"
@@ -246,7 +254,10 @@ export default function ContributionCalculator({ analysis }) {
                             <div>{q ? formatMoney(q.price, q.currency || inst.currency) : formatPLN(o.price)}</div>
                             {q && (q.currency || inst.currency) !== 'PLN' && <div className="text-xs text-stone-500">{formatPLN(o.price)}</div>}
                           </td>
-                          <td className="px-3 py-2 text-right font-semibold">{formatPLN(o.amount)}</td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="font-semibold">{formatPLN(o.amount)}</div>
+                            {o.fxFee > 0 && <div className="text-xs text-stone-500">FX {formatPLN(o.fxFee)}</div>}
+                          </td>
                           <td className="px-3 py-2 text-right text-xs">
                             {formatPercent(r?.before, { digits: 1 })} → <span className="font-medium">{formatPercent(r?.after, { digits: 1 })}</span>{' '}
                             <span className="text-stone-500">({formatPercent(r?.target, { digits: 1 })})</span>
@@ -270,7 +281,7 @@ export default function ContributionCalculator({ analysis }) {
             )}
             <p className="text-[11px] text-stone-500 dark:text-stone-500">
               Kursy z modułu notowań ({state.prices.status === 'live' ? 'na żywo' : 'symulowane/ostatnie znane'})
-              {Number(account?.fxConversionPct) > 0 ? `, z przewalutowaniem ${String(account.fxConversionPct).replace('.', ',')}% dla instrumentów w walutach obcych` : ''}. Plan nie uwzględnia prowizji maklerskich. Wagi liczone w części akcje + ETF
+              {accountFxPct(account) > 0 ? `, z przewalutowaniem ${String(accountFxPct(account)).replace('.', ',')}% (XTB) doliczonym do ceny instrumentów w walutach obcych` : ''}. Plan nie uwzględnia prowizji maklerskich. Wagi liczone w części akcje + ETF
               wybranego zakresu kont.
             </p>
           </div>

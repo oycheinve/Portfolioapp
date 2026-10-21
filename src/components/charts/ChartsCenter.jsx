@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarRange, Database, Layers, LineChart as LineIcon, RefreshCw, Scale } from 'lucide-react';
+import { CalendarRange, Database, Layers, LineChart as LineIcon, Plus, RefreshCw, Scale, Trash2 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { ACCOUNT_TYPES, BENCHMARKS } from '../../lib/constants.js';
+import { ACCOUNT_TYPES, BENCHMARKS, benchmarkDefs } from '../../lib/constants.js';
 import { createPriceResolver, historyAgeDays } from '../../lib/history.js';
 import {
   RANGE_PRESETS,
@@ -15,7 +15,7 @@ import {
 import { isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
 import { formatDate, formatDateTime, formatPLN, formatPercent, signClass } from '../../lib/format.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
-import { Button, Card, Dropdown, Segmented, Select } from '../ui.jsx';
+import { Button, Card, Dropdown, Input, Segmented, Select } from '../ui.jsx';
 import { DrawdownChart, ProfitChart, ValueChart } from './PortfolioCharts.jsx';
 import { DividendsMonthlyChart, DividendsYearlyChart } from './DividendCharts.jsx';
 import { benchmarkColor } from './chartUtils.jsx';
@@ -46,6 +46,72 @@ function CheckItem({ checked, onChange, label, color, disabled }) {
   );
 }
 
+// Własne benchmarki o stałej stopie: lista (z usuwaniem) i formularz „Stwórz własny benchmark / stała stopa”
+function CustomBenchmarks({ selected, onToggle, onCreate, info, isDark }) {
+  const { state, actions } = useApp();
+  const custom = state.settings.customBenchmarks || [];
+  const [name, setName] = useState('');
+  const [rate, setRate] = useState('');
+  const rateNum = Number(String(rate).replace(',', '.'));
+  const valid = name.trim().length > 0 && rate !== '' && Number.isFinite(rateNum) && rateNum > -50 && rateNum < 100;
+  const create = () => {
+    if (!valid) return;
+    const id = `custom_${Date.now().toString(36)}`;
+    actions.updateSettings({ customBenchmarks: [...custom, { id, name: name.trim(), ratePct: rateNum }] });
+    onCreate(id);
+    setName('');
+    setRate('');
+    actions.notify(`Dodano benchmark „${name.trim()}”`, 'success');
+  };
+  const remove = (id) => actions.updateSettings({ customBenchmarks: custom.filter((c) => c.id !== id) });
+  return (
+    <div className="mt-2 border-t border-stone-100 pt-2 dark:border-white/5">
+      <div className="mb-1 px-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase">Własne (stała stopa)</div>
+      {custom.map((c) => (
+        <div key={c.id} className="flex items-start gap-1">
+          <div className="min-w-0 flex-1">
+            <CheckItem checked={selected.includes(c.id)} onChange={() => onToggle(c.id)} label={c.name} color={benchmarkColor(c.id, isDark)} />
+            <div className="pl-8 text-[11px] text-stone-500">{info[c.id]?.source}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => remove(c.id)}
+            className="mt-1 rounded-md p-1 text-stone-400 hover:bg-stone-100 hover:text-red-600 dark:hover:bg-white/5"
+            aria-label={`Usuń benchmark ${c.name}`}
+            title="Usuń"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ))}
+      <form
+        className="mt-1.5 space-y-1.5 rounded-lg bg-stone-50 p-2 dark:bg-white/[0.03]"
+        onSubmit={(e) => {
+          e.preventDefault();
+          create();
+        }}
+      >
+        <div className="text-xs font-medium">Stwórz własny benchmark / stała stopa</div>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nazwa, np. Moja lokata 4%" aria-label="Nazwa benchmarku" className="h-8 text-xs" />
+        <div className="flex gap-1.5">
+          <Input
+            type="number"
+            step="0.1"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            placeholder="% rocznie"
+            aria-label="Stopa roczna w procentach"
+            className="h-8 text-xs"
+          />
+          <Button type="submit" size="sm" variant="primary" icon={Plus} disabled={!valid}>
+            Dodaj
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function readChart(param) {
   if (param && CHART_OPTIONS.some((c) => c.id === param)) return param;
   try {
@@ -61,7 +127,10 @@ export default function ChartsCenter({ param }) {
   const [chart, setChartState] = useState(() => readChart(param));
   const [range, setRange] = useState('1Y');
   const [selection, setSelection] = useState(defaultSelection);
-  const [benchmarks, setBenchmarks] = useState(['SP500', 'CPI']);
+  const [benchmarkIds, setBenchmarks] = useState(['SP500', 'CPI']);
+  const defs = useMemo(() => benchmarkDefs(state.settings), [state.settings]);
+  // Usunięte własne benchmarki znikają z wyboru
+  const benchmarks = useMemo(() => benchmarkIds.filter((id) => defs[id]), [benchmarkIds, defs]);
   const [profitMode, setProfitMode] = useState('PLN');
   const [divNet, setDivNet] = useState(true);
   const [divYear, setDivYear] = useState(new Date().getFullYear());
@@ -110,7 +179,7 @@ export default function ChartsCenter({ param }) {
   const setKinds = (kinds) => setSelection((s) => ({ ...s, kinds, instruments: [], compare: false }));
   const presets = [
     { id: 'all', label: 'Cały majątek', apply: () => setSelection(defaultSelection()) },
-    ...['IKE', 'IKZE', 'OKI', 'BROKERAGE']
+    ...['IKE', 'IKZE', 'BROKERAGE', 'BONDS']
       .filter((t) => state.accounts.some((a) => a.type === t))
       .map((t) => ({
         id: `type-${t}`,
@@ -243,6 +312,13 @@ export default function ChartsCenter({ param }) {
                     </div>
                   );
                 })}
+                <CustomBenchmarks
+                  selected={benchmarks}
+                  onToggle={toggleBenchmark}
+                  onCreate={(id) => setBenchmarks((b) => [...b, id])}
+                  info={resolver.benchmarkInfo}
+                  isDark={isDark}
+                />
               </div>
             </Dropdown>
           )}
@@ -296,7 +372,7 @@ export default function ChartsCenter({ param }) {
               benchmarks.length
                 ? benchmarks
                     .slice(0, 2)
-                    .map((id) => `${BENCHMARKS[id].label.split(' ')[0]} ${Number.isFinite(sum.benchmarks[id]?.pct) ? formatPercent(sum.benchmarks[id].pct, { sign: true, digits: 1 }) : '—'}`)
+                    .map((id) => `${defs[id].label.split(' ')[0]} ${Number.isFinite(sum.benchmarks[id]?.pct) ? formatPercent(sum.benchmarks[id].pct, { sign: true, digits: 1 }) : '—'}`)
                     .join(' · ')
                 : '—'
             }
@@ -338,7 +414,7 @@ export default function ChartsCenter({ param }) {
               {firstBench ? (
                 <Tile
                   plain
-                  label={`Gdyby wpłaty w ${BENCHMARKS[firstBench].label}`}
+                  label={`Gdyby wpłaty w ${defs[firstBench].label}`}
                   value={formatPLN(sum.benchmarks[firstBench]?.value)}
                   sub={`Twój portfel ${formatPLN(sum.value - (sum.benchmarks[firstBench]?.value || 0), { sign: true })}`}
                 />

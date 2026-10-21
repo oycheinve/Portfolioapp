@@ -40,7 +40,27 @@ function SavingsCard({ account }) {
           <div className="text-xs text-stone-500 dark:text-stone-400">Saldo</div>
           <div className="text-3xl font-semibold tracking-tight tabular">{formatPLN(p.balance)}</div>
         </div>
-        <Badge tone={p.belka === 0 ? 'green' : 'amber'}>Belka {Math.round(p.belka * 100)}%</Badge>
+        <Badge tone={p.deferred ? 'violet' : p.belka === 0 ? 'green' : 'amber'}>
+          {p.deferred ? 'Belka odroczona (PIT)' : account.belkaEnabled === false ? 'bez Belki (brutto)' : `Belka ${Math.round(p.belka * 100)}%`}
+        </Badge>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <Toggle
+          checked={account.belkaEnabled !== false}
+          onChange={(v) => update({ belkaEnabled: v })}
+          label="Wliczaj podatek Belki (19%)"
+          description={account.belkaEnabled === false ? 'Odsetki pokazywane brutto.' : 'Odsetki i prognozy pokazywane po podatku.'}
+        />
+        {p.deferred && (
+          <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 text-xs text-violet-900 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200">
+            <div className="font-semibold">Podatek Belki odroczony (rozliczenie samodzielne w PIT)</div>
+            <div className="mt-1">
+              Bank wypłaca odsetki brutto – 19% wykażesz w zeznaniu rocznym (PIT-38). Do rozliczenia za {todayISO().slice(0, 4)} r. (dotychczas):{' '}
+              <span className="font-semibold tabular">{formatPLN(p.pitDueYtd)}</span> · prognoza na 12 mies.: <span className="tabular">{formatPLN(p.pitDueYearly)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">

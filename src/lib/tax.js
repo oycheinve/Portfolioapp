@@ -7,20 +7,26 @@ import {
   TAX_BRACKETS,
 } from './constants.js';
 
-// Stawka podatku Belki właściwa dla danego konta (z uwzględnieniem nadpisań OKI w ustawieniach).
-export function belkaRateForAccount(account, settings) {
+// Stawka podatku Belki pobieranego dla danego konta.
+// 0, gdy konto emerytalne (IKE/IKZE), gdy wyłączono „Wliczaj podatek Belki”, lub gdy podatek jest odroczony
+// (np. Revolut – brak poboru u źródła, rozliczenie samodzielne w PIT-38).
+export function belkaRateForAccount(account) {
   if (!account) return BELKA_RATE;
   const type = ACCOUNT_TYPES[account.type];
   if (!type) return BELKA_RATE;
-  if (account.type === 'OKI' && settings?.oki) {
-    return Number.isFinite(settings.oki.belkaRate) ? settings.oki.belkaRate : 0;
-  }
+  if (account.belkaEnabled === false || account.belkaDeferred) return 0;
   return type.belkaRate;
+}
+
+// Stawka dla transzy obligacji: przełącznik transzy ma pierwszeństwo przed ustawieniem konta
+export function bondBelkaRate(bond, account) {
+  if (bond?.belkaEnabled === false) return 0;
+  return belkaRateForAccount(account);
 }
 
 // Podatek od dywidendy / odsetek:
 // - konto opodatkowane: łącznie 19%, z zaliczeniem podatku pobranego za granicą (max do 19%)
-// - IKE/IKZE/OKI: tylko ewentualny podatek u źródła za granicą
+// - IKE/IKZE (lub Belka wyłączona/odroczona): tylko ewentualny podatek u źródła za granicą
 export function computeIncomeTax({ gross, foreignTax = 0 }, account, settings) {
   const g = Number(gross) || 0;
   const foreign = Math.max(0, Number(foreignTax) || 0);
@@ -60,14 +66,12 @@ export function computeLimitsForYear(settings, year) {
   const all = knownLimits(settings);
   if (all[year]) return { ...all[year], source: limitsSource(settings, year) };
   const policy = settings?.limitsPolicy || {};
-  const okiFallback = Object.values(all).at(-1)?.oki || 0;
   const wage = Number(policy.projectedWages?.[year]);
   if (wage > 0) {
     return {
       ike: round2(wage * LIMIT_MULTIPLIERS.ike),
       ikze: round2(wage * LIMIT_MULTIPLIERS.ikze),
       ikzeSelfEmployed: round2(wage * LIMIT_MULTIPLIERS.ikzeSelfEmployed),
-      oki: okiFallback,
       source: 'wage',
     };
   }
@@ -82,7 +86,6 @@ export function computeLimitsForYear(settings, year) {
     ike: round2(b.ike * k),
     ikze: round2(b.ikze * k),
     ikzeSelfEmployed: round2(b.ikzeSelfEmployed * k),
-    oki: b.oki || 0,
     source: 'estimate',
   };
 }
@@ -97,7 +100,6 @@ export function limitForAccount(account, settings, year) {
   if (!account || !limits) return 0;
   if (account.type === 'IKE') return limits.ike || 0;
   if (account.type === 'IKZE') return settings?.selfEmployed ? limits.ikzeSelfEmployed || 0 : limits.ikze || 0;
-  if (account.type === 'OKI') return settings?.oki?.annualLimit || limits.oki || 0;
   return 0;
 }
 

@@ -94,7 +94,8 @@ function MetricsTable({ rows }) {
   );
 }
 
-export default function Summaries() {
+// parts: które sekcje pokazać – 'year' (podsumowanie roku), 'months' (tabela miesięcy), 'years' (lata kalendarzowe)
+export default function Summaries({ parts = ['year', 'months', 'years'] }) {
   const { state, isDark } = useApp();
   const chrome = chartChrome(isDark);
   const resolver = useMemo(() => createPriceResolver(state), [state]);
@@ -112,77 +113,83 @@ export default function Summaries() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <Card
-        title={`Podsumowanie roku ${year}`}
-        subtitle={t.period.closed ? `Rok kalendarzowy: 1 stycznia – 31 grudnia ${year}` : `Rok kalendarzowy w toku: 1 stycznia – dziś`}
-        icon={CalendarRange}
-        actions={
-          <Select value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-auto" aria-label="Rok">
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </Select>
-        }
-      >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Kpi label="Zysk / strata" value={formatPLN(t.profit, { sign: true })} tone={signClass(t.profit)} />
-          <Kpi label="Stopa zwrotu" value={formatPercent(t.pct, { sign: true })} tone={signClass(t.pct)} sub="ważona przepływami" />
-          <Kpi label="Wpłaty netto" value={formatPLN(t.flows, { sign: true })} sub={`wpłaty ${formatPLN(t.deposits, { compact: true })}`} />
-          <Kpi label="Dywidendy netto" value={formatPLN(t.dividends)} sub={t.interest > 0 ? `odsetki ${formatPLN(t.interest)}` : null} />
-          <Kpi label="Wartość: start → koniec" value={formatPLN(t.endValue, { compact: true })} sub={`z ${formatPLN(t.startValue, { compact: true })}`} />
-          <Kpi
-            label="Najlepszy / najgorszy"
-            value={t.best ? `${t.best.instrument.ticker} ${formatPercent(t.best.pct, { sign: true, digits: 1 })}` : '—'}
-            sub={t.worst ? `${t.worst.instrument.ticker} ${formatPercent(t.worst.pct, { sign: true, digits: 1 })}` : null}
-          />
-        </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke={chrome.grid} vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={{ stroke: chrome.axis }} />
-                <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={58} tickFormatter={formatAxisPLN} />
-                <ReferenceLine y={0} stroke={chrome.axis} />
-                <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v, { sign: true })} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
-                <Bar dataKey="profit" name="Wynik miesiąca" radius={[4, 4, 4, 4]} maxBarSize={32} isAnimationActive={false}>
-                  {chartData.map((d) => (
-                    <Cell key={d.label} fill={d.profit >= 0 ? seriesColor(0, isDark) : seriesColor(7, isDark)} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+      {parts.includes('year') && (
+        <Card
+          title={`Podsumowanie roku ${year}`}
+          subtitle={t.period.closed ? `Rok kalendarzowy: 1 stycznia – 31 grudnia ${year}` : `Rok kalendarzowy w toku: 1 stycznia – dziś`}
+          icon={CalendarRange}
+          actions={
+            <Select value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-auto" aria-label="Rok">
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </Select>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Kpi label="Zysk / strata" value={formatPLN(t.profit, { sign: true })} tone={signClass(t.profit)} />
+            <Kpi label="Stopa zwrotu" value={formatPercent(t.pct, { sign: true })} tone={signClass(t.pct)} sub="ważona przepływami" />
+            <Kpi label="Wpłaty netto" value={formatPLN(t.flows, { sign: true })} sub={`wpłaty ${formatPLN(t.deposits, { compact: true })}`} />
+            <Kpi label="Dywidendy netto" value={formatPLN(t.dividends)} sub={t.interest > 0 ? `odsetki ${formatPLN(t.interest)}` : null} />
+            <Kpi label="Wartość: start → koniec" value={formatPLN(t.endValue, { compact: true })} sub={`z ${formatPLN(t.startValue, { compact: true })}`} />
+            <Kpi
+              label="Najlepszy / najgorszy"
+              value={t.best ? `${t.best.instrument.ticker} ${formatPercent(t.best.pct, { sign: true, digits: 1 })}` : '—'}
+              sub={t.worst ? `${t.worst.instrument.ticker} ${formatPercent(t.worst.pct, { sign: true, digits: 1 })}` : null}
+            />
           </div>
-          <div className="space-y-3 text-sm">
-            <div className="rounded-xl bg-stone-50 p-3 dark:bg-white/[0.03]">
-              <div className="flex items-center gap-1.5 text-xs text-stone-500">
-                <Trophy size={13} /> Najlepszy miesiąc
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={chrome.grid} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={{ stroke: chrome.axis }} />
+                  <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={58} tickFormatter={formatAxisPLN} />
+                  <ReferenceLine y={0} stroke={chrome.axis} />
+                  <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v, { sign: true })} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
+                  <Bar dataKey="profit" name="Wynik miesiąca" radius={[4, 4, 4, 4]} maxBarSize={32} isAnimationActive={false}>
+                    {chartData.map((d) => (
+                      <Cell key={d.label} fill={d.profit >= 0 ? seriesColor(0, isDark) : seriesColor(7, isDark)} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="rounded-xl bg-stone-50 p-3 dark:bg-white/[0.03]">
+                <div className="flex items-center gap-1.5 text-xs text-stone-500">
+                  <Trophy size={13} /> Najlepszy miesiąc
+                </div>
+                <div className="font-semibold">{bestMonth?.period.label || '—'}</div>
+                {bestMonth && <div className={`text-xs tabular ${signClass(bestMonth.profit)}`}>{formatPLN(bestMonth.profit, { sign: true })} ({formatPercent(bestMonth.pct, { sign: true, digits: 1 })})</div>}
               </div>
-              <div className="font-semibold">{bestMonth?.period.label || '—'}</div>
-              {bestMonth && <div className={`text-xs tabular ${signClass(bestMonth.profit)}`}>{formatPLN(bestMonth.profit, { sign: true })} ({formatPercent(bestMonth.pct, { sign: true, digits: 1 })})</div>}
-            </div>
-            <div className="rounded-xl bg-stone-50 p-3 dark:bg-white/[0.03]">
-              <div className="text-xs text-stone-500">Najsłabszy miesiąc</div>
-              <div className="font-semibold">{worstMonth?.period.label || '—'}</div>
-              {worstMonth && <div className={`text-xs tabular ${signClass(worstMonth.profit)}`}>{formatPLN(worstMonth.profit, { sign: true })} ({formatPercent(worstMonth.pct, { sign: true, digits: 1 })})</div>}
-            </div>
-            <div className="text-xs text-stone-500 dark:text-stone-400">
-              Miesiące dodatnie: <strong>{summary.months.filter((m) => m.profit > 0).length}</strong> / {summary.months.length}
+              <div className="rounded-xl bg-stone-50 p-3 dark:bg-white/[0.03]">
+                <div className="text-xs text-stone-500">Najsłabszy miesiąc</div>
+                <div className="font-semibold">{worstMonth?.period.label || '—'}</div>
+                {worstMonth && <div className={`text-xs tabular ${signClass(worstMonth.profit)}`}>{formatPLN(worstMonth.profit, { sign: true })} ({formatPercent(worstMonth.pct, { sign: true, digits: 1 })})</div>}
+              </div>
+              <div className="text-xs text-stone-500 dark:text-stone-400">
+                Miesiące dodatnie: <strong>{summary.months.filter((m) => m.profit > 0).length}</strong> / {summary.months.length}
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
-      <Card title={`Miesiące ${year}`} subtitle="Każdy miesiąc kalendarzowy osobno · najnowsze na górze" icon={History} bodyClassName="p-0 sm:p-0">
-        <MetricsTable rows={monthsDesc.map((m) => ({ key: m.period.first, m, label: m.period.label }))} />
-      </Card>
+      {parts.includes('months') && (
+        <Card title={`Miesiące ${year}`} subtitle="Każdy miesiąc kalendarzowy osobno · najnowsze na górze" icon={History} bodyClassName="p-0 sm:p-0">
+          <MetricsTable rows={monthsDesc.map((m) => ({ key: m.period.first, m, label: m.period.label }))} />
+        </Card>
+      )}
 
-      <Card title="Lata kalendarzowe" subtitle="1 stycznia – 31 grudnia każdego roku (bieżący rok do dziś)" icon={CalendarRange} bodyClassName="p-0 sm:p-0">
-        <MetricsTable rows={allYears.map((m) => ({ key: m.period.first, m, label: m.period.label }))} />
-      </Card>
+      {parts.includes('years') && (
+        <Card title="Lata kalendarzowe" subtitle="1 stycznia – 31 grudnia każdego roku (bieżący rok do dziś)" icon={CalendarRange} bodyClassName="p-0 sm:p-0">
+          <MetricsTable rows={allYears.map((m) => ({ key: m.period.first, m, label: m.period.label }))} />
+        </Card>
+      )}
     </div>
   );
 }

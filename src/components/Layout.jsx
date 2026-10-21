@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, BarChart3, BookOpen, Coins, FileText, FlaskConical, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, Coins, FileText, FlaskConical, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -13,11 +13,10 @@ export const NAV_ITEMS = [
   { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i notowania', icon: LineChart, mobile: true },
   { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins, mobile: true },
   { id: 'simulations', label: 'Symulacje', longLabel: 'Symulacje i kalkulator', icon: FlaskConical },
-  { id: 'safe', label: 'Bezpieczne', longLabel: 'Kapitał bezpieczny', icon: Shield },
+  { id: 'safe', label: 'Poduszka', longLabel: 'Poduszka finansowa', icon: Shield },
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText },
-  { id: 'journal', label: 'Dziennik', longLabel: 'Dziennik decyzji', icon: BookOpen },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];

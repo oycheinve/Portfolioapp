@@ -1,6 +1,7 @@
 import { Percent } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { seriesColor } from '../../lib/colors.js';
+import { XTB_FX_FEE_PCT } from '../../lib/constants.js';
 import { formatPLN, formatPercent } from '../../lib/format.js';
 import { Card, EmptyState } from '../ui.jsx';
 
@@ -29,6 +30,12 @@ export default function TerAnalysis({ analysis }) {
   const terSleeve = analysis.sleeveValue > 0 ? annualCost / analysis.sleeveValue : 0;
   const terPortfolio = analysis.total > 0 ? annualCost / analysis.total : 0;
   const maxCost = Math.max(1, ...rows.map((r) => r.annualCost));
+  // Przewalutowanie (XTB 0,05%): zapłacone przy dotychczasowych transakcjach + szacunek przy sprzedaży – wszystkie instrumenty
+  const fxPaid = analysis.instruments.reduce((s, r) => s + (r.fxFees || 0), 0);
+  const fxSell = analysis.instruments.reduce((s, r) => s + (r.fxSellFee || 0), 0);
+  const fxEtfPaid = rows.reduce((s, r) => s + (r.fxFees || 0), 0);
+  const fxEtfSell = rows.reduce((s, r) => s + (r.fxSellFee || 0), 0);
+  const fxPct = String(XTB_FX_FEE_PCT).replace('.', ',');
 
   // TER po osiągnięciu wag docelowych (akcje = 0%)
   const targetTer = analysis.instrumentTargetsSet
@@ -39,12 +46,12 @@ export default function TerAnalysis({ analysis }) {
   const barColor = seriesColor(1, isDark);
 
   return (
-    <Card title="Analiza kosztów TER" subtitle="Roczny koszt utrzymania ETF przy obecnej wycenie" icon={Percent} bodyClassName="p-0 sm:p-0">
+    <Card title="Analiza kosztów TER" subtitle={`Roczny koszt utrzymania ETF i przewalutowanie ${fxPct}% przy kupnie i sprzedaży`} icon={Percent} bodyClassName="p-0 sm:p-0">
       {rows.length === 0 ? (
         <EmptyState icon={Percent} title="Brak ETF w wybranym zakresie kont" />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 border-b border-stone-100 px-4 py-4 sm:grid-cols-4 sm:px-5 dark:border-white/5">
+          <div className="grid grid-cols-2 gap-4 border-b border-stone-100 px-4 py-4 sm:grid-cols-5 sm:px-5 dark:border-white/5">
             <Kpi label="Ważony TER (ETF)" value={formatPercent(terEtf, { digits: 3 })} />
             <Kpi label="Ważony TER (akcje + ETF)" value={formatPercent(terSleeve, { digits: 3 })} sub={`cały portfel: ${formatPercent(terPortfolio, { digits: 3 })}`} />
             <Kpi label="Roczny koszt" value={formatPLN(annualCost)} sub={`${formatPLN(annualCost / 12)} / mies.`} />
@@ -53,9 +60,10 @@ export default function TerAnalysis({ analysis }) {
               value={formatPLN(horizonCost)}
               sub={targetTer !== null ? `TER przy wagach docelowych: ${formatPercent(targetTer, { digits: 3 })}` : 'bez wzrostu wartości'}
             />
+            <Kpi label={`Przewalutowanie ${fxPct}%`} value={formatPLN(fxPaid)} sub={`zapłacone · przy sprzedaży ~${formatPLN(fxSell)}`} />
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full min-w-[820px] text-sm">
               <thead>
                 <tr className="border-b border-stone-100 text-left text-xs text-stone-500 dark:border-white/5 dark:text-stone-400">
                   <th className="px-4 py-2 font-medium sm:px-5">ETF</th>
@@ -63,7 +71,9 @@ export default function TerAnalysis({ analysis }) {
                   <th className="px-3 py-2 text-right font-medium">Udział w ETF</th>
                   <th className="px-3 py-2 text-right font-medium">TER (%)</th>
                   <th className="px-3 py-2 font-medium">Roczny koszt</th>
-                  <th className="px-4 py-2 text-right font-medium sm:px-5">{HORIZON_YEARS} lat</th>
+                  <th className="px-3 py-2 text-right font-medium">{HORIZON_YEARS} lat</th>
+                  <th className="px-3 py-2 text-right font-medium">FX zapłacone</th>
+                  <th className="px-4 py-2 text-right font-medium sm:px-5">FX przy sprzedaży</th>
                 </tr>
               </thead>
               <tbody className="tabular">
@@ -94,7 +104,9 @@ export default function TerAnalysis({ analysis }) {
                         <span className="font-medium">{formatPLN(r.annualCost)}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-2 text-right text-stone-500 sm:px-5 dark:text-stone-400">{formatPLN(r.horizonCost)}</td>
+                    <td className="px-3 py-2 text-right text-stone-500 dark:text-stone-400">{formatPLN(r.horizonCost)}</td>
+                    <td className="px-3 py-2 text-right">{r.fxFees > 0 ? formatPLN(r.fxFees) : <span className="text-stone-400">—</span>}</td>
+                    <td className="px-4 py-2 text-right text-stone-500 sm:px-5 dark:text-stone-400">{r.fxSellFee > 0 ? formatPLN(r.fxSellFee) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -105,13 +117,16 @@ export default function TerAnalysis({ analysis }) {
                   <td className="px-3 py-2.5 text-right tabular">100%</td>
                   <td className="px-3 py-2.5 text-right tabular">{formatPercent(terEtf, { digits: 3 })}</td>
                   <td className="px-3 py-2.5 tabular">{formatPLN(annualCost)}</td>
-                  <td className="px-4 py-2.5 text-right tabular sm:px-5">{formatPLN(horizonCost)}</td>
+                  <td className="px-3 py-2.5 text-right tabular">{formatPLN(horizonCost)}</td>
+                  <td className="px-3 py-2.5 text-right tabular">{formatPLN(fxEtfPaid)}</td>
+                  <td className="px-4 py-2.5 text-right tabular sm:px-5">{formatPLN(fxEtfSell)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
           <p className="px-4 py-2.5 text-[11px] text-stone-500 sm:px-5 dark:text-stone-500">
-            TER jest pobierany przez fundusz z wartości jednostki – nie zobaczysz go jako osobnej opłaty. Koszt {HORIZON_YEARS}-letni liczony przy stałej wartości pozycji. Wartości TER można edytować w tabeli.
+            TER jest pobierany przez fundusz z wartości jednostki – nie zobaczysz go jako osobnej opłaty. Koszt {HORIZON_YEARS}-letni liczony przy stałej wartości pozycji. Wartości TER można edytować w tabeli. Przewalutowanie {fxPct}% (XTB, konto w PLN, instrument w USD/EUR) jest doliczane do kosztu przy zakupie i potrącane z
+            kwoty przy sprzedaży – „FX przy sprzedaży” to szacunek dla sprzedaży całej pozycji po bieżącej wycenie. Domyślnie dotyczy IKE i rachunków w XTB (zmiana w ustawieniach konta).
           </p>
         </>
       )}

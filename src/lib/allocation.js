@@ -1,6 +1,6 @@
 // Etap 2: alokacja (wagi bieżące vs docelowe), odchylenia, alerty oraz algorytm water-filling dla dopłat.
 import { ASSET_CLASSES } from './constants.js';
-import { fxToPLN, isoDay, livePriceLookup, resolveAccountIds, valuePortfolio } from './engine.js';
+import { fxConversionPct, fxToPLN, isoDay, livePriceLookup, resolveAccountIds, valuePortfolio } from './engine.js';
 
 export const ALLOCATION_CLASSES = ['STOCKS', 'ETF', 'BONDS', 'CASH'];
 
@@ -47,13 +47,17 @@ export function computeAllocation(state, scopeOverride) {
   );
 
   // Instrumenty – udział w części akcje + ETF
+  // + koszty przewalutowania: zapłacone przy zakupach oraz szacunek przy sprzedaży całej pozycji
+  const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const byInstrument = new Map();
   for (const p of valuation.positions) {
     if (!p.instrument) continue;
-    const prev = byInstrument.get(p.instrumentId) || { value: 0, quantity: 0, cost: 0 };
+    const prev = byInstrument.get(p.instrumentId) || { value: 0, quantity: 0, cost: 0, fxFees: 0, fxSellFee: 0 };
     prev.value += p.value;
     prev.quantity += p.quantity;
     prev.cost += p.costPLN;
+    prev.fxFees += p.fxFeesPLN || 0;
+    prev.fxSellFee += p.value * fxConversionPct(accountsById[p.accountId], p.instrument);
     byInstrument.set(p.instrumentId, prev);
   }
   const sleeveValue = t.market;
@@ -61,12 +65,14 @@ export function computeAllocation(state, scopeOverride) {
   const instruments = state.instruments
     .filter((inst) => byInstrument.has(inst.id) || (Number(instrumentTargets[inst.id]) || 0) > 0)
     .map((inst) => {
-      const held = byInstrument.get(inst.id) || { value: 0, quantity: 0, cost: 0 };
+      const held = byInstrument.get(inst.id) || { value: 0, quantity: 0, cost: 0, fxFees: 0, fxSellFee: 0 };
       return {
         ...deviationRow({ key: inst.id, label: inst.ticker, value: held.value, total: sleeveValue, targetPct: instrumentTargets[inst.id] }),
         instrument: inst,
         quantity: held.quantity,
         cost: held.cost,
+        fxFees: held.fxFees,
+        fxSellFee: held.fxSellFee,
         price: unitPricePLN(state, inst),
       };
     })

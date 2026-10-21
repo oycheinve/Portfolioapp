@@ -1,6 +1,6 @@
 // Etap 3: szeregi czasowe dla Centrum Wykresów – wycena historyczna wybranego wycinka portfela,
 // wkład własny, rozbicie zysku, TWR, drawdown, benchmarki oraz dywidendy miesięczne/roczne.
-import { BENCHMARKS } from './constants.js';
+import { benchmarkLabel } from './constants.js';
 import { isoDay, netFlows, resolveAccountIds, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
@@ -241,7 +241,7 @@ export function buildPortfolioSeries(state, { range, selection, benchmarks = [],
       annualized: years >= 1 ? Math.pow(1 + last.twr, 1 / years) - 1 : null,
       maxDrawdown,
       currentDrawdown: last.drawdown,
-      benchmarks: Object.fromEntries(benchmarks.map((id) => [id, { pct: last[`b_${id}_pct`], value: last[`b_${id}_value`], label: BENCHMARKS[id].label }])),
+      benchmarks: Object.fromEntries(benchmarks.map((id) => [id, { pct: last[`b_${id}_pct`], value: last[`b_${id}_value`], label: benchmarkLabel(state.settings, id) }])),
     },
   };
 }

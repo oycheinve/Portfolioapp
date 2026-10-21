@@ -14,9 +14,9 @@ npm run preview  # podgląd buildu (również z proxy /api/yahoo)
 ## Etap 1 – zakres
 
 - Szkielet: motyw jasny/ciemny/systemowy, nawigacja boczna (desktop) i dolna (mobile).
-- **Pulpit (Majątek)**: Majątek Całkowity (bezpieczne vs rynkowe vs inne, podział na klasy, historia), Statystyki i Prawdziwy Zysk (Całość/YTD/1M, filtr konta, TWR, CAGR, ważony TER, limity IKE/IKZE/OKI + kalkulator zwrotu PIT z IKZE), Mapa Cieplna Dnia, Notowania z przelicznikiem walut.
+- **Pulpit (Majątek)**: Majątek Całkowity (bezpieczne vs rynkowe vs inne, podział na klasy, historia), Statystyki i Prawdziwy Zysk (Całość/YTD/1M, filtr konta, TWR, CAGR, ważony TER, limity IKE/IKZE + kalkulator zwrotu PIT z IKZE), Mapa Cieplna Dnia, Notowania z przelicznikiem walut.
 - **Rejestr Wpłat/Wypłat**: filtrowanie, dodawanie/edycja/usuwanie, ostrzeżenia o limitach i dostępnej gotówce.
-- **Konta i ustawienia**: konta, podatki i limity, parametry OKI, źródła notowań, nieruchomości/inne aktywa, eksport/import JSON.
+- **Konta i ustawienia**: konta, podatki i limity, źródła notowań, nieruchomości/inne aktywa, eksport/import JSON.
 
 ## Etap 2 – Alokacja i Dopłaty
 
@@ -78,19 +78,27 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Symulacje i kalkulator** (nowa zakładka): Symulacja FIRE (opcje celu w zwijanym panelu, dochód pasywny), Stress test / Co jeśli, Kalkulator inwestycyjny (`src/lib/calculator.js`) – układ: dane wejściowe → wykres → wyniki.
 - Dolny pasek na telefonie: Pulpit, Portfel, Statystyki, Wykresy, Dywidendy, Więcej. Stare adresy `#/fire`, `#/stress`, `#/quotes` przekierowują do nowych miejsc.
 
+## Usprawnienia: Portfel, akordeony, własne benchmarki, koszty FX
+
+- **Portfel**: wiersz „Cały portfel” na górze i na dole tabeli; kolumny: Walor (z ikonami operacji: dochód, sprzedaż, przewalutowanie), Operacje, Zmiana dzienna [%], Liczba jednostek, Śr. cena zakupu, Cena aktualna, Okres inwestycji [dni], Wartość, Udział [%], Stopa zwrotu, Zysk. Sekcje: Konta gotówkowe, Akcje GPW, ETF-y zagraniczne, ETF/ETC/ETN GPW, Obligacje skarbowe.
+- **Akordeony**: Statystyki (Prawdziwy Zysk · Podsumowanie roku i miesiące · Lata kalendarzowe), Dywidendy (Kalendarz · Rejestr wypłat · Prognoza DGR), Alokacja (Wagi klas · Wagi instrumentów · Kalkulator dopłaty · Analiza TER). Rozwinięte sekcje są zapamiętywane.
+- **Własne benchmarki**: w Wykresach → Benchmarki → „Stwórz własny benchmark / stała stopa” (nazwa + % rocznie); linia przerywana obok indeksów (`settings.customBenchmarks`).
+- **Przewalutowanie XTB 0,05%**: domyślnie dla IKE i rachunków w XTB (gdy pole konta jest puste), doliczane przy kupnie i potrącane przy sprzedaży; widoczne w Analizie TER (zapłacone + szacunek przy sprzedaży) i w kalkulatorze dopłat.
+- **Porządki**: zakładka „Poduszka finansowa” (dawniej „Kapitał bezpieczny”); Dziennik ukryty w menu; OKI usunięte (migracja: puste konto znika, z historią → maklerskie); typ konta „Obligacje skarbowe”; przełącznik „Wliczaj podatek Belki (19%)” dla kont oszczędnościowych i obligacji; wybór banku (Revolut → podatek odroczony, rozliczenie w PIT); limity IKE/IKZE tylko dla bieżącego roku (ręcznie lub automatycznie po Nowym Roku).
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |
 |---|---|
-| `accounts` | Konta: `IKE`, `IKZE`, `OKI`, `BROKERAGE`, `SAVINGS` (oprocentowanie, kapitalizacja) |
+| `accounts` | Konta: `IKE`, `IKZE`, `BROKERAGE`, `BONDS` (obligacje skarbowe), `SAVINGS` (bank, oprocentowanie, kapitalizacja); `belkaEnabled`, `belkaDeferred`, `fxConversionPct` |
 | `instruments` | Akcje/ETF: ticker, symbol Yahoo (`.WA` dla GPW), waluta, TER |
 | `trades` | Kupno/sprzedaż (cena, kurs waluty, prowizja) – z nich liczone są pozycje (średni koszt) |
 | `cashflows` | Wpłaty/wypłaty własne – podstawa wkładu netto |
-| `income` | Dywidendy/odsetki brutto + podatek u źródła; Belka 19% liczona automatycznie poza IKE/IKZE/OKI |
+| `income` | Dywidendy/odsetki brutto + podatek u źródła; Belka 19% liczona automatycznie poza IKE/IKZE (można wyłączyć per konto/transza) |
 | `bonds` | Obligacje EDO/COI/TOS/ROR: data zakupu, sztuki, oprocentowanie 1. roku, marża, inflacja |
 | `otherAssets` | Nieruchomości/inne z przełącznikiem uwzględniania w majątku |
 | `goals` | Cele roczne: kategoria, wartość docelowa i aktualna, źródło automatyczne (Etap 6) |
-| `journal` | Dziennik decyzji inwestycyjnych (Etap 6) |
+| `journal` | Dziennik decyzji inwestycyjnych (Etap 6) – dane zachowane, zakładka chwilowo ukryta w menu |
 | `dividendSchedule` | Ogłoszone dywidendy: DPS, Ex-Date, wypłata, podatek u źródła, status księgowania (Etap 4) |
 | `snapshots` | Dzienne migawki wartości i wkładu per konto oraz ceny instrumentów (historia, TWR, raporty okresowe) |
 | `prices` | Notowania, kursy walut, status i dziennik odświeżania |

@@ -1,6 +1,6 @@
 // Etap 3: historia cen – pobieranie z Yahoo Finance oraz rozwiązywanie cen historycznych
 // z łańcuchem awaryjnym: historia Yahoo → rekonstrukcja z transakcji (interpolacja geometryczna) → kurs bieżący.
-import { BENCHMARKS, FX_HISTORY_SYMBOLS } from './constants.js';
+import { BENCHMARKS, FX_HISTORY_SYMBOLS, benchmarkDefs } from './constants.js';
 import { fetchYahooHistory } from './prices.js';
 import { fxToPLN, isoDay } from './engine.js';
 import { getCpiTable } from './bonds.js';
@@ -111,6 +111,14 @@ function buildCpiIndex(settings) {
   };
 }
 
+// Indeks o stałej stopie rocznej (kapitalizacja ciągła w dniach), poziom 100 na 2000-01-01
+const INDEX_EPOCH = Date.UTC(2000, 0, 1);
+export function constantRateIndex(ratePct, iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const days = (Date.UTC(y, m - 1, d) - INDEX_EPOCH) / 86400000;
+  return 100 * Math.pow(1 + (Number(ratePct) || 0) / 100, days / 365);
+}
+
 // Resolver cen historycznych (PLN) dla instrumentów i benchmarków
 export function createPriceResolver(state) {
   const today = isoDay(new Date());
@@ -194,7 +202,12 @@ export function createPriceResolver(state) {
 
   // Benchmark: historia Yahoo → instrument-proxy z portfela → brak
   const benchmarkInfo = {};
-  for (const b of Object.values(BENCHMARKS)) {
+  const defs = benchmarkDefs(state.settings);
+  for (const b of Object.values(defs)) {
+    if (b.custom) {
+      benchmarkInfo[b.id] = { available: true, source: `własny · stała stopa ${String(b.ratePct).replace('.', ',')}% rocznie` };
+      continue;
+    }
     if (b.id === 'CPI') {
       benchmarkInfo[b.id] = { available: true, source: 'Tabela CPI (GUS)' };
       continue;
@@ -211,9 +224,10 @@ export function createPriceResolver(state) {
   }
 
   const benchmarkPLN = (id, iso) => {
-    const b = BENCHMARKS[id];
+    const b = defs[id];
     const info = benchmarkInfo[id];
     if (!b || !info?.available) return null;
+    if (b.custom) return constantRateIndex(b.ratePct, iso);
     if (id === 'CPI') return cpiIndex(iso);
     const s = b.yahooSymbol ? series[b.yahooSymbol] : null;
     if (s?.points?.length) return closeAt(s.points, iso) * fxAt(s.currency || b.currency, iso);

@@ -1,6 +1,6 @@
 // Etap 3: konto oszczędnościowe – projekcja odsetek, automatyczne księgowanie odsetek netto,
 // oraz zestawienie dochodu pasywnego (dywidendy + kupony obligacji + odsetki).
-import { CAPITALIZATION } from './constants.js';
+import { BELKA_RATE, CAPITALIZATION } from './constants.js';
 import { computeCashBalances, incomeEventsWithTax, bondIncomeEvents, isoDay } from './engine.js';
 import { belkaRateForAccount } from './tax.js';
 
@@ -57,7 +57,9 @@ function lastInterestDate(state, accountId) {
 export function savingsProjection(state, account, today = isoDay(new Date())) {
   const income = [...incomeEventsWithTax(state), ...bondIncomeEvents(state, today)];
   const balance = computeCashBalances(state, today, [account.id], income)[account.id] || 0;
-  const belka = belkaRateForAccount(account, state.settings);
+  const belka = belkaRateForAccount(account);
+  // Podatek odroczony (np. Revolut): bank wypłaca odsetki brutto, 19% rozliczane samodzielnie w PIT-38
+  const deferred = !!account.belkaDeferred && account.belkaEnabled !== false;
   const cap = account.capitalization || 'MONTHLY';
   const rate = Number(account.interestRate) || 0;
   const periodStart = periodStartFor(today, cap);
@@ -85,6 +87,13 @@ export function savingsProjection(state, account, today = isoDay(new Date())) {
     last12Net: last12.reduce((s, i) => s + i.net, 0),
     last12Gross: last12.reduce((s, i) => s + (Number(i.gross) || 0), 0),
     lastPosted: lastInterestDate(state, account.id),
+    deferred,
+    pitDueYtd: deferred
+      ? income
+          .filter((i) => i.accountId === account.id && i.type === 'INTEREST' && i.date.slice(0, 4) === today.slice(0, 4) && i.date <= today)
+          .reduce((s, i) => s + (Number(i.gross) || 0), 0) * BELKA_RATE
+      : 0,
+    pitDueYearly: deferred ? balance * ear * BELKA_RATE : 0,
   };
 }
 

@@ -1,15 +1,15 @@
 // Tabela „Portfel”: wszystkie pozycje majątku pogrupowane w kategorie z podsumowaniami
 import { getCpiTable, valueBond } from './bonds.js';
 import { bondIncomeEvents, fxToPLN, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, tradeAmounts, valuePortfolio } from './engine.js';
-import { belkaRateForAccount } from './tax.js';
+import { belkaRateForAccount, bondBelkaRate } from './tax.js';
 import { OTHER_ASSET_CATEGORIES } from './constants.js';
 
 export const PORTFOLIO_CATEGORIES = [
   { id: 'CASH', label: 'Konta gotówkowe', short: 'Gotówka' },
   { id: 'STOCK_PL', label: 'Akcje GPW', short: 'Akcje GPW' },
   { id: 'STOCK_FOREIGN', label: 'Akcje zagraniczne', short: 'Akcje zagr.' },
-  { id: 'ETF_PL', label: 'ETF-y polskie', short: 'ETF PL' },
   { id: 'ETF_FOREIGN', label: 'ETF-y zagraniczne', short: 'ETF zagr.' },
+  { id: 'ETF_PL', label: 'ETF/ETC/ETN GPW', short: 'ETF/ETC/ETN GPW' },
   { id: 'BONDS', label: 'Obligacje skarbowe', short: 'Obligacje' },
   { id: 'OTHER', label: 'Nieruchomości i inne', short: 'Nieruchomości' },
 ];
@@ -64,7 +64,7 @@ export function buildPortfolioRows(state) {
     const q = quotes[p.instrumentId];
     const ccy = q?.currency || inst.currency || 'PLN';
     const foreign = ccy !== 'PLN';
-    const category = inst.kind === 'ETF' ? (foreign ? 'ETF_FOREIGN' : 'ETF_PL') : foreign ? 'STOCK_FOREIGN' : 'STOCK_PL';
+    const category = ['ETF', 'ETC', 'ETN'].includes(inst.kind) ? (foreign ? 'ETF_FOREIGN' : 'ETF_PL') : foreign ? 'STOCK_FOREIGN' : 'STOCK_PL';
     const dayPct = q && q.prevClose ? q.price / q.prevClose - 1 : 0;
     const trades = state.trades.filter((t) => t.accountId === p.accountId && t.instrumentId === p.instrumentId);
     const ops = sortOps([
@@ -109,7 +109,7 @@ export function buildPortfolioRows(state) {
   // Obligacje – per transza
   const cpi = getCpiTable(state.settings);
   for (const b of v.bonds) {
-    const belka = belkaRateForAccount(b.account, state.settings);
+    const belka = bondBelkaRate(b, b.account);
     const val = valueBond(b, today, belka, cpi);
     const coupons = val.coupons.reduce((s, c) => s + c.gross, 0) * (1 - belka);
     const ops = sortOps([

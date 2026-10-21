@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { AlertTriangle, BellRing, Layers, ListChecks, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, BellRing, Calculator, Layers, ListChecks, Percent, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { computeAllocation, unitPricePLN } from '../lib/allocation.js';
 import { assetClassColor } from '../lib/colors.js';
 import { formatPLN } from '../lib/format.js';
-import { Card, Field, Input } from '../components/ui.jsx';
+import { Accordion, Card, Field, Input } from '../components/ui.jsx';
 import { AccountFilterSelect } from '../components/dashboard/PortfolioStatsCard.jsx';
 import AllocationDonut, { instrumentColorMap } from '../components/allocation/AllocationDonut.jsx';
 import DeviationList, { formatDeviation } from '../components/allocation/DeviationList.jsx';
@@ -92,41 +92,73 @@ export default function AllocationView() {
 
       <AlertsBanner analysis={analysis} />
 
-      <div className="grid gap-4 sm:gap-6 xl:grid-cols-2">
-        <AllocationDonut analysis={analysis} />
-        <DeviationList
-          title="Klasy aktywów – wagi docelowe"
-          subtitle="Udział w całym portfelu (suma 100%)"
-          icon={Layers}
-          rows={analysis.classes}
-          colorFor={(r) => assetClassColor(r.key, isDark)}
-          targets={classTargets}
-          threshold={analysis.threshold}
-          onTargetChange={(key, v) => setAlloc({ classTargets: { ...classTargets, [key]: v } })}
-          onNormalize={() => setAlloc({ classTargets: normalizeTo100(classTargets) })}
-          onSetCurrent={() => setAlloc({ classTargets: currentAsTargets(analysis.classes) })}
-          onClear={() => setAlloc({ classTargets: Object.fromEntries(Object.keys(classTargets).map((k) => [k, 0])) })}
-          emptyText="Brak danych."
-        />
-      </div>
-
-      <DeviationList
-        title="Akcje i ETF – wagi docelowe"
-        subtitle="Udział instrumentu w części akcje + ETF (suma 100%) · podstawa kalkulatora dopłat"
-        icon={ListChecks}
-        rows={instrumentRows}
-        colorFor={(r) => instrumentColors[r.key]}
-        targets={instrumentTargets}
-        threshold={analysis.threshold}
-        onTargetChange={(key, v) => setAlloc({ instrumentTargets: { ...instrumentTargets, [key]: v } })}
-        onNormalize={() => setAlloc({ instrumentTargets: normalizeTo100(instrumentTargets) })}
-        onSetCurrent={() => setAlloc({ instrumentTargets: currentAsTargets(instrumentRows.filter((r) => r.value > 0)) })}
-        onClear={() => setAlloc({ instrumentTargets: {} })}
-        emptyText="Brak instrumentów – dodaj transakcje lub instrumenty."
+      <Accordion
+        storageKey="wealth-app-allocation-open"
+        defaultOpen={['classes']}
+        items={[
+          {
+            id: 'classes',
+            title: 'Wagi klas aktywów',
+            subtitle: 'Struktura portfela i odchylenia od celu (akcje, ETF, obligacje, gotówka)',
+            icon: Layers,
+            render: () => (
+              <div className="grid gap-4 sm:gap-6 xl:grid-cols-2">
+                <AllocationDonut analysis={analysis} />
+                <DeviationList
+                  title="Klasy aktywów – wagi docelowe"
+                  subtitle="Udział w całym portfelu (suma 100%)"
+                  icon={Layers}
+                  rows={analysis.classes}
+                  colorFor={(r) => assetClassColor(r.key, isDark)}
+                  targets={classTargets}
+                  threshold={analysis.threshold}
+                  onTargetChange={(key, v) => setAlloc({ classTargets: { ...classTargets, [key]: v } })}
+                  onNormalize={() => setAlloc({ classTargets: normalizeTo100(classTargets) })}
+                  onSetCurrent={() => setAlloc({ classTargets: currentAsTargets(analysis.classes) })}
+                  onClear={() => setAlloc({ classTargets: Object.fromEntries(Object.keys(classTargets).map((k) => [k, 0])) })}
+                  emptyText="Brak danych."
+                />
+              </div>
+            ),
+          },
+          {
+            id: 'instruments',
+            title: 'Wagi instrumentów',
+            subtitle: 'Udział akcji i ETF w części akcyjnej · podstawa kalkulatora dopłat',
+            icon: ListChecks,
+            render: () => (
+              <DeviationList
+                title="Akcje i ETF – wagi docelowe"
+                subtitle="Udział instrumentu w części akcje + ETF (suma 100%) · podstawa kalkulatora dopłat"
+                icon={ListChecks}
+                rows={instrumentRows}
+                colorFor={(r) => instrumentColors[r.key]}
+                targets={instrumentTargets}
+                threshold={analysis.threshold}
+                onTargetChange={(key, v) => setAlloc({ instrumentTargets: { ...instrumentTargets, [key]: v } })}
+                onNormalize={() => setAlloc({ instrumentTargets: normalizeTo100(instrumentTargets) })}
+                onSetCurrent={() => setAlloc({ instrumentTargets: currentAsTargets(instrumentRows.filter((r) => r.value > 0)) })}
+                onClear={() => setAlloc({ instrumentTargets: {} })}
+                emptyText="Brak instrumentów – dodaj transakcje lub instrumenty."
+              />
+            ),
+          },
+          {
+            id: 'calculator',
+            title: 'Kalkulator Inteligentnej Dopłaty',
+            subtitle: 'Plan zakupów wyrównujący wagi (z przewalutowaniem XTB 0,05%)',
+            icon: Calculator,
+            render: () => <ContributionCalculator analysis={analysis} />,
+          },
+          {
+            id: 'ter',
+            title: 'Analiza kosztów TER',
+            subtitle: 'Opłaty roczne ETF oraz koszty przewalutowania przy kupnie i sprzedaży',
+            icon: Percent,
+            render: () => <TerAnalysis analysis={analysis} />,
+          },
+        ]}
       />
-
-      <ContributionCalculator analysis={analysis} />
-      <TerAnalysis analysis={analysis} />
     </div>
   );
 }

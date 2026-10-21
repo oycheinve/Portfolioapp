@@ -4,7 +4,14 @@ import { formatDate, formatPLN, formatPercent } from '../../lib/format.js';
 // Stałe przypisanie kolorów do benchmarków (kolor podąża za benchmarkiem, nie za kolejnością)
 const BENCHMARK_SLOT = { MSCI_WORLD: 1, WIG20TR: 3, WIG: 5, SP500: 6, CPI: 7 };
 
+// Własne benchmarki: stały slot wyliczany z identyfikatora (kolor nie zmienia się po dodaniu kolejnych)
+const CUSTOM_SLOTS = [4, 2, 0, 3, 1, 5];
+
 export function benchmarkColor(id, isDark) {
+  if (BENCHMARK_SLOT[id] === undefined && typeof id === 'string' && id.startsWith('custom_')) {
+    const hash = [...id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+    return seriesColor(CUSTOM_SLOTS[hash % CUSTOM_SLOTS.length], isDark);
+  }
   return seriesColor(BENCHMARK_SLOT[id] ?? 7, isDark);
 }
 

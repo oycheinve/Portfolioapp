@@ -5,14 +5,14 @@ import { ACCOUNT_TYPES } from '../lib/constants.js';
 import { getCpiTable, valueBond } from '../lib/bonds.js';
 import { isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../lib/engine.js';
 import { savingsProjection } from '../lib/savings.js';
-import { belkaRateForAccount } from '../lib/tax.js';
+import { bondBelkaRate } from '../lib/tax.js';
 import { seriesColor } from '../lib/colors.js';
 import { formatPLN, formatPercent } from '../lib/format.js';
 import { Card } from '../components/ui.jsx';
 import BondsSection from '../components/bonds/BondsSection.jsx';
 import { CpiCard, SavingsCards } from '../components/bonds/SavingsSection.jsx';
 
-// Kapitał bezpieczny: obligacje skarbowe, konta oszczędnościowe i gotówka na rachunkach maklerskich w jednym miejscu
+// Poduszka finansowa: obligacje skarbowe, konta oszczędnościowe i gotówka na rachunkach maklerskich w jednym miejscu
 export default function SafeCapitalView({ onNavigate }) {
   const { state, isDark } = useApp();
   const today = isoDay(new Date());
@@ -21,7 +21,7 @@ export default function SafeCapitalView({ onNavigate }) {
     const cpi = getCpiTable(state.settings);
     let bondsIncome = 0;
     for (const b of v.bonds) {
-      const belka = belkaRateForAccount(b.account, state.settings);
+      const belka = bondBelkaRate(b, b.account);
       const val = valueBond(b, today, belka, cpi);
       if (!val.matured) bondsIncome += val.nominal * val.currentRate * (1 - belka);
     }
@@ -47,7 +47,7 @@ export default function SafeCapitalView({ onNavigate }) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-              <Shield size={16} /> Kapitał bezpieczny
+              <Shield size={16} /> Poduszka finansowa
             </div>
             <div className="mt-1 text-3xl font-semibold tracking-tight tabular">{formatPLN(data.safe)}</div>
             <div className="text-xs text-stone-500 dark:text-stone-400">
@@ -60,7 +60,7 @@ export default function SafeCapitalView({ onNavigate }) {
             <div className="text-xs text-stone-500 tabular">{formatPLN(data.income / 12)} / mies.</div>
           </div>
         </div>
-        <div className="mt-4 flex h-3 w-full gap-[2px] overflow-hidden rounded-full" aria-label="Struktura kapitału bezpiecznego">
+        <div className="mt-4 flex h-3 w-full gap-[2px] overflow-hidden rounded-full" aria-label="Struktura poduszki finansowej">
           {data.parts
             .filter((p) => p.value > 0)
             .map((p) => (

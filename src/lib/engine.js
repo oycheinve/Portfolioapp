@@ -1,7 +1,7 @@
 // Silnik obliczeń portfela: księga zdarzeń kont, pozycje, wycena, Prawdziwy Zysk Total, TWR, CAGR.
-import { ACCOUNT_TYPES } from './constants.js';
+import { ACCOUNT_TYPES, XTB_FX_FEE_PCT } from './constants.js';
 import { getCpiTable, valueBond } from './bonds.js';
-import { belkaRateForAccount, computeIncomeTax, limitForAccount } from './tax.js';
+import { belkaRateForAccount, bondBelkaRate, computeIncomeTax, limitForAccount } from './tax.js';
 
 const DAY = 86400000;
 
@@ -54,7 +54,7 @@ export function bondIncomeEvents(state, asOf) {
   const cpi = getCpiTable(state.settings);
   for (const bond of state.bonds) {
     const account = accountsById[bond.accountId];
-    const rate = belkaRateForAccount(account, state.settings);
+    const rate = bondBelkaRate(bond, account);
     const v = valueBond(bond, asOf, rate, cpi);
     for (const c of v.coupons) {
       events.push({
@@ -84,9 +84,17 @@ export function incomeEventsWithTax(state) {
 
 // Koszty transakcji w PLN: wartość, prowizja oraz prowizja za przewalutowanie (np. XTB IKE 0,05%) –
 // naliczana, gdy konto rozlicza się w PLN, a instrument notowany jest w walucie obcej.
+// Prowizja za przewalutowanie konta (w %). Brak ustawienia = domyślnie XTB 0,05% dla IKE i rachunków w XTB.
+export function accountFxPct(account) {
+  if (!account || account.type === 'SAVINGS' || account.type === 'BONDS') return 0;
+  const raw = account.fxConversionPct;
+  if (raw !== undefined && raw !== null && raw !== '') return Number(raw) || 0;
+  return account.type === 'IKE' || /xtb/i.test(account.institution || '') ? XTB_FX_FEE_PCT : 0;
+}
+
 export function fxConversionPct(account, instrument, trade) {
   if (trade && trade.fxFeePct !== undefined && trade.fxFeePct !== null && trade.fxFeePct !== '') return (Number(trade.fxFeePct) || 0) / 100;
-  const pct = Number(account?.fxConversionPct) || 0;
+  const pct = accountFxPct(account);
   const ccy = trade?.currency || instrument?.currency || 'PLN';
   return pct > 0 && ccy !== 'PLN' ? pct / 100 : 0;
 }
@@ -207,7 +215,7 @@ export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
     .filter((b) => inFilter(accountIds, b.accountId) && b.purchaseDate <= day)
     .map((b) => {
       const acc = accountsById[b.accountId];
-      const v = valueBond(b, day, belkaRateForAccount(acc, state.settings), cpi);
+      const v = valueBond(b, day, bondBelkaRate(b, acc), cpi);
       return { ...b, account: acc, valuation: v, value: v.netValue };
     });
 
@@ -403,7 +411,7 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   const cpi = getCpiTable(state.settings);
   for (const b of state.bonds) {
     if (!accountIds.includes(b.accountId)) continue;
-    const rate = belkaRateForAccount(accountsById[b.accountId], state.settings);
+    const rate = bondBelkaRate(b, accountsById[b.accountId]);
     const endAcc = valueBond(b, todayIso, rate, cpi).accruedNet;
     const startAcc = startDate && b.purchaseDate <= startDate ? valueBond(b, startDate, rate, cpi).accruedNet : 0;
     bondAccrualDelta += endAcc - startAcc;
@@ -468,7 +476,7 @@ function firstFlowDate(state, accountIds) {
     .reduce((m, c) => (!m || c.date < m ? c.date : m), null);
 }
 
-// Wykorzystanie rocznych limitów IKE/IKZE/OKI
+// Wykorzystanie rocznych limitów IKE/IKZE
 export function computeLimitUsage(state, year = new Date().getFullYear()) {
   return state.accounts
     .filter((a) => ACCOUNT_TYPES[a.type]?.hasLimit)

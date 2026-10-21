@@ -305,7 +305,7 @@ function CashflowFormModal({ form, setForm, onSave }) {
   const amount = Number(String(f.amount).replace(',', '.')) || 0;
   const year = Number((f.date || todayISO()).slice(0, 4));
 
-  // Limit roczny dla IKE/IKZE/OKI (z pominięciem edytowanej operacji)
+  // Limit roczny dla IKE/IKZE (z pominięciem edytowanej operacji)
   const limit = account ? limitForAccount(account, state.settings, year) : 0;
   const yearDeposits = state.cashflows
     .filter((c) => c.accountId === f.accountId && c.type === 'DEPOSIT' && c.date.startsWith(String(year)) && c.id !== f.id)

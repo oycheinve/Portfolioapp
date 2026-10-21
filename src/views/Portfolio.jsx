@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, ListOrdered, SlidersHorizontal, Table2 } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, Coins, ListOrdered, SlidersHorizontal, Table2, TrendingDown } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { PORTFOLIO_CATEGORIES, buildPortfolioRows, groupRows } from '../lib/portfolioTable.js';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
@@ -20,19 +20,34 @@ function readPrefs() {
   }
 }
 
-// Okres inwestycji: „2 l. 9 mies.” / „4 mies.” / „12 dni”
-export function holdingPeriod(since, today = new Date()) {
-  if (!since) return '—';
+// Okres inwestycji w dniach od pierwszego zakupu / wpłaty
+export function holdingDays(since, today = new Date()) {
+  if (!since) return null;
   const [y, m, d] = since.split('-').map(Number);
   const start = new Date(y, m - 1, d);
-  const days = Math.max(0, Math.round((today - start) / 86400000));
-  if (days < 31) return `${days} dni`;
-  let months = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
-  if (today.getDate() < start.getDate()) months -= 1;
-  const years = Math.floor(months / 12);
-  const rest = months % 12;
-  if (years === 0) return `${rest} mies.`;
-  return rest ? `${years} l. ${rest} mies.` : `${years} l.`;
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.max(0, Math.round((end - start) / 86400000));
+}
+
+function daysLabel(since) {
+  const days = holdingDays(since);
+  return days === null ? '—' : days.toLocaleString('pl-PL');
+}
+
+// Ikony operacji przy walorze: dywidendy/kupony/odsetki, przewalutowanie, sprzedaże
+function OpIcons({ row }) {
+  const ops = row.ops || [];
+  const income = ops.some((o) => /Dywidenda|Kupon|Odsetki/.test(o.type));
+  const sold = ops.some((o) => o.type === 'Sprzedaż');
+  const fx = (row.fxFees || 0) > 0;
+  if (!income && !sold && !fx) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 text-stone-400">
+      {income && <Coins size={11} aria-label="Wypłaty dochodu" />}
+      {sold && <TrendingDown size={11} aria-label="Częściowa sprzedaż" />}
+      {fx && <ArrowLeftRight size={11} aria-label={`Przewalutowanie ${fmt2(row.fxFees)} zł`} />}
+    </span>
+  );
 }
 
 function CheckRow({ checked, onChange, label, color, count }) {
@@ -54,16 +69,45 @@ function Signed({ value, kind = 'pln', digits = 2 }) {
 const COLS = [
   { key: 'name', label: 'Walor', align: 'left' },
   { key: 'ops', label: 'Operacje', align: 'center' },
-  { key: 'day', label: 'Zmiana dzienna', align: 'right' },
+  { key: 'day', label: 'Zmiana dzienna [%]', align: 'right' },
   { key: 'qty', label: 'Liczba jednostek', align: 'right' },
   { key: 'avg', label: 'Śr. cena zakupu [PLN]', align: 'right' },
   { key: 'price', label: 'Cena aktualna [PLN]', align: 'right' },
-  { key: 'period', label: 'Okres inwestycji', align: 'right' },
+  { key: 'period', label: 'Okres inwestycji [dni]', align: 'right' },
   { key: 'value', label: 'Wartość waloru [PLN]', align: 'right' },
-  { key: 'share', label: 'Udział w portfelu [%]', align: 'right' },
+  { key: 'share', label: 'Udział w wartości portfela [%]', align: 'right' },
   { key: 'rate', label: 'Stopa zwrotu [%]', align: 'right' },
   { key: 'gain', label: 'Zysk [PLN]', align: 'right' },
 ];
+
+// Wiersz „Cały portfel” – na górze (pod nagłówkiem) i na dole tabeli
+function TotalRow({ data, position }) {
+  const top = position === 'top';
+  const bg = top ? 'bg-blue-50 dark:bg-[#16233a]' : 'bg-white dark:bg-neutral-900';
+  return (
+    <tr className={`font-semibold tabular text-[13px] text-stone-900 dark:text-stone-100 ${top ? 'border-b border-stone-200 dark:border-white/10' : 'border-t-2 border-stone-300 dark:border-white/15'} ${bg}`}>
+      <td className={`sticky left-0 z-10 py-2.5 pl-4 text-left ${bg}`}>Cały portfel</td>
+      <td className="px-2.5 py-2.5 text-center text-[11px] font-normal text-stone-500">{data.count} poz.</td>
+      <td className="px-2.5 py-2.5 text-right">
+        <div>
+          <Signed value={data.dayPct} kind="pct" />
+        </div>
+        <div className="text-[11px] font-normal">
+          <Signed value={data.dayChange} />
+        </div>
+      </td>
+      <td colSpan={4} />
+      <td className="px-2.5 py-2.5 text-right">{fmt2(data.total)}</td>
+      <td className="px-2.5 py-2.5 text-right">100,00%</td>
+      <td className="px-2.5 py-2.5 text-right">
+        <Signed value={data.gainPct} kind="pct" />
+      </td>
+      <td className="px-2.5 py-2.5 text-right">
+        <Signed value={data.gain} />
+      </td>
+    </tr>
+  );
+}
 
 export default function PortfolioView() {
   const { state } = useApp();
@@ -112,7 +156,7 @@ export default function PortfolioView() {
               {[
                 { label: 'Wszystko', cats: allCats },
                 { label: 'Akcje i ETF', cats: ['STOCK_PL', 'STOCK_FOREIGN', 'ETF_PL', 'ETF_FOREIGN'] },
-                { label: 'Kapitał bezpieczny', cats: ['CASH', 'BONDS'] },
+                { label: 'Poduszka finansowa', cats: ['CASH', 'BONDS'] },
               ].map((p) => (
                 <button
                   key={p.label}
@@ -192,6 +236,7 @@ export default function PortfolioView() {
                     </th>
                   ))}
                 </tr>
+                <TotalRow data={data} position="top" />
               </thead>
               {data.groups.map((g) => {
                 const isOpen = !collapsed[g.id];
@@ -206,7 +251,7 @@ export default function PortfolioView() {
                       </td>
                       <td />
                       <td className="px-2.5 py-2 text-right">
-                        <Signed value={g.dayChange} />
+                        <Signed value={g.dayPct} kind="pct" />
                       </td>
                       <td colSpan={4} />
                       <td className="px-2.5 py-2 text-right">{fmt2(g.value)}</td>
@@ -222,7 +267,10 @@ export default function PortfolioView() {
                       g.rows.map((r) => (
                         <tr key={r.id} className="group border-b border-stone-100 last:border-0 dark:border-white/5">
                           <td className="sticky left-0 z-10 max-w-[15rem] bg-white py-2 pr-2.5 pl-4 group-hover:bg-stone-50 dark:bg-neutral-900 dark:group-hover:bg-neutral-800">
-                            <div className="truncate font-medium">{r.name}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium">{r.name}</span>
+                              <OpIcons row={r} />
+                            </div>
                             <div className="flex items-center gap-1 truncate text-[11px] text-stone-500 dark:text-stone-400">
                               {r.account && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: ACCOUNT_TYPES[r.account.type]?.color }} />}
                               <span className="truncate">{r.account ? r.account.name : r.sub}</span>
@@ -244,10 +292,10 @@ export default function PortfolioView() {
                           </td>
                           <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
                             <div>
-                              <Signed value={r.dayChange || 0} />
+                              <Signed value={r.dayPct} kind="pct" />
                             </div>
                             <div className="text-[11px]">
-                              <Signed value={r.dayPct} kind="pct" />
+                              <Signed value={r.dayChange || 0} />
                             </div>
                           </td>
                           <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">{r.quantity ? formatNumber(r.quantity, 4) : '—'}</td>
@@ -256,7 +304,7 @@ export default function PortfolioView() {
                             <div>{r.currentPricePLN ? fmt2(r.currentPricePLN) : '—'}</div>
                             {r.currency && r.currency !== 'PLN' && r.price ? <div className="text-[11px] text-stone-500">{formatMoney(r.price, r.currency)}</div> : null}
                           </td>
-                          <td className="px-2.5 py-2 text-right whitespace-nowrap text-stone-600 group-hover:bg-stone-50 dark:text-stone-300 dark:group-hover:bg-white/[0.02]">{holdingPeriod(r.since)}</td>
+                          <td className="px-2.5 py-2 text-right whitespace-nowrap text-stone-600 group-hover:bg-stone-50 dark:text-stone-300 dark:group-hover:bg-white/[0.02]">{daysLabel(r.since)}</td>
                           <td className="px-2.5 py-2 text-right font-semibold group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">{fmt2(r.value)}</td>
                           <td className="px-2.5 py-2 text-right text-stone-600 group-hover:bg-stone-50 dark:text-stone-300 dark:group-hover:bg-white/[0.02]">{formatPercent(r.share, { digits: 2 })}</td>
                           <td className="px-2.5 py-2 text-right group-hover:bg-stone-50 dark:group-hover:bg-white/[0.02]">
@@ -271,28 +319,27 @@ export default function PortfolioView() {
                 );
               })}
               <tfoot>
-                <tr className="border-t-2 border-stone-300 font-semibold tabular dark:border-white/15">
-                  <td className="sticky left-0 z-10 bg-white py-2.5 pl-4 dark:bg-neutral-900">Razem</td>
-                  <td />
-                  <td className="px-2.5 py-2.5 text-right">
-                    <Signed value={data.dayChange} />
-                  </td>
-                  <td colSpan={4} />
-                  <td className="px-2.5 py-2.5 text-right">{fmt2(data.total)}</td>
-                  <td className="px-2.5 py-2.5 text-right">100%</td>
-                  <td className="px-2.5 py-2.5 text-right">
-                    <Signed value={data.gainPct} kind="pct" />
-                  </td>
-                  <td className="px-2.5 py-2.5 text-right">
-                    <Signed value={data.gain} />
-                  </td>
-                </tr>
+                <TotalRow data={data} position="bottom" />
               </tfoot>
             </table>
           </div>
 
           {/* Lista – mobile */}
           <div className="md:hidden">
+            <div className="flex items-start justify-between gap-3 border-b border-stone-200 bg-blue-50/60 px-4 py-3 dark:border-white/10 dark:bg-blue-500/10">
+              <div>
+                <div className="text-sm font-semibold">Cały portfel</div>
+                <div className="text-[11px] tabular">
+                  dziś <Signed value={data.dayPct} kind="pct" /> · zysk <Signed value={data.gainPct} kind="pct" />
+                </div>
+              </div>
+              <div className="text-right tabular">
+                <div className="text-sm font-semibold">{formatPLN(data.total)}</div>
+                <div className="text-[11px]">
+                  <Signed value={data.gain} />
+                </div>
+              </div>
+            </div>
             {data.groups.map((g) => {
               const isOpen = !collapsed[g.id];
               return (
@@ -304,7 +351,7 @@ export default function PortfolioView() {
                         {g.label} <span className="font-normal text-stone-500">({g.rows.length})</span>
                       </div>
                       <div className="text-[11px] tabular">
-                        <Signed value={g.gain} /> · <Signed value={g.gainPct} kind="pct" /> · dziś <Signed value={g.dayChange} />
+                        <Signed value={g.gain} /> · <Signed value={g.gainPct} kind="pct" /> · dziś <Signed value={g.dayPct} kind="pct" />
                       </div>
                     </div>
                     <div className="text-right">
@@ -319,10 +366,13 @@ export default function PortfolioView() {
                           <button type="button" onClick={() => r.ops?.length && setOpsFor(r)} className="flex w-full items-start gap-3 px-4 py-2.5 text-left">
                             <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: r.account ? ACCOUNT_TYPES[r.account.type]?.color : '#a3a29b' }} />
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium">{r.name}</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate text-sm font-medium">{r.name}</span>
+                                <OpIcons row={r} />
+                              </div>
                               <div className="truncate text-[11px] text-stone-500">
                                 {r.quantity && r.avgPricePLN ? `${formatNumber(r.quantity, 4)} szt. · ${fmt2(r.avgPricePLN)} → ${fmt2(r.currentPricePLN)} zł · ` : ''}
-                                {holdingPeriod(r.since)}
+                                {holdingDays(r.since) === null ? '' : `${daysLabel(r.since)} dni`}
                               </div>
                             </div>
                             <div className="text-right tabular">
@@ -340,15 +390,15 @@ export default function PortfolioView() {
               );
             })}
             <div className="flex justify-between px-4 py-3 text-sm font-semibold tabular">
-              <span>Razem</span>
+              <span>Cały portfel</span>
               <span>{formatPLN(data.total)}</span>
             </div>
           </div>
         </section>
       )}
       <p className="text-[11px] text-stone-500 dark:text-stone-500">
-        Ceny w PLN po bieżącym kursie walut. Śr. cena zakupu zawiera prowizje i przewalutowanie. Stopa zwrotu i zysk: akcje/ETF – wartość − koszt zakupu; obligacje – odsetki narosłe i wypłacone netto; konta oszczędnościowe – odsetki ponad wpłaty. Zmiana dzienna obligacji i
-        oszczędności = odsetki za 1 dzień. Kliknij liczbę operacji, aby zobaczyć historię.
+        Ceny w PLN po bieżącym kursie walut. Śr. cena zakupu zawiera prowizje i przewalutowanie. Stopa zwrotu i zysk: akcje/ETF – wartość − koszt zakupu; obligacje – odsetki narosłe i wypłacone netto; konta oszczędnościowe – odsetki ponad wpłaty. Zmiana dzienna w % (pod spodem w zł); dla obligacji i
+        oszczędności = odsetki za 1 dzień. Okres inwestycji liczony w dniach od pierwszego zakupu lub wpłaty. Ikony przy walorze: wypłaty dochodu, sprzedaż, przewalutowanie. Kliknij liczbę operacji, aby zobaczyć historię.
       </p>
 
       <Modal open={!!opsFor} onClose={() => setOpsFor(null)} title={`Operacje: ${opsFor?.name || ''}`}>

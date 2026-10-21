@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Building2, Landmark, Pencil, Plus, Radio, Scale, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { ACCOUNT_TYPES, ACCOUNT_TYPE_LIST, CAPITALIZATION, OTHER_ASSET_CATEGORIES, TAX_BRACKETS } from '../lib/constants.js';
-import { contributionLimitsForYear } from '../lib/tax.js';
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_LIST, CAPITALIZATION, OTHER_ASSET_CATEGORIES, SAVINGS_BANKS, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
+import { belkaRateForAccount } from '../lib/tax.js';
+import { accountFxPct } from '../lib/engine.js';
 import { formatDateTime, formatPLN, todayISO } from '../lib/format.js';
 import { Badge, Button, Card, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
 import LimitsCard from '../components/settings/LimitsCard.jsx';
@@ -36,7 +37,7 @@ function AccountsSection() {
   return (
     <Card
       title="Konta i wrappery podatkowe"
-      subtitle="IKE / IKZE / OKI – 0% podatku Belki · Maklerskie i Oszczędnościowe – 19%"
+      subtitle="IKE / IKZE – 0% podatku Belki · Maklerskie, Obligacje skarbowe i Oszczędnościowe – 19%"
       icon={Wallet}
       actions={
         <Button variant="primary" icon={Plus} onClick={() => setForm({ name: '', type: 'BROKERAGE', institution: '', currency: 'PLN', openedAt: todayISO(), interestRate: 0, capitalization: 'MONTHLY' })}>
@@ -58,8 +59,8 @@ function AccountsSection() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate text-sm font-medium">{a.name}</span>
                   <Badge>{t?.label}</Badge>
-                  <Badge tone={t?.belkaRate === 0 ? 'green' : 'amber'}>Belka {t?.belkaRate === 0 ? '0%' : '19%'}</Badge>
-                  {Number(a.fxConversionPct) > 0 && <Badge tone="violet">przewalutowanie {String(a.fxConversionPct).replace('.', ',')}%</Badge>}
+                  <BelkaBadge account={a} />
+                  {accountFxPct(a) > 0 && <Badge tone="violet">przewalutowanie {String(accountFxPct(a)).replace('.', ',')}%</Badge>}
                 </div>
                 <div className="truncate text-xs text-stone-500 dark:text-stone-400">
                   {a.institution || '—'} · {c.flows} wpłat/wypłat · {c.trades} transakcji{c.bonds ? ` · ${c.bonds} obligacji` : ''}
@@ -84,7 +85,13 @@ function AccountsSection() {
               variant="primary"
               disabled={!form?.name?.trim()}
               onClick={() => {
-                const item = { ...form, name: form.name.trim(), interestRate: Number(form.interestRate) || 0, fxConversionPct: Number(form.fxConversionPct) || 0 };
+                const fx = form.fxConversionPct;
+                const item = {
+                  ...form,
+                  name: form.name.trim(),
+                  interestRate: Number(form.interestRate) || 0,
+                  fxConversionPct: fx === '' || fx === undefined || fx === null ? undefined : Number(fx) || 0,
+                };
                 actions.upsert('accounts', item);
                 actions.notify('Zapisano konto', 'success');
                 setForm(null);
@@ -109,20 +116,50 @@ function AccountsSection() {
                 ))}
               </Select>
             </Field>
-            <Field label="Instytucja">
-              <Input value={form.institution || ''} onChange={(e) => setForm({ ...form, institution: e.target.value })} placeholder="np. XTB, mBank" />
-            </Field>
+            {form.type === 'SAVINGS' ? (
+              <BankField form={form} setForm={setForm} />
+            ) : (
+              <Field label="Instytucja">
+                <Input value={form.institution || ''} onChange={(e) => setForm({ ...form, institution: e.target.value })} placeholder={form.type === 'BONDS' ? 'np. PKO BP, Pekao' : 'np. XTB, mBank'} />
+              </Field>
+            )}
             <Field label="Data otwarcia">
               <Input type="date" value={form.openedAt || ''} onChange={(e) => setForm({ ...form, openedAt: e.target.value })} />
             </Field>
-            {form.type !== 'SAVINGS' && (
+            {form.type !== 'SAVINGS' && form.type !== 'BONDS' && (
               <Field
-                label="Przewalutowanie przy zakupie (%)"
-                hint="Konto w PLN, a instrument w USD/EUR – prowizja doliczana do kosztu zakupu (XTB IKE: 0,05%)"
+                label="Przewalutowanie przy kupnie i sprzedaży (%)"
+                hint={`Konto w PLN, a instrument w USD/EUR – prowizja doliczana przy zakupie i potrącana przy sprzedaży. Puste = domyślnie ${String(accountFxPct({ ...form, fxConversionPct: undefined })).replace('.', ',')}% (XTB/IKE: ${String(XTB_FX_FEE_PCT).replace('.', ',')}%)`}
                 className="sm:col-span-2"
               >
-                <Input type="number" step="0.01" min="0" max="5" value={form.fxConversionPct ?? ''} placeholder="0" onChange={(e) => setForm({ ...form, fxConversionPct: e.target.value })} />
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="5"
+                  value={form.fxConversionPct ?? ''}
+                  placeholder={String(accountFxPct({ ...form, fxConversionPct: undefined }))}
+                  onChange={(e) => setForm({ ...form, fxConversionPct: e.target.value })}
+                />
               </Field>
+            )}
+            {ACCOUNT_TYPES[form.type]?.belkaRate > 0 && (
+              <div className="space-y-3 sm:col-span-2">
+                <Toggle
+                  checked={form.belkaEnabled !== false}
+                  onChange={(v) => setForm({ ...form, belkaEnabled: v })}
+                  label="Wliczaj podatek Belki (19%)"
+                  description="Odsetki i zyski pokazywane netto. Wyłącz, aby liczyć je brutto."
+                />
+                {form.type === 'SAVINGS' && (
+                  <Toggle
+                    checked={!!form.belkaDeferred}
+                    onChange={(v) => setForm({ ...form, belkaDeferred: v })}
+                    label="Podatek Belki odroczony (rozliczenie samodzielne w PIT)"
+                    description="Bank nie pobiera podatku – odsetki trafiają na konto brutto, a 19% rozliczasz w zeznaniu rocznym (PIT-38)."
+                  />
+                )}
+              </div>
             )}
             {form.type === 'SAVINGS' && (
               <>
@@ -175,14 +212,48 @@ function AccountsSection() {
   );
 }
 
+function BelkaBadge({ account }) {
+  const t = ACCOUNT_TYPES[account.type];
+  if (t?.belkaRate === 0) return <Badge tone="green">Belka 0%</Badge>;
+  if (account.belkaDeferred) return <Badge tone="violet">Belka odroczona (PIT)</Badge>;
+  if (account.belkaEnabled === false) return <Badge>bez Belki (brutto)</Badge>;
+  return <Badge tone="amber">Belka {Math.round(belkaRateForAccount(account) * 100)}%</Badge>;
+}
+
+// Bank konta oszczędnościowego – Revolut automatycznie oznacza podatek jako odroczony (rozliczany w PIT)
+function BankField({ form, setForm }) {
+  const known = SAVINGS_BANKS.find((b) => b.id === form.institution);
+  const value = known ? known.id : form.institution ? 'Inny' : '';
+  return (
+    <Field label="Bank" hint={known?.belkaDeferred ? 'Revolut nie pobiera podatku Belki – rozliczasz go sam w PIT' : undefined}>
+      <Select
+        value={value}
+        onChange={(e) => {
+          const bank = SAVINGS_BANKS.find((b) => b.id === e.target.value);
+          setForm({ ...form, institution: e.target.value, belkaDeferred: !!bank?.belkaDeferred });
+        }}
+      >
+        <option value="" disabled>
+          Wybierz bank…
+        </option>
+        {SAVINGS_BANKS.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.label}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+}
+
 // Szybkie ustawienie: zakupy na IKE w XTB rozliczane w PLN z prowizją 0,05% za przewalutowanie
 function XtbIkeToggle() {
   const { state, actions } = useApp();
   const ike = state.accounts.filter((a) => a.type === 'IKE');
   if (ike.length === 0) return null;
-  const on = ike.every((a) => Number(a.fxConversionPct) === 0.05);
+  const on = ike.every((a) => accountFxPct(a) === XTB_FX_FEE_PCT);
   const set = (v) => {
-    for (const a of ike) actions.upsert('accounts', { ...a, fxConversionPct: v ? 0.05 : 0 });
+    for (const a of ike) actions.upsert('accounts', { ...a, fxConversionPct: v ? XTB_FX_FEE_PCT : 0 });
     actions.notify(v ? 'IKE: zakupy w PLN z przewalutowaniem 0,05% wliczanym w koszt' : 'IKE: wyłączono prowizję za przewalutowanie', 'info');
   };
   return (
@@ -191,7 +262,7 @@ function XtbIkeToggle() {
         checked={on}
         onChange={set}
         label="IKE w XTB: zakupy w złotówkach (przewalutowanie 0,05%)"
-        description="Zagraniczne ETF-y (USD/EUR) kupowane z rachunku PLN – prowizja 0,05% doliczana do ceny zakupu i bazy kosztowej. Wartość dla każdego konta można zmienić w jego edycji."
+        description="Zagraniczne ETF-y (USD/EUR) kupowane i sprzedawane z rachunku PLN – prowizja 0,05% doliczana przy zakupie (baza kosztowa) i potrącana przy sprzedaży. Domyślnie włączone; wartość dla każdego konta można zmienić w jego edycji."
       />
     </div>
   );
@@ -200,15 +271,9 @@ function XtbIkeToggle() {
 function TaxSection() {
   const { state, actions } = useApp();
   const s = state.settings;
-  const year = new Date().getFullYear();
-  const limits = contributionLimitsForYear(s, year);
-  const setLimit = (key, value) =>
-    actions.updateSettings({
-      contributionLimits: { ...s.contributionLimits, [year]: { ...limits, [key]: Number(value) || 0 } },
-    });
 
   return (
-    <Card title="Podatki i limity" subtitle={`Limity wpłat na rok ${year} · kalkulator ulgi IKZE`} icon={Scale}>
+    <Card title="Podatki" subtitle="Parametry kalkulatora ulgi IKZE · limity wpłat znajdziesz w karcie poniżej" icon={Scale}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Próg podatkowy (IKZE)">
           <Select value={s.taxBracket} onChange={(e) => actions.updateSettings({ taxBracket: e.target.value })}>
@@ -229,40 +294,6 @@ function TaxSection() {
             label="Prowadzę działalność gospodarczą"
             description="Wyższy limit IKZE (1,8× przeciętnego wynagrodzenia)"
           />
-        </div>
-        <Field label={`Limit IKE ${year}`}>
-          <Input type="number" step="0.01" value={limits.ike} onChange={(e) => setLimit('ike', e.target.value)} />
-        </Field>
-        <Field label={`Limit IKZE ${year}`}>
-          <Input type="number" step="0.01" value={limits.ikze} onChange={(e) => setLimit('ikze', e.target.value)} />
-        </Field>
-        <Field label={`Limit IKZE (JDG) ${year}`}>
-          <Input type="number" step="0.01" value={limits.ikzeSelfEmployed} onChange={(e) => setLimit('ikzeSelfEmployed', e.target.value)} />
-        </Field>
-        <div className="sm:col-span-2 mt-2 rounded-lg border border-dashed border-stone-300 p-3 dark:border-white/10">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
-            <Badge tone="green">OKI</Badge> Osobiste Konto Inwestycyjne – parametry konfigurowalne
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Stawka podatku od zysków na OKI (%)">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                max="19"
-                value={(s.oki?.belkaRate || 0) * 100}
-                onChange={(e) => actions.updateSettings({ oki: { ...s.oki, belkaRate: (Number(e.target.value) || 0) / 100 } })}
-              />
-            </Field>
-            <Field label="Roczny limit wpłat OKI (PLN)" hint="0 = brak limitu">
-              <Input
-                type="number"
-                min="0"
-                value={s.oki?.annualLimit || 0}
-                onChange={(e) => actions.updateSettings({ oki: { ...s.oki, annualLimit: Number(e.target.value) || 0 } })}
-              />
-            </Field>
-          </div>
         </div>
       </div>
     </Card>

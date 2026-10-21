@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Landmark, Pencil, Plus, Trash2 } from 'lucid
 import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES, BOND_TYPES } from '../../lib/constants.js';
 import { bondSchedule, getCpiTable, valueBond } from '../../lib/bonds.js';
-import { belkaRateForAccount } from '../../lib/tax.js';
+import { bondBelkaRate } from '../../lib/tax.js';
 import { formatDate, formatPLN, formatPercent, todayISO, uid } from '../../lib/format.js';
 import { Badge, Button, Card, EmptyState, IconButton, Modal, Toggle } from '../ui.jsx';
 import BondForm, { emptyBond } from './BondForm.jsx';
@@ -27,7 +27,7 @@ export default function BondsSection() {
       state.bonds
         .map((b) => {
           const acc = accountsById[b.accountId];
-          const belka = belkaRateForAccount(acc, state.settings);
+          const belka = bondBelkaRate(b, acc);
           const v = valueBond(b, today, belka, cpi);
           const couponsGross = v.coupons.reduce((s, c) => s + c.gross, 0);
           return { bond: b, account: acc, belka, v, couponsGross, couponsNet: couponsGross * (1 - belka) };
@@ -76,7 +76,7 @@ export default function BondsSection() {
       subtitle="Transze EDO / COI / TOS / ROR · odsetki narosłe na dziś, kupony i daty wykupu"
       icon={Landmark}
       actions={
-        <Button variant="primary" icon={Plus} onClick={() => setForm(emptyBond(state.accounts.find((a) => a.type !== 'SAVINGS')?.id || ''))} disabled={!state.accounts.some((a) => a.type !== 'SAVINGS')}>
+        <Button variant="primary" icon={Plus} onClick={() => setForm(emptyBond((state.accounts.find((a) => a.type === 'BONDS') || state.accounts.find((a) => a.type !== 'SAVINGS'))?.id || ''))} disabled={!state.accounts.some((a) => a.type !== 'SAVINGS')}>
           Dodaj transzę
         </Button>
       }

@@ -180,7 +180,7 @@ function LimitsPanel() {
       <div className="flex items-center gap-2 text-sm font-semibold">
         <PiggyBank size={16} /> Limity wpłat {year}
       </div>
-      {usage.length === 0 && <p className="text-xs text-stone-500">Brak kont IKE/IKZE/OKI.</p>}
+      {usage.length === 0 && <p className="text-xs text-stone-500">Brak kont IKE/IKZE.</p>}
       <ul className="space-y-4">
         {usage.map((u) => (
           <li key={u.account.id}>

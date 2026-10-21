@@ -1,6 +1,6 @@
 import { Area, AreaChart, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '../../state/AppContext.jsx';
-import { BENCHMARKS } from '../../lib/constants.js';
+import { benchmarkLabel, isCustomBenchmark } from '../../lib/constants.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatPercent } from '../../lib/format.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
@@ -56,7 +56,7 @@ export function ValueChart({ data, span, benchmarks, compareIds }) {
   const legend = [
     { key: 'v', label: 'Wartość portfela', color: valueColor },
     { key: 'c', label: 'Wkład własny netto', color: chrome.muted, dashed: true },
-    ...benchmarks.map((id) => ({ key: id, label: id === 'CPI' ? 'Wpłaty waloryzowane inflacją' : `Gdyby wpłaty w ${BENCHMARKS[id].label}`, color: benchmarkColor(id, isDark), dashed: id === 'CPI' })),
+    ...benchmarks.map((id) => ({ key: id, label: id === 'CPI' ? 'Wpłaty waloryzowane inflacją' : `Gdyby wpłaty w ${benchmarkLabel(state.settings, id)}`, color: benchmarkColor(id, isDark), dashed: id === 'CPI' || isCustomBenchmark(id) })),
   ];
   return (
     <>
@@ -80,10 +80,10 @@ export function ValueChart({ data, span, benchmarks, compareIds }) {
               <Line
                 key={id}
                 dataKey={`b_${id}_value`}
-                name={id === 'CPI' ? 'Wpłaty + inflacja' : BENCHMARKS[id].label}
+                name={id === 'CPI' ? 'Wpłaty + inflacja' : benchmarkLabel(state.settings, id)}
                 stroke={benchmarkColor(id, isDark)}
                 strokeWidth={1.5}
-                strokeDasharray={id === 'CPI' ? '5 4' : undefined}
+                strokeDasharray={id === 'CPI' || isCustomBenchmark(id) ? '5 4' : undefined}
                 dot={false}
                 isAnimationActive={false}
               />
@@ -120,7 +120,7 @@ export function ProfitChart({ data, span, benchmarks, compareIds, mode, onModeCh
     const lines = compareIds.length
       ? compareIds.map((id) => ({ key: `i_${id}_pct`, label: instById[id]?.ticker, color: instColors[id] }))
       : [{ key: 'twr', label: 'Portfel (TWR)', color: c(0), width: 2.5 }];
-    const legend = [...lines, ...benchmarks.map((id) => ({ key: `b_${id}_pct`, label: BENCHMARKS[id].label, color: benchmarkColor(id, isDark), dashed: id === 'CPI' }))];
+    const legend = [...lines, ...benchmarks.map((id) => ({ key: `b_${id}_pct`, label: benchmarkLabel(state.settings, id), color: benchmarkColor(id, isDark), dashed: id === 'CPI' || isCustomBenchmark(id) }))];
     return (
       <>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -142,10 +142,10 @@ export function ProfitChart({ data, span, benchmarks, compareIds, mode, onModeCh
                 <Line
                   key={id}
                   dataKey={`b_${id}_pct`}
-                  name={BENCHMARKS[id].label}
+                  name={benchmarkLabel(state.settings, id)}
                   stroke={benchmarkColor(id, isDark)}
                   strokeWidth={1.5}
-                  strokeDasharray={id === 'CPI' ? '5 4' : undefined}
+                  strokeDasharray={id === 'CPI' || isCustomBenchmark(id) ? '5 4' : undefined}
                   dot={false}
                   isAnimationActive={false}
                 />
@@ -200,7 +200,7 @@ export function DrawdownChart({ data, span, benchmarks, compareIds }) {
     ...(compareIds.length
       ? compareIds.map((id) => ({ key: id, label: instById[id]?.ticker, color: instColors[id] }))
       : [{ key: 'dd', label: 'Portfel (TWR)', color: ddColor }]),
-    ...bench.map((id) => ({ key: id, label: BENCHMARKS[id].label, color: benchmarkColor(id, isDark) })),
+    ...bench.map((id) => ({ key: id, label: benchmarkLabel(state.settings, id), color: benchmarkColor(id, isDark) })),
   ];
   return (
     <>
@@ -220,7 +220,7 @@ export function DrawdownChart({ data, span, benchmarks, compareIds }) {
               <Line key={id} dataKey={`i_${id}_dd`} name={instById[id]?.ticker} stroke={instColors[id]} strokeWidth={2} dot={false} isAnimationActive={false} />
             ))}
             {bench.map((id) => (
-              <Line key={id} dataKey={`b_${id}_dd`} name={BENCHMARKS[id].label} stroke={benchmarkColor(id, isDark)} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line key={id} dataKey={`b_${id}_dd`} name={benchmarkLabel(state.settings, id)} stroke={benchmarkColor(id, isDark)} strokeWidth={1.5} dot={false} isAnimationActive={false} />
             ))}
           </ComposedChart>
         </ResponsiveContainer>

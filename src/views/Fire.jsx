@@ -7,7 +7,7 @@ import { dividendKpis } from '../lib/dividends.js';
 import { savingsProjection } from '../lib/savings.js';
 import { getCpiTable, valueBond } from '../lib/bonds.js';
 import { isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../lib/engine.js';
-import { belkaRateForAccount } from '../lib/tax.js';
+import { bondBelkaRate } from '../lib/tax.js';
 import { chartChrome, seriesColor } from '../lib/colors.js';
 import { formatAxisPLN, formatNumber, formatPLN, formatPercent } from '../lib/format.js';
 import { Button, Card, Field, Input, Segmented, Slider, Toggle } from '../components/ui.jsx';
@@ -28,7 +28,7 @@ function currentPassiveIncome(state) {
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   let bonds = 0;
   for (const b of state.bonds) {
-    const belka = belkaRateForAccount(accountsById[b.accountId], state.settings);
+    const belka = bondBelkaRate(b, accountsById[b.accountId]);
     const v = valueBond(b, today, belka, cpi);
     if (!v.matured) bonds += v.nominal * v.currentRate * (1 - belka);
   }

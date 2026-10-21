@@ -33,7 +33,8 @@ export default function BondForm({ form, setForm, onSave }) {
   const f = form || emptyBond('');
   const type = BOND_TYPES[f.type];
   const account = state.accounts.find((a) => a.id === f.accountId);
-  const belka = account ? belkaRateForAccount(account, state.settings) : 0.19;
+  const accountBelka = account ? belkaRateForAccount(account) : 0.19;
+  const belka = f.belkaEnabled === false ? 0 : accountBelka;
   const cpi = useMemo(() => getCpiTable(state.settings), [state.settings]);
   const schedule = useMemo(() => (open && f.purchaseDate ? bondSchedule({ ...f, quantity: Number(f.quantity) || 0 }, cpi) : []), [open, f, cpi]);
   const set = (patch) => setForm({ ...f, ...patch });
@@ -82,7 +83,7 @@ export default function BondForm({ form, setForm, onSave }) {
           <Field label="Seria" className="col-span-2 sm:col-span-1">
             <Input value={f.series} onChange={(e) => set({ series: e.target.value.toUpperCase() })} />
           </Field>
-          <Field label="Konto" className="col-span-2" hint={account ? `Podatek Belki od odsetek: ${belka === 0 ? '0% (konto emerytalne)' : `${Math.round(belka * 100)}%`}` : undefined}>
+          <Field label="Konto" className="col-span-2" hint={account ? `Podatek Belki od odsetek: ${accountBelka === 0 ? '0% (konto emerytalne / zwolnione)' : `${Math.round(belka * 100)}%`}` : undefined}>
             <Select value={f.accountId} onChange={(e) => set({ accountId: e.target.value })}>
               <option value="" disabled>
                 Wybierz konto…
@@ -120,6 +121,15 @@ export default function BondForm({ form, setForm, onSave }) {
             </Field>
           )}
         </div>
+
+        {accountBelka > 0 && (
+          <Toggle
+            checked={f.belkaEnabled !== false}
+            onChange={(v) => set({ belkaEnabled: v })}
+            label="Wliczaj podatek Belki (19%)"
+            description="Wyłącz, aby pokazywać odsetki brutto (np. gdy rozliczasz podatek samodzielnie lub transza jest zwolniona)."
+          />
+        )}
 
         {cpiYears.length > 0 && (
           <div>

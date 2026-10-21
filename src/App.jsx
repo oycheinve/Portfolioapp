@@ -12,7 +12,6 @@ import DividendsView from './views/Dividends.jsx';
 import ReportsView from './views/Reports.jsx';
 import SimulationsView from './views/Simulations.jsx';
 import GoalsView from './views/Goals.jsx';
-import JournalView from './views/Journal.jsx';
 import GoalsRolloverHost from './components/goals/GoalsRolloverHost.jsx';
 import SettingsView from './views/Settings.jsx';
 
@@ -27,7 +26,6 @@ const VIEWS = {
   simulations: SimulationsView,
   reports: ReportsView,
   goals: GoalsView,
-  journal: JournalView,
   cash: CashRegister,
   settings: SettingsView,
 };

@@ -23,16 +23,6 @@ export const ACCOUNT_TYPES = {
     taxDeductible: true,
     color: '#6250d6',
   },
-  OKI: {
-    id: 'OKI',
-    label: 'OKI',
-    fullName: 'Osobiste Konto Inwestycyjne',
-    // Parametry OKI są konfigurowalne w ustawieniach (rozwiązanie w trakcie legislacji).
-    belkaRate: 0,
-    hasLimit: true,
-    limitKey: 'oki',
-    color: '#1baf7a',
-  },
   BROKERAGE: {
     id: 'BROKERAGE',
     label: 'Maklerskie',
@@ -40,6 +30,15 @@ export const ACCOUNT_TYPES = {
     belkaRate: BELKA_RATE,
     hasLimit: false,
     color: '#eb6834',
+  },
+  BONDS: {
+    id: 'BONDS',
+    label: 'Obligacje skarbowe',
+    fullName: 'Rachunek obligacji skarbowych (rejestr)',
+    belkaRate: BELKA_RATE,
+    hasLimit: false,
+    isBonds: true,
+    color: '#1baf7a',
   },
   SAVINGS: {
     id: 'SAVINGS',
@@ -53,6 +52,23 @@ export const ACCOUNT_TYPES = {
 };
 
 export const ACCOUNT_TYPE_LIST = Object.values(ACCOUNT_TYPES);
+
+// Banki dla kont oszczędnościowych; Revolut nie pobiera podatku Belki (rozliczenie samodzielne w PIT-38)
+export const SAVINGS_BANKS = [
+  { id: 'PKO BP', label: 'PKO BP' },
+  { id: 'mBank', label: 'mBank' },
+  { id: 'Santander', label: 'Santander Bank Polska' },
+  { id: 'ING', label: 'ING Bank Śląski' },
+  { id: 'Pekao', label: 'Bank Pekao' },
+  { id: 'Millennium', label: 'Bank Millennium' },
+  { id: 'Alior', label: 'Alior Bank' },
+  { id: 'VeloBank', label: 'VeloBank' },
+  { id: 'Revolut', label: 'Revolut (podatek odroczony)', belkaDeferred: true },
+  { id: 'Inny', label: 'Inny bank' },
+];
+
+// Domyślna prowizja XTB za przewalutowanie na IKE (zakup i sprzedaż walorów w walutach obcych z rachunku PLN)
+export const XTB_FX_FEE_PCT = 0.05;
 
 export const INSTRUMENT_KINDS = {
   STOCK: { id: 'STOCK', label: 'Akcja' },
@@ -177,5 +193,22 @@ export const BENCHMARKS = {
   MSCI_WORLD: { id: 'MSCI_WORLD', label: 'MSCI World (PLN)', yahooSymbol: 'IWDA.AS', currency: 'EUR', proxySymbols: ['IWDA.AS', 'VWCE.DE', 'SWDA.L'] },
   CPI: { id: 'CPI', label: 'Inflacja CPI', yahooSymbol: null, currency: 'PLN', proxySymbols: [] },
 };
+
+// Własne benchmarki o stałej stopie (np. „Inflacja własna 5%”, „Moja lokata 4%”) – zapisywane w settings.customBenchmarks
+export function isCustomBenchmark(id) {
+  return typeof id === 'string' && id.startsWith('custom_');
+}
+
+export function benchmarkDefs(settings) {
+  const out = { ...BENCHMARKS };
+  for (const c of settings?.customBenchmarks || []) {
+    out[c.id] = { id: c.id, label: c.name, custom: true, ratePct: Number(c.ratePct) || 0, yahooSymbol: null, currency: 'PLN', proxySymbols: [] };
+  }
+  return out;
+}
+
+export function benchmarkLabel(settings, id) {
+  return benchmarkDefs(settings)[id]?.label || id;
+}
 
 export const FX_HISTORY_SYMBOLS = { USD: 'USDPLN=X', EUR: 'EURPLN=X', GBP: 'GBPPLN=X', CHF: 'CHFPLN=X' };

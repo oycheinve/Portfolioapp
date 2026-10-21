@@ -5,7 +5,7 @@ export const STATE_VERSION = 1;
 export const STORAGE_KEY = 'wealth-app-state-v1';
 
 export const COLLECTIONS = [
-  'accounts', // konta / wrappery: IKE, IKZE, OKI, BROKERAGE, SAVINGS
+  'accounts', // konta / wrappery: IKE, IKZE, BROKERAGE, BONDS (obligacje skarbowe), SAVINGS
   'instruments', // akcje i ETF (ticker, symbol Yahoo, waluta, TER)
   'trades', // transakcje kupna/sprzedaży
   'cashflows', // wpłaty / wypłaty własne (wkład netto)
@@ -62,11 +62,6 @@ export function defaultSettings() {
     annualIncome: 0,
     selfEmployed: false,
     contributionLimits: { ...DEFAULT_CONTRIBUTION_LIMITS },
-    oki: {
-      belkaRate: 0,
-      annualLimit: 0,
-      note: 'Parametry OKI do uzupełnienia po wejściu w życie ustawy.',
-    },
     allocation: defaultAllocation(),
     fire: defaultFire(),
     // Etap 6: polityka limitów IKE/IKZE – automatyczne uzupełnienie po Nowym Roku
@@ -74,6 +69,7 @@ export function defaultSettings() {
     contributionLimitsMeta: {}, // { rok: 'official' | 'manual' | 'wage' | 'estimate' }
     goalsReview: { reviewedYears: [] }, // lata, dla których wykonano zamknięcie roku i przeniesienie celów
     dividendPrefs: { dgr: 6, years: 10, drip: true, reminderDays: 30, autoSync: true, autoBook: false, lastSync: null }, // Etap 4 (+ automatyczne dane dywidend)
+    customBenchmarks: [], // własne benchmarki o stałej stopie: [{ id: 'custom_…', name, ratePct }]
     cpiOverrides: {}, // Etap 3: ręczne odczyty CPI r/r { 'RRRR-MM': % }
     priceMode: 'auto', // 'auto' | 'mock'
     corsProxy: 'https://corsproxy.io/?url=',
@@ -129,7 +125,6 @@ export function migrateState(raw) {
     ...base.settings,
     ...(raw.settings || {}),
     contributionLimits: { ...base.settings.contributionLimits, ...(raw.settings?.contributionLimits || {}) },
-    oki: { ...base.settings.oki, ...(raw.settings?.oki || {}) },
     allocation: {
       ...base.settings.allocation,
       ...(raw.settings?.allocation || {}),
@@ -152,7 +147,12 @@ export function migrateState(raw) {
       projectedWages: { ...(raw.settings?.limitsPolicy?.projectedWages || {}) },
     },
   };
+  delete out.settings.oki;
+  out.settings.customBenchmarks = Array.isArray(raw.settings?.customBenchmarks)
+    ? raw.settings.customBenchmarks.filter((b) => b && b.id && b.name)
+    : [];
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
+  out.accounts = migrateAccounts(out);
   out.priceHistory = {
     ...base.priceHistory,
     ...(raw.priceHistory || {}),
@@ -164,6 +164,27 @@ export function migrateState(raw) {
     fx: { ...base.prices.fx, ...(raw.prices?.fx || {}), rates: { ...base.prices.fx.rates, ...(raw.prices?.fx?.rates || {}) } },
     quotes: { ...(raw.prices?.quotes || {}) },
   };
+  return out;
+}
+
+// Porządki w kontach: OKI usunięte z systemu (puste konto znika, z historią → konto maklerskie),
+// konto maklerskie zawierające wyłącznie obligacje → typ „Obligacje skarbowe”.
+function migrateAccounts(state) {
+  const used = (id, collections) => collections.some((c) => state[c].some((x) => x.accountId === id));
+  const out = [];
+  for (const a of state.accounts) {
+    if (!a || typeof a !== 'object') continue;
+    if (a.type === 'OKI') {
+      if (!used(a.id, ['trades', 'cashflows', 'income', 'bonds'])) continue;
+      out.push({ ...a, type: 'BROKERAGE' });
+      continue;
+    }
+    if (a.type === 'BROKERAGE' && !a.typeMigrated && used(a.id, ['bonds']) && !used(a.id, ['trades', 'income'])) {
+      out.push({ ...a, type: 'BONDS', typeMigrated: true });
+      continue;
+    }
+    out.push(a);
+  }
   return out;
 }
 
