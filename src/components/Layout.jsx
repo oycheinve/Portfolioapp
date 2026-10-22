@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, BarChart3, Cloud, CloudOff, Coins, FileText, FlaskConical, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -15,6 +15,8 @@ export const NAV_ITEMS = [
   { id: 'safe', label: 'Poduszka', longLabel: 'Poduszka finansowa', icon: Shield },
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target, mobile: true },
+  // Nazwa z rokiem docelowym z ustawień FIRE (np. „FIRE 2055”) – navLabel()
+  { id: 'fire', label: 'FIRE', longLabel: 'FIRE', icon: Flame },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
@@ -23,6 +25,16 @@ export const NAV_ITEMS = [
 // Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
 const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'dividends', 'goals'];
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)).filter(Boolean);
+
+// Kolejność kafelków w arkuszu „Więcej” (telefon); Ustawienia na końcu, pod nimi przełącznik motywu
+const MORE_ORDER = ['safe', 'simulations', 'allocation', 'fire', 'stats', 'reports', 'cash', 'settings'];
+const MORE_ITEMS = [...MORE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)), ...NAV_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
+
+// Etykieta pozycji menu – FIRE z rokiem docelowym
+export function navLabel(item, settings, long = true) {
+  if (item?.id === 'fire') return `FIRE ${settings?.fire?.targetYear || ''}`.trim();
+  return long ? item?.longLabel : item?.label;
+}
 
 const THEME_CYCLE = { light: 'dark', dark: 'system', system: 'light' };
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
@@ -110,7 +122,7 @@ export function Layout({ view, onNavigate, children }) {
                 }`}
               >
                 <Icon size={18} />
-                {item.longLabel}
+                {navLabel(item, state.settings)}
                 {badges[item.id] && (
                   <span
                     className="ml-auto rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white"
@@ -141,7 +153,7 @@ export function Layout({ view, onNavigate, children }) {
               <Wallet size={16} />
             </span>
           </div>
-          <h1 className="truncate text-base font-semibold">{current?.longLabel}</h1>
+          <h1 className="truncate text-base font-semibold">{navLabel(current, state.settings)}</h1>
           <div className="ml-auto flex items-center gap-2">
             <CloudStatus onNavigate={onNavigate} />
             <PriceStatus />
@@ -200,7 +212,7 @@ export function Layout({ view, onNavigate, children }) {
               <span className="h-1.5 w-12 rounded-full bg-stone-300 dark:bg-white/20" />
             </button>
             <div className="grid max-h-[62vh] grid-cols-2 gap-3 overflow-y-auto">
-              {NAV_ITEMS.filter((n) => !n.mobile).map((item) => {
+              {MORE_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active = item.id === view;
                 return (
@@ -221,7 +233,7 @@ export function Layout({ view, onNavigate, children }) {
                     <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${active ? 'bg-white/80 dark:bg-white/10' : 'bg-white/70 dark:bg-white/10'}`}>
                       <Icon size={20} strokeWidth={1.8} />
                     </span>
-                    <span className="min-w-0">{item.longLabel}</span>
+                    <span className="min-w-0">{navLabel(item, state.settings)}</span>
                     {badges[item.id] && <span className="absolute top-2 right-2.5 rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
                   </button>
                 );

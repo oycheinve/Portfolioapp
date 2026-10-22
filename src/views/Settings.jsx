@@ -11,7 +11,7 @@ import CloudCard from '../components/settings/CloudCard.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
-export default function SettingsView() {
+export default function SettingsView({ param }) {
   return (
     <div className="space-y-4 sm:space-y-6">
       <AccountsSection />
@@ -20,7 +20,7 @@ export default function SettingsView() {
         <PricesSection />
       </div>
       <LimitsCard />
-      <FireGoalsCard />
+      <FireGoalsCard defaultOpen={param === 'fire'} />
       <OtherAssetsSection />
       <CloudCard />
       <BackupCard />

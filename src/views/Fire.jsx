@@ -21,7 +21,7 @@ function formatWhen(r) {
 }
 
 // Bieżący roczny dochód pasywny netto: dywidendy (forward), obligacje (bieżące oprocentowanie), oszczędności
-function currentPassiveIncome(state) {
+export function currentPassiveIncome(state) {
   const today = isoDay(new Date());
   const div = dividendKpis(state, today).forwardNet;
   const cpi = getCpiTable(state.settings);

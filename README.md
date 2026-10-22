@@ -226,6 +226,12 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
 
+## FIRE {rok} i porządek w „Więcej”
+
+- **FIRE {rok docelowy}** (`#/fire`, `src/views/FireGoal.jsx`) – osobna sekcja w „Więcej” i w menu bocznym (nazwa z rokiem z celów FIRE): pierścień „osiągnięte”, główny wskaźnik „Do celu FIRE brakuje X%” wg kryterium (oba cele / dochód / majątek), karty postępu majątku i miesięcznego dochodu pasywnego (z kwotą brakującą), szacowany termin osiągnięcia z symulacji FIRE, przyciski „Symulacja i projekcja FIRE” i „Zmień cele FIRE” (`#/settings/fire`). Dawny adres `#/fire` prowadzi teraz tutaj (symulacja: `#/simulations/fire`).
+- **Ustawienia → Cele FIRE** – sekcja zwijana, domyślnie zwinięta (otwiera się sama po wejściu z widoku FIRE).
+- **Kolejność w „Więcej”**: Poduszka finansowa, Symulacje i kalkulator, Alokacja i Dopłaty, FIRE, Statystyki, Raport na X, Rejestr Wpłat/Wypłat, a na końcu Konta i ustawienia oraz przełącznik motywu (`MORE_ORDER` w `Layout.jsx`).
+
 ## Odświeżony wygląd (UI)
 
 - **Więcej** (telefon): arkusz z uchwytem, dwukolumnowa siatka zaokrąglonych kart z ikoną w kółku (te same sekcje co dotąd), przełącznik motywu (jasny / ciemny / systemowy) na dole.

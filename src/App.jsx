@@ -15,6 +15,7 @@ import SimulationsView from './views/Simulations.jsx';
 import GoalsView from './views/Goals.jsx';
 import GoalsRolloverHost from './components/goals/GoalsRolloverHost.jsx';
 import SettingsView from './views/Settings.jsx';
+import FireGoalView from './views/FireGoal.jsx';
 
 const VIEWS = {
   dashboard: Dashboard,
@@ -29,10 +30,11 @@ const VIEWS = {
   goals: GoalsView,
   cash: CashRegister,
   settings: SettingsView,
+  fire: FireGoalView,
 };
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc
-const ALIASES = { fire: 'simulations/fire', stress: 'simulations/stress', quotes: 'charts/quotes' };
+const ALIASES = { stress: 'simulations/stress', quotes: 'charts/quotes' };
 
 function readHash() {
   let h = window.location.hash.replace('#/', '').replace('#', '');
