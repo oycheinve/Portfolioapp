@@ -1,7 +1,7 @@
 // Moduł notowań: Yahoo Finance (GPW .WA, ETF-y z giełd zagranicznych) + kursy walut NBP.
 // Trasy do Yahoo (serwer aplikacji → proxy z ustawień → publiczne proxy CORS) w yahooFetch.js.
-// Gdy Yahoo jest niedostępne: ostatnie znane notowanie albo cena z transakcji – bez losowych danych i bez komunikatów o błędach.
-import { fetchYahooJson, mapLimited, normalizeYahooSymbol, yahooSymbolFor } from './yahooFetch.js';
+// Gdy Yahoo jest niedostępne: ostatnie znane notowanie albo cena z transakcji (bez losowych danych); źródło kursów w toaście i konsoli.
+import { fetchYahooData, mapLimited, normalizeYahooSymbol, yahooSymbolFor } from './yahooFetch.js';
 
 const TIMEOUT_MS = 7000;
 const FX_CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF'];
@@ -49,7 +49,7 @@ function parseYahooChart(json) {
 }
 
 export async function fetchYahooQuote(symbol, corsProxy) {
-  const { json, via } = await fetchYahooJson(yahooChartPath(normalizeYahooSymbol(symbol)), { corsProxy, validate: parseYahooChart });
+  const { json, via } = await fetchYahooData(yahooChartPath(normalizeYahooSymbol(symbol)), { corsProxy, validate: parseYahooChart });
   return { ...parseYahooChart(json), source: `Yahoo (${via})` };
 }
 
@@ -126,6 +126,8 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
   const quotes = {};
   let liveCount = 0;
   let fallbackCount = 0;
+  const routesUsed = new Set();
+  const failures = [];
 
   let fx;
   if (mode === 'mock') {
@@ -159,10 +161,12 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
       try {
         const q = await fetchYahooQuote(symbol, corsProxy);
         quotes[inst.id] = { ...q, currency: q.currency || inst.currency, updatedAt: now };
+        routesUsed.add(q.source.replace(/^Yahoo \(|\)$/g, ''));
         liveCount += 1;
         return;
       } catch (e) {
         log.push({ level: 'info', message: `${inst.ticker} (${symbol}): ${e.message}` });
+        failures.push({ ticker: inst.ticker, symbol, error: e.message });
       }
     }
     fallbackCount += 1;
@@ -188,7 +192,16 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
             : 'Yahoo Finance niedostępne – ceny z ostatnich danych i transakcji',
   });
 
-  return { quotes, fx, status, lastRefresh: now, log: log.slice(0, 30) };
+  // Diagnostyka w konsoli: skąd ceny i dlaczego część nie przyszła na żywo
+  if (mode !== 'mock' && typeof console !== 'undefined') {
+    if (failures.length) {
+      console.warn(`[Kursy] Yahoo Finance: ${liveCount} na żywo, ${fallbackCount} z danych awaryjnych (ostatnie znane / transakcje).`, failures);
+    } else {
+      console.info(`[Kursy] Yahoo Finance: ${liveCount} notowań na żywo · trasa: ${[...routesUsed].join(', ') || '—'} · kursy walut: ${fx.source}`);
+    }
+  }
+
+  return { quotes, fx, status, lastRefresh: now, log: log.slice(0, 30), routes: [...routesUsed], live: liveCount, fallback: fallbackCount };
 }
 
 // Etap 3: historia notowań (domyślnie tygodniowa, 5 lat) – kurs skorygowany o dywidendy, jeśli dostępny
@@ -216,7 +229,7 @@ function parseYahooHistory(json) {
 
 export async function fetchYahooHistory(symbol, corsProxy, { range = '5y', interval = '1wk' } = {}) {
   const path = `/v8/finance/chart/${encodeURIComponent(normalizeYahooSymbol(symbol))}?range=${range}&interval=${interval}&events=div`;
-  const { json, via } = await fetchYahooJson(path, { corsProxy, validate: parseYahooHistory });
+  const { json, via } = await fetchYahooData(path, { corsProxy, validate: parseYahooHistory });
   return { ...parseYahooHistory(json), source: `Yahoo (${via})` };
 }
 
@@ -241,6 +254,6 @@ function parseYahooDividends(json) {
 
 export async function fetchYahooDividends(symbol, corsProxy) {
   const path = `/v8/finance/chart/${encodeURIComponent(normalizeYahooSymbol(symbol))}?range=5y&interval=1mo&events=div`;
-  const { json, via } = await fetchYahooJson(path, { corsProxy, validate: parseYahooDividends });
+  const { json, via } = await fetchYahooData(path, { corsProxy, validate: parseYahooDividends });
   return { ...parseYahooDividends(json), source: `Yahoo (${via})` };
 }

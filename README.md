@@ -194,6 +194,12 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Nowy wykres „Skład portfela” (grupa Portfel): wykres kołowy z udziałem procentowym walorów – spółki i ETF-y zsumowane ze wszystkich kont, obligacje per seria, konta gotówkowe/oszczędnościowe per konto, nieruchomości (jeśli widoczne w Portfelu). Nad wykresem panel filtrów z checkboxami: grupy (spółki, ETF-y, obligacje, konta, nieruchomości) i pojedyncze pozycje, „Zaznacz / Odznacz wszystko”; udziały i suma przeliczają się dynamicznie, wybór jest zapamiętywany.
 
+## Pobieranie kursów z Yahoo – trasy zapasowe i diagnostyka
+
+- `fetchYahooData` (src/lib/yahooFetch.js): serwer aplikacji `/api/yahoo` → proxy z ustawień → publiczne proxy CORS (corsproxy.io, allorigins raw i get, codetabs, cors.lol, thingproxy); przy błędzie HTTP danej trasy także druga domena Yahoo (query2). Działająca trasa zapamiętywana, niedziałające odpoczywają 90 s; gdy wszystkie zawiodły przed chwilą – szybkie przejście na dane awaryjne bez długiego czekania.
+- Po każdym odświeżeniu subtelny komunikat: „Kursy pobrane na żywo z Yahoo Finance (n) · trasa: …”, częściowo na żywo / z danych awaryjnych albo „Yahoo Finance niedostępne – kursy z danych awaryjnych (ostatnie znane i ceny z transakcji)”. W konsoli podsumowanie `[Kursy]` z listą walorów, które nie przyszły na żywo, i powodami; historia zapytań w `window.__yahooDiag`.
+- Mapowanie tickerów przed zapytaniem: końcówki XTB → Yahoo (`.PL` → `.WA`, `.UK` → `.L`, `.US` → bez końcówki, `.DE`, `.NL` → `.AS` itd.), także gdy końcówka jest w samym tickerze; ticker bez końcówki – giełda wg waluty (PLN `.WA`, EUR `.DE`, GBP `.L`, CHF `.SW`, USD bez końcówki).
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

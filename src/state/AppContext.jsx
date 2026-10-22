@@ -139,7 +139,7 @@ export function AppProvider({ children }) {
 
   const notify = useCallback((message, type = 'info') => setToast({ message, type, id: Date.now() }), []);
 
-  // silent – odświeżenie automatyczne (przy wejściu do aplikacji) bez komunikatu
+  // silent – odświeżenie automatyczne (przy wejściu do aplikacji); komunikat o źródle kursów pokazywany zawsze
   const refreshPrices = useCallback(
     async (modeOverride, { silent = false } = {}) => {
       const s = stateRef.current;
@@ -154,8 +154,12 @@ export function AppProvider({ children }) {
           trades: s.trades,
         });
         dispatch({ type: 'SET_PRICES', payload: result });
-        // Bez komunikatów o błędach: przy braku Yahoo aplikacja płynnie korzysta z ostatnich danych (status w nagłówku)
-        if (!silent && (result.status === 'live' || result.status === 'partial')) notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');
+        // Subtelny komunikat po każdym odświeżeniu: na żywo / częściowo / dane awaryjne (szczegóły w konsoli)
+        const route = result.routes?.length ? ` · trasa: ${result.routes.join(', ')}` : '';
+        if (result.status === 'live') notify(`Kursy pobrane na żywo z Yahoo Finance (${result.live})${route}`, 'success');
+        else if (result.status === 'partial') notify(`Kursy: ${result.live} na żywo, ${result.fallback} z danych awaryjnych (ostatnie znane / transakcje)${route}`, 'warn');
+        else if (result.status === 'offline') notify('Yahoo Finance niedostępne (sieć lub proxy zablokowane) – kursy z danych awaryjnych: ostatnie znane i ceny z transakcji', 'warn');
+        else if (!silent) notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');
       } catch {
         dispatch({ type: 'SET_PRICES', payload: { status: 'offline' } });
       } finally {

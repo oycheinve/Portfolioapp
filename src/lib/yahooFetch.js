@@ -1,17 +1,22 @@
 // Pobieranie danych z Yahoo Finance mimo blokady CORS przeglądarki.
 // Kolejność tras: 1) własny endpoint aplikacji /api/yahoo (Vercel Function w produkcji, middleware Vite lokalnie),
 // 2) proxy wpisane w ustawieniach, 3) publiczne proxy CORS (corsproxy.io, allorigins, codetabs).
-// Ostatnio działająca trasa jest zapamiętywana i próbowana jako pierwsza; trasy, które zawiodły, odpoczywają kilka minut.
+// Ostatnio działająca trasa jest zapamiętywana i próbowana jako pierwsza; trasy, które zawiodły, odpoczywają chwilę,
+// a gdy zawiodą wszystkie – próbowane są ponownie (także druga domena Yahoo: query2). Wynik diagnostyki w konsoli.
 
 const TIMEOUT_MS = 8000;
-const COOLDOWN_MS = 5 * 60 * 1000;
+const COOLDOWN_MS = 90 * 1000;
 const PREFERRED_KEY = 'wealth-app-yahoo-route';
-const YAHOO_HOST = 'https://query1.finance.yahoo.com';
+const YAHOO_HOSTS = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
 
+// unwrap – proxy zwracające JSON z treścią w polu (np. allorigins /get → { contents })
 export const PUBLIC_PROXIES = [
   { id: 'corsproxy', label: 'corsproxy.io', wrap: (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}` },
   { id: 'allorigins', label: 'allorigins', wrap: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
   { id: 'codetabs', label: 'codetabs', wrap: (url) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}` },
+  { id: 'corslol', label: 'cors.lol', wrap: (url) => `https://api.cors.lol/?url=${encodeURIComponent(url)}` },
+  { id: 'thingproxy', label: 'thingproxy', wrap: (url) => `https://thingproxy.freeboard.io/fetch/${url}` },
+  { id: 'allorigins-get', label: 'allorigins (get)', wrap: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, unwrap: (j) => (typeof j?.contents === 'string' ? JSON.parse(j.contents) : j) },
 ];
 
 const failedAt = {};
@@ -45,7 +50,8 @@ function customRoute(corsProxy) {
 }
 
 function routes(corsProxy, ignoreCooldown = false) {
-  const list = [{ id: 'app', label: 'serwer aplikacji', wrap: (_url, path) => `/api/yahoo?path=${encodeURIComponent(path)}` }];
+  // Serwer aplikacji sam próbuje query1 i query2 – jedna trasa
+  const list = [{ id: 'app', label: 'serwer aplikacji', wrap: (_url, path) => `/api/yahoo?path=${encodeURIComponent(path)}`, singleHost: true }];
   const custom = customRoute(corsProxy);
   if (custom) list.push(custom);
   list.push(...PUBLIC_PROXIES);
@@ -71,32 +77,62 @@ async function fetchJsonWithTimeout(url) {
   }
 }
 
-// Ścieżka API Yahoo (np. /v8/finance/chart/PKO.WA?range=5d&interval=1d) → JSON; validate(json) rzuca, gdy dane są niepełne
-export async function fetchYahooJson(path, { corsProxy, validate } = {}) {
-  const full = `${YAHOO_HOST}${path}`;
-  const errors = [];
-  const list = routes(corsProxy);
-  // Wszystkie trasy chwilowo „odpoczywają” – spróbuj ponownie każdej
-  const tryList = list.length ? list : routes(corsProxy, true);
-  for (const route of tryList) {
-    try {
-      const json = await fetchJsonWithTimeout(route.wrap(full, path));
-      if (validate) validate(json);
-      savePreferred(route.id);
-      delete failedAt[route.id];
-      return { json, via: route.label };
-    } catch (e) {
-      // Brak danych dla symbolu (np. błędny ticker) nie oznacza awarii trasy
-      if (!/Brak danych|Nieprawidłow|Za mało/.test(e.message)) failedAt[route.id] = Date.now();
-      errors.push(`${route.label}: ${e.name === 'AbortError' ? 'przekroczony czas' : e.message}`);
-      if (/Brak danych|Nieprawidłow|Za mało/.test(e.message)) break;
-    }
+const DATA_ERROR = /Brak danych|Nieprawidłow|Za mało/;
+
+// Diagnostyka ostatnich zapytań (trasa → wynik) – podgląd w konsoli: window.__yahooDiag
+const diag = [];
+function report(entry) {
+  diag.unshift({ at: new Date().toISOString(), ...entry });
+  diag.length = Math.min(diag.length, 50);
+  try {
+    window.__yahooDiag = diag;
+  } catch {
+    // poza przeglądarką
   }
-  throw new Error(errors.join('; ') || 'brak dostępnych tras');
 }
 
+// Ścieżka API Yahoo (np. /v8/finance/chart/PKO.WA?range=5d&interval=1d) → JSON; validate(json) rzuca, gdy dane są niepełne.
+// Kolejno wszystkie dostępne trasy; przy błędzie HTTP danej trasy także druga domena Yahoo (query2). Gdy wszystkie trasy
+// zawiodły przed chwilą (odpoczywają) – szybka odpowiedź bez ponownego czekania (dane awaryjne), po przerwie – nowa próba.
+export async function fetchYahooData(path, { corsProxy, validate } = {}) {
+  const errors = [];
+  const list = routes(corsProxy);
+  if (!list.length) {
+    const msg = 'wszystkie trasy do Yahoo chwilowo niedostępne (sieć zablokowana lub proxy nie odpowiadają)';
+    report({ path, ok: false, error: msg });
+    throw new Error(msg);
+  }
+  for (const route of list) {
+    for (const host of route.singleHost ? [YAHOO_HOSTS[0]] : YAHOO_HOSTS) {
+      try {
+        const raw = await fetchJsonWithTimeout(route.wrap(`${host}${path}`, path));
+        const json = route.unwrap ? route.unwrap(raw) : raw;
+        if (validate) validate(json);
+        savePreferred(route.id);
+        delete failedAt[route.id];
+        report({ path, ok: true, via: route.label, host });
+        return { json, via: route.label };
+      } catch (e) {
+        const msg = e.name === 'AbortError' ? 'przekroczony czas' : e.message;
+        errors.push(`${route.label}${route.singleHost ? '' : ` (${host.slice(8, 14)})`}: ${msg}`);
+        // Brak danych dla symbolu (np. błędny ticker) nie oznacza awarii trasy – kolejne trasy dadzą to samo
+        if (DATA_ERROR.test(e.message)) {
+          report({ path, ok: false, via: route.label, error: msg });
+          throw new Error(errors.join('; '));
+        }
+        failedAt[route.id] = Date.now();
+        // Druga domena Yahoo ma sens tylko przy odpowiedzi HTTP z błędem (np. 401/429), nie przy braku połączenia z proxy
+        if (!/^HTTP \d+/.test(e.message)) break;
+      }
+    }
+  }
+  report({ path, ok: false, error: errors.join('; ') });
+  throw new Error(errors.join('; '));
+}
+
+
 // Symbole Yahoo: GPW .WA, Xetra .DE, Londyn .L, USA bez końcówki. Zamienia też końcówki XTB (.PL, .UK, .US…).
-const XTB_SUFFIX = { PL: 'WA', UK: 'L', US: '', NL: 'AS', FR: 'PA', IT: 'MI', ES: 'MC', BE: 'BR', PT: 'LS', FI: 'HE', IE: 'IR', CH: 'SW', DK: 'CO', SE: 'ST', NO: 'OL', AT: 'VI', CZ: 'PR' };
+const XTB_SUFFIX = { PL: 'WA', UK: 'L', US: '', DE: 'DE', NL: 'AS', FR: 'PA', IT: 'MI', ES: 'MC', BE: 'BR', PT: 'LS', FI: 'HE', IE: 'IR', CH: 'SW', DK: 'CO', SE: 'ST', NO: 'OL', AT: 'VI', CZ: 'PR' };
 
 export function normalizeYahooSymbol(symbol) {
   const s = String(symbol || '').trim().toUpperCase();
@@ -109,12 +145,18 @@ export function normalizeYahooSymbol(symbol) {
   return s;
 }
 
-// Symbol Yahoo dla instrumentu: zapisany symbol (znormalizowany) albo ticker + .WA dla instrumentów w PLN
+// Domyślna giełda wg waluty, gdy ticker nie ma końcówki: PLN → GPW (.WA), EUR → Xetra (.DE), GBP → Londyn (.L),
+// CHF → SIX (.SW), USD → USA (bez końcówki)
+const SUFFIX_BY_CURRENCY = { PLN: '.WA', EUR: '.DE', GBP: '.L', CHF: '.SW', USD: '' };
+
+// Symbol Yahoo dla instrumentu: zapisany symbol (znormalizowany, np. DIG.PL → DIG.WA, CSPX.UK → CSPX.L) albo ticker –
+// z końcówką XTB zamienioną na Yahoo lub z końcówką giełdy wg waluty
 export function yahooSymbolFor(instrument) {
   if (instrument?.yahooSymbol) return normalizeYahooSymbol(instrument.yahooSymbol);
   const ticker = String(instrument?.ticker || '').trim().toUpperCase();
   if (!ticker) return null;
-  return (instrument.currency || 'PLN') === 'PLN' ? `${ticker}.WA` : ticker;
+  if (ticker.includes('.') || ticker.startsWith('^') || ticker.endsWith('=X')) return normalizeYahooSymbol(ticker);
+  return `${ticker}${SUFFIX_BY_CURRENCY[instrument.currency || 'PLN'] ?? ''}`;
 }
 
 // Ograniczenie równoległości – publiczne proxy źle znoszą kilkadziesiąt jednoczesnych zapytań
