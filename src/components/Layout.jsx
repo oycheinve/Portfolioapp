@@ -8,17 +8,21 @@ import { computeAllocation } from '../lib/allocation.js';
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard, mobile: true },
   { id: 'portfolio', label: 'Portfel', longLabel: 'Portfel', icon: Table2, mobile: true },
-  { id: 'stats', label: 'Statystyki', longLabel: 'Statystyki', icon: BarChart3, mobile: true },
+  { id: 'stats', label: 'Statystyki', longLabel: 'Statystyki', icon: BarChart3 },
   { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i notowania', icon: LineChart, mobile: true },
   { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins, mobile: true },
   { id: 'simulations', label: 'Symulacje', longLabel: 'Symulacje i kalkulator', icon: FlaskConical },
   { id: 'safe', label: 'Poduszka', longLabel: 'Poduszka finansowa', icon: Shield },
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
-  { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
+  { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target, mobile: true },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
+
+// Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
+const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'dividends', 'goals'];
+const MOBILE_ITEMS = MOBILE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
 const THEME_CYCLE = { light: 'dark', dark: 'system', system: 'light' };
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
@@ -171,7 +175,7 @@ export function Layout({ view, onNavigate, children }) {
         className="fixed inset-x-0 bottom-0 z-40 flex border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden dark:border-white/10 dark:bg-neutral-900/95"
         aria-label="Nawigacja dolna"
       >
-        {NAV_ITEMS.filter((n) => n.mobile).map((item) => (
+        {MOBILE_ITEMS.map((item) => (
           <BottomTab key={item.id} item={item} active={item.id === view} badge={badges[item.id]} onClick={() => onNavigate(item.id)} />
         ))}
         <BottomTab

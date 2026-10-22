@@ -76,7 +76,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Wykresy i notowania**: wybór wykresu z listy (wartość vs wkład, zysk, drawdown, dywidendy, mapa cieplna, notowania i waluty), obok wybór aktywów i benchmarków.
 - **Dywidendy**: automatyczna synchronizacja (historia dywidend z Yahoo Finance; offline – prognoza z historii wypłat), opcjonalne automatyczne księgowanie wypłat; usunięto sekcję raportów/WZA (`src/lib/dividendSync.js`).
 - **Symulacje i kalkulator** (nowa zakładka): Symulacja FIRE (opcje celu w zwijanym panelu, dochód pasywny), Stress test / Co jeśli, Kalkulator inwestycyjny (`src/lib/calculator.js`) – układ: dane wejściowe → wykres → wyniki.
-- Dolny pasek na telefonie: Pulpit, Portfel, Statystyki, Wykresy, Dywidendy, Więcej. Stare adresy `#/fire`, `#/stress`, `#/quotes` przekierowują do nowych miejsc.
+- Dolny pasek na telefonie: Pulpit, Portfel, Wykresy, Dywidendy, Cele, Więcej (Statystyki i pozostałe sekcje w arkuszu „Więcej”; kolejność w `MOBILE_ORDER` w `src/components/Layout.jsx`, menu boczne bez zmian). Stare adresy `#/fire`, `#/stress`, `#/quotes` przekierowują do nowych miejsc.
 
 ## Usprawnienia: Portfel, akordeony, własne benchmarki, koszty FX
 
