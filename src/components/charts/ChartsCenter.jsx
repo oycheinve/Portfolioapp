@@ -19,6 +19,7 @@ import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
 import { Button, Card, Dropdown, Input, Segmented, Select } from '../ui.jsx';
 import { DrawdownChart, ProfitChart, ValueChart } from './PortfolioCharts.jsx';
 import { DividendsMonthlyChart, DividendsYearlyChart } from './DividendCharts.jsx';
+import CompositionChart from './CompositionChart.jsx';
 import { benchmarkColor } from './chartUtils.jsx';
 import HeatmapCard from '../dashboard/HeatmapCard.jsx';
 import LivePricesCard from '../dashboard/LivePricesCard.jsx';
@@ -28,6 +29,7 @@ export const CHART_OPTIONS = [
   { id: 'value', label: 'Wartość vs wkład', group: 'Portfel', kind: 'series' },
   { id: 'profit', label: 'Zysk w czasie', group: 'Portfel', kind: 'series' },
   { id: 'drawdown', label: 'Drawdown (obsunięcie)', group: 'Portfel', kind: 'series' },
+  { id: 'composition', label: 'Skład portfela', group: 'Portfel', kind: 'composition' },
   { id: 'divMonthly', label: 'Dywidendy – miesięcznie', group: 'Dywidendy', kind: 'dividends' },
   { id: 'divYearly', label: 'Dywidendy – rocznie', group: 'Dywidendy', kind: 'dividends' },
   { id: 'heatmap', label: 'Mapa cieplna dnia', group: 'Rynek', kind: 'market' },
@@ -391,7 +393,9 @@ export default function ChartsCenter({ param }) {
       {option.id === 'heatmap' && valuation && <HeatmapCard valuation={valuation} />}
       {option.id === 'quotes' && <LivePricesCard />}
 
-      {option.kind !== 'market' && (
+      {option.kind === 'composition' && <CompositionChart />}
+
+      {option.kind !== 'market' && option.kind !== 'composition' && (
         <Card title={option.label} bodyClassName="p-4 sm:p-5">
           {chart === 'value' && <ValueChart data={series.points} span={span} benchmarks={[]} compareIds={compareIds} />}
           {chart === 'profit' && <ProfitChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} mode={compareIds.length ? 'PCT' : profitMode} onModeChange={setProfitMode} />}

@@ -190,6 +190,10 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Na górze zakładki Ustawienia: „Pobierz kopię zapasową (JSON)” – cały stan (konta, transakcje, wpłaty, dywidendy, obligacje, cele, ustawienia) oraz ustawienia widoków i kalkulatorów w jednym pliku; „Wczytaj kopię zapasową” – podgląd i walidacja pliku, potem przywrócenie danych (np. po wyczyszczeniu przeglądarki lub na innym urządzeniu).
 
+## Skład portfela (Wykresy)
+
+- Nowy wykres „Skład portfela” (grupa Portfel): wykres kołowy z udziałem procentowym walorów – spółki i ETF-y zsumowane ze wszystkich kont, obligacje per seria, konta gotówkowe/oszczędnościowe per konto, nieruchomości (jeśli widoczne w Portfelu). Nad wykresem panel filtrów z checkboxami: grupy (spółki, ETF-y, obligacje, konta, nieruchomości) i pojedyncze pozycje, „Zaznacz / Odznacz wszystko”; udziały i suma przeliczają się dynamicznie, wybór jest zapamiętywany.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |
