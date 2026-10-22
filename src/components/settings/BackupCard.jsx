@@ -34,7 +34,8 @@ export default function BackupCard() {
 
   const doImport = () => {
     if (backupFirst) actions.exportState();
-    actions.importRaw(preview.raw);
+    // Dane po naprawie rekordów (wartości domyślne dla brakujących pól)
+    actions.importRaw(preview.report?.data || preview.raw);
     setPreview(null);
   };
 

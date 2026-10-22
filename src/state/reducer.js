@@ -1,4 +1,5 @@
 import { COLLECTIONS, createEmptyState, migrateState } from './schema.js';
+import { normalizeBackup } from '../lib/backup.js';
 import { createDemoState } from './demoData.js';
 
 function touch(state) {
@@ -138,7 +139,8 @@ export function reducer(state, action) {
     }
 
     case 'IMPORT_STATE':
-      return migrateState(action.payload);
+      // Naprawa rekordów starszych kopii (brakujące pola → wartości domyślne) przed migracją
+      return migrateState(normalizeBackup(action.payload).data);
 
     case 'LOAD_DEMO': {
       const demo = createDemoState();

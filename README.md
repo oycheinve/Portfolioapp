@@ -188,7 +188,8 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 ## Kopia zapasowa (Ustawienia)
 
-- Na górze zakładki Ustawienia: „Pobierz kopię zapasową (JSON)” – cały stan (konta, transakcje, wpłaty, dywidendy, obligacje, cele, ustawienia) oraz ustawienia widoków i kalkulatorów w jednym pliku; „Wczytaj kopię zapasową” – podgląd i walidacja pliku, potem przywrócenie danych (np. po wyczyszczeniu przeglądarki lub na innym urządzeniu).
+- Na dole zakładki Ustawienia: „Pobierz kopię zapasową (JSON)” – cały stan (konta, transakcje, wpłaty, dywidendy, obligacje, cele, ustawienia) oraz ustawienia widoków i kalkulatorów w jednym pliku; „Wczytaj kopię zapasową” – podgląd i walidacja pliku, potem przywrócenie danych (np. po wyczyszczeniu przeglądarki lub na innym urządzeniu).
+- Wczytywanie jest wyrozumiałe dla starszych kopii: brakujące lub inaczej nazwane pola rekordów dostają wartości domyślne (np. `type` → `side` w transakcji, brak id, liczby jako tekst, daty z godziną lub „dd.mm.rrrr”, wpłata/wypłata ze znaku kwoty, nieznany typ konta → maklerskie). Rekordy bez daty są pomijane z ostrzeżeniem; braki nie blokują „Przywróć dane z kopii”.
 
 ## Skład portfela (Wykresy)
 

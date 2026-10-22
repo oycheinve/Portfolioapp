@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { reducer } from './reducer.js';
-import { COLLECTIONS, STATE_VERSION, STORAGE_KEY, migrateState, validateImported } from './schema.js';
+import { COLLECTIONS, STATE_VERSION, STORAGE_KEY, migrateState } from './schema.js';
+import { validateBackup } from '../lib/backup.js';
 import { createDemoState } from './demoData.js';
 import { autoFundingCashflows, buildSnapshot, isAutoFunding, isBondRedemption, isoDay, livePriceLookup } from '../lib/engine.js';
 import { refreshAllPrices } from '../lib/prices.js';
@@ -277,7 +278,7 @@ export function AppProvider({ children }) {
         try {
           const text = await file.text();
           const raw = JSON.parse(text);
-          const errors = validateImported(raw);
+          const { errors } = validateBackup(raw);
           if (errors.length) {
             notify(`Import odrzucony: ${errors.join(' ')}`, 'error');
             return false;
