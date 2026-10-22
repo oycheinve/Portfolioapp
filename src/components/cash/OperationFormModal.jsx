@@ -215,7 +215,7 @@ export default function OperationFormModal({ form, setForm, onSave }) {
               <option value="" disabled>
                 Wybierz konto…
               </option>
-              {state.accounts.map((a) => (
+              {state.accounts.filter((a) => a.type !== 'BONDS').map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name} ({ACCOUNT_TYPES[a.type].label})
                 </option>

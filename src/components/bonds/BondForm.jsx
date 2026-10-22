@@ -24,7 +24,7 @@ export function suggestSeries(type, purchaseDate) {
 
 export function emptyBond(accountId) {
   const date = todayISO();
-  return { id: null, type: 'EDO', series: suggestSeries('EDO', date), accountId, purchaseDate: date, quantity: 10, ...TYPE_DEFAULTS.EDO, inflationByYear: {}, addDeposit: true };
+  return { id: null, type: 'EDO', series: suggestSeries('EDO', date), accountId, purchaseDate: date, quantity: 10, ...TYPE_DEFAULTS.EDO, inflationByYear: {} };
 }
 
 export default function BondForm({ form, setForm, onSave }) {
@@ -166,14 +166,6 @@ export default function BondForm({ form, setForm, onSave }) {
           </div>
         )}
 
-        {!f.id && (
-          <Toggle
-            checked={!!f.addDeposit}
-            onChange={(v) => set({ addDeposit: v })}
-            label="Zapisz wpłatę własną w wysokości nominału"
-            description="Obligacje to osobny rejestr poduszki finansowej (poza IKE/IKZE) – wpłata pokrywa zakup. Bez niej brak środków uzupełni automatyczne „Uzupełnienie środków”."
-          />
-        )}
         <Badge tone={belka === 0 ? 'green' : 'amber'}>Belka {belka === 0 ? '0%' : `${Math.round(belka * 100)}%`} – rejestr „Obligacje skarbowe” (poduszka finansowa)</Badge>
       </div>
     </Modal>

@@ -170,12 +170,9 @@ export function createDemoState(today = new Date()) {
   }
 
   // Obligacje skarbowe
-  deposit('acc_bonds', '2024-03-11', 20000, 'Środki na obligacje');
   state.bonds.push({ id: 'bond_edo1', accountId: 'acc_bonds', type: 'EDO', series: 'EDO0334', purchaseDate: '2024-03-11', quantity: 120, firstYearRate: 6.8, margin: 2.0, inflation: 3.5 });
   state.bonds.push({ id: 'bond_coi1', accountId: 'acc_bonds', type: 'COI', series: 'COI0328', purchaseDate: '2024-03-11', quantity: 80, firstYearRate: 6.55, margin: 1.5, inflation: 3.5 });
-  deposit('acc_bonds', '2025-06-16', 10000, 'Środki na obligacje');
   state.bonds.push({ id: 'bond_tos1', accountId: 'acc_bonds', type: 'TOS', series: 'TOS0628', purchaseDate: '2025-06-16', quantity: 60, firstYearRate: 5.65, margin: 0, inflation: 0 });
-  deposit('acc_bonds', '2026-02-16', 5000, 'Środki na obligacje');
   state.bonds.push({ id: 'bond_ror1', accountId: 'acc_bonds', type: 'ROR', series: 'ROR0227', purchaseDate: '2026-02-16', quantity: 50, firstYearRate: 4.25, margin: 0, inflation: 4.0 });
 
   // Konto oszczędnościowe z miesięczną kapitalizacją odsetek

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { reducer } from './reducer.js';
 import { COLLECTIONS, STATE_VERSION, STORAGE_KEY, migrateState, validateImported } from './schema.js';
 import { createDemoState } from './demoData.js';
-import { autoFundingCashflows, bondRedemptionCashflows, buildSnapshot, isAutoFunding, isBondRedemption, isoDay, livePriceLookup } from '../lib/engine.js';
+import { autoFundingCashflows, buildSnapshot, isAutoFunding, isBondRedemption, isoDay, livePriceLookup } from '../lib/engine.js';
 import { refreshAllPrices } from '../lib/prices.js';
 import { fetchAllHistory } from '../lib/history.js';
 import { pendingSavingsInterest } from '../lib/savings.js';
@@ -76,8 +76,8 @@ export function AppProvider({ children }) {
 
   // Gotówka na rachunkach ≥ 0: zakupy bez pokrycia uzupełniane automatyczną wpłatą (poza kontami debetowymi)
   useEffect(() => {
-    // Razem z wpłatami uzupełniającymi: wypłaty z tytułu wykupu obligacji (transza wychodzi z portfela)
-    const desired = [...autoFundingCashflows(state), ...bondRedemptionCashflows(state)];
+    // Dawne automatyczne wypłaty z tytułu wykupu obligacji są usuwane – wykup po prostu znika z portfela
+    const desired = autoFundingCashflows(state);
     const current = state.cashflows.filter((c) => isAutoFunding(c) || isBondRedemption(c));
     const key = (list) =>
       list

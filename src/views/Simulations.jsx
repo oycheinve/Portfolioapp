@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Calculator, Droplets, Flame, FlaskConical, Landmark, Scale, Zap } from 'lucide-react';
+import { Calculator, Droplets, Flame, FlaskConical, Landmark, PiggyBank, Scale, Zap } from 'lucide-react';
 import EtfCostCalculator from '../components/simulations/EtfCostCalculator.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { computeAllocation } from '../lib/allocation.js';
@@ -8,6 +8,7 @@ import FireView from './Fire.jsx';
 import StressTestView from './StressTest.jsx';
 import InvestmentCalculator from '../components/simulations/InvestmentCalculator.jsx';
 import BondCalculator from '../components/simulations/BondCalculator.jsx';
+import IkzeCalculator from '../components/simulations/IkzeCalculator.jsx';
 
 export const SIMULATIONS = [
   { id: 'fire', label: 'Symulacja FIRE', description: 'Niezależność finansowa – ścieżka majątku i dochodu pasywnego', icon: Flame },
@@ -15,6 +16,7 @@ export const SIMULATIONS = [
   { id: 'topup', label: 'Kalkulator Inteligentnej Dopłaty', description: 'Plan zakupów wyrównujący wagi docelowe (z przewalutowaniem XTB 0,05%)', icon: Droplets },
   { id: 'etf', label: 'Kalkulator opłacalności ETF', description: 'TER, przewalutowanie XTB 0,05% i podatek – długoterminowy wpływ kosztów', icon: Scale },
   { id: 'calculator', label: 'Kalkulator inwestycyjny', description: 'Procent składany, TER i podatki wg konta', icon: Calculator },
+  { id: 'ikze', label: 'Kalkulator IKZE', description: 'Zwrot podatku wg zarobków i formy opodatkowania oraz wzrost kapitału w czasie', icon: PiggyBank },
   { id: 'bonds', label: 'Kalkulator obligacyjny', description: 'OTS / ROR / DOR / TOS / COI / EDO – przedterminowy wykup, horyzont w miesiącach, inflacja miesięczna', icon: Landmark },
 ];
 
@@ -72,6 +74,7 @@ export default function SimulationsView({ param, onNavigate }) {
       {type === 'etf' && <EtfCostCalculator />}
       {type === 'calculator' && <InvestmentCalculator />}
       {type === 'bonds' && <BondCalculator />}
+      {type === 'ikze' && <IkzeCalculator />}
     </div>
   );
 }

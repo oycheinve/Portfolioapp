@@ -1,7 +1,7 @@
 // Etap 3: szeregi czasowe dla Centrum Wykresów – wycena historyczna wybranego wycinka portfela,
 // wkład własny, rozbicie zysku, TWR, drawdown, benchmarki oraz dywidendy miesięczne/roczne.
 import { benchmarkLabel } from './constants.js';
-import { isoDay, netFlows, resolveAccountIds, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
+import { flowItems, isoDay, netFlows, resolveAccountIds, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
 
@@ -108,14 +108,17 @@ function pointFor(state, sel, accountIds, date, resolver) {
   const couponsNet = income.filter((i) => i.source === 'BOND').reduce((s, i) => s + i.net, 0);
   const isInterest = safeInterestFilter(state);
   const otherInterestNet = income.filter((i) => isInterest(i) && i.source !== 'BOND').reduce((s, i) => s + i.net, 0);
-  const bondPurchases = state.bonds.filter((b) => accountIds.includes(b.accountId) && b.purchaseDate <= date).reduce((s, b) => s + (Number(b.quantity) || 0) * 100, 0);
+  // Kapitał obligacji: zakupy − kupony − wykupy (rejestr obligacji bez gotówki)
+  const bondFlows = flowItems(state).filter((f) => String(f.source).startsWith('BOND_') && accountIds.includes(f.accountId) && f.date <= date);
+  const bondNetFlows = bondFlows.reduce((s, f) => s + (f.type === 'DEPOSIT' ? 1 : -1) * f.amount, 0);
+  const bondRedeemedGain = bondFlows.filter((f) => f.source === 'BOND_REDEEM').reduce((s, f) => s + (f.gain || 0), 0);
   const bondAccrued = v.bonds.reduce((s, b) => s + b.valuation.accruedNet, 0);
   const flows = netFlows(state, accountIds, null, date);
 
   const matchSel = (inst) => instrumentMatches(sel, inst);
   const all = () => true;
   const secContrib = anySecurities ? tradeNet(matchSel) - divNet(matchSel) : 0;
-  const bondsContrib = bondPurchases - couponsNet;
+  const bondsContrib = bondNetFlows;
   const cashContrib = flows - (tradeNet(all) - divNet(all)) - bondsContrib;
 
   let contrib;
@@ -123,7 +126,7 @@ function pointFor(state, sel, accountIds, date, resolver) {
   else contrib = secContrib + (useBonds ? bondsContrib : 0) + (useCash ? cashContrib : 0);
 
   const dividends = anySecurities ? divNet(matchSel) : 0;
-  const interest = (useBonds ? couponsNet + bondAccrued : 0) + (useCash ? otherInterestNet : 0);
+  const interest = (useBonds ? couponsNet + bondAccrued + bondRedeemedGain : 0) + (useCash ? otherInterestNet : 0);
   const profit = value - contrib;
   return {
     date,

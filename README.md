@@ -176,9 +176,14 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 ## Wykup obligacji, kalkulator obligacyjny, saldo konta oszczędnościowego
 
-- **Wykupione obligacje** nie są już częścią portfela ani nie zamieniają się w wolną gotówkę: od dnia wykupu transza znika z wyceny (Portfel, Poduszka, majątek), a kwota wykupu (nominał + odsetki netto) wychodzi z rejestru jako automatyczna wypłata „Wykup obligacji – środki do rozdysponowania” (rejestr wpłat, etykieta „auto · wykup obligacji”). Gotówka rejestru się nie zmienia; środki przypisujesz ręcznie (np. wpłata na konto oszczędnościowe, nowa transza). Zysk z transzy = odsetki.
+- **Obligacje – tylko aktywne transze**: rejestr obligacji nie ma gotówki (pojęcie „gotówki z kuponów” usunięte). Zakup transzy to wpływ kapitału do rejestru; kupony i wykup w terminie opuszczają portfel bez żadnego zapisu – środki księgujesz sam tam, gdzie trafiły. W wyniku i stopach zwrotu zysk transzy = odsetki; kupony i wykupy nie są liczone jako wypłaty. Dawne wpłaty/wypłaty na koncie obligacji i automatyczne zapisy wykupu są usuwane przy wczytaniu; rejestr obligacji nie występuje w rejestrze wpłat/wypłat ani w formularzu operacji.
 - **Kalkulator obligacyjny** (Symulacje): OTS, ROR, DOR, TOS, COI, EDO dla kwoty, miesiąca zakupu i horyzontu w miesiącach (suwak + skróty). Przedterminowy wykup z opłatą za każdą obligację (nie wyższą niż naliczone odsetki), podatek Belki od zysku po opłacie, reinwestycja po wykupie w terminie, kupony COI/ROR/DOR. Inflacja z miesięcznych odczytów CPI (tabela z możliwością wpisywania odczytów miesiąc po miesiącu – także w kalkulatorze), dla przyszłych miesięcy – założenie; stopa NBP dla ROR/DOR. Wynik: wartość netto, zysk, stopa roczna, wynik realny, opłaty; wykres wartości przy wykupie w każdym miesiącu i wskazanie najlepszej obligacji. Parametry ofert edytowalne.
 - **Konto oszczędnościowe**: brak wpłat/wypłat – w formularzu operacji tylko „Ustal saldo” (zmiana salda albo dopisanie odsetek). Ręczne zmiany salda nie trafiają do rejestru wpłat/wypłat ani do sum wpłat i wypłat w statystykach i raportach; w wyniku i statystykach saldo tego konta zmienia się wyłącznie o odsetki.
+
+## Kalkulator IKZE
+
+- Symulacje → „Kalkulator IKZE”: forma opodatkowania (skala 12%/32% z progiem 120 tys. zł liczonym z dochodu i jego wzrostu, liniowy 19%, ryczałt – odliczenie od przychodu wg stawki), działalność gospodarcza (limit JDG), wpłata pełnego limitu lub własnej kwoty, wzrost limitu r/r, stopa zwrotu, horyzont.
+- Wynik: zwrot podatku w bieżącym roku i suma zwrotów, suma wpłat, wartość IKZE i zysk, IKZE netto po 10% podatku przy wypłacie, przewaga nad zwykłym kontem (Belka 19%), opcjonalna reinwestycja zwrotów; wykres kapitału w czasie i tabela rok po roku.
 
 ## Architektura danych (`src/state/schema.js`)
 

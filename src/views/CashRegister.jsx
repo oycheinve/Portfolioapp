@@ -32,7 +32,8 @@ export default function CashRegister() {
   }, [state.cashflows]);
 
   // Konto oszczędnościowe nie ma operacji wpłat/wypłat – ręczne zmiany salda nie trafiają do rejestru
-  const savingsIds = useMemo(() => new Set(state.accounts.filter((a) => a.type === 'SAVINGS').map((a) => a.id)), [state.accounts]);
+  // (rejestr obligacji też nie ma operacji – kapitałem są wyłącznie aktywne transze)
+  const savingsIds = useMemo(() => new Set(state.accounts.filter((a) => a.type === 'SAVINGS' || a.type === 'BONDS').map((a) => a.id)), [state.accounts]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return state.cashflows
@@ -64,7 +65,7 @@ export default function CashRegister() {
 
   const perAccount = useMemo(() => {
     const today = isoDay(new Date());
-    return state.accounts.filter((a) => a.type !== 'SAVINGS').map((a) => {
+    return state.accounts.filter((a) => a.type !== 'SAVINGS' && a.type !== 'BONDS').map((a) => {
       const list = state.cashflows.filter((c) => c.accountId === a.id);
       const { deposits: dep, withdrawals: wd } = depositsWithdrawals(state, list);
       // Do limitu IKE/IKZE: bez rotacji wewnątrz konta i bez wpłat technicznych
@@ -147,7 +148,7 @@ export default function CashRegister() {
         <div className="flex flex-wrap items-end gap-2 border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
           <Select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className="w-auto min-w-[10rem]" aria-label="Konto">
             <option value="ALL">Wszystkie konta</option>
-            {state.accounts.filter((a) => a.type !== 'SAVINGS').map((a) => (
+            {state.accounts.filter((a) => a.type !== 'SAVINGS' && a.type !== 'BONDS').map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>

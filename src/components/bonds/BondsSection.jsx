@@ -17,7 +17,6 @@ export default function BondsSection() {
   const [form, setForm] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [toDelete, setToDelete] = useState(null);
-  const [deleteDeposit, setDeleteDeposit] = useState(true);
   const today = todayISO();
   const cpi = useMemo(() => getCpiTable(state.settings), [state.settings]);
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
@@ -49,7 +48,8 @@ export default function BondsSection() {
   // Wbudowany rejestr obligacji – tworzony przy pierwszej transzy
   const registry = state.accounts.find((a) => a.type === 'BONDS');
   const save = (f) => {
-    const { addDeposit, ...bond } = f;
+    // Zakup transzy to wpływ kapitału do rejestru – bez osobnej wpłaty (rejestr obligacji nie ma gotówki)
+    const { addDeposit, linkedCashflowId, ...bond } = f; // eslint-disable-line no-unused-vars
     let accountId = registry?.id;
     if (!accountId) accountId = actions.upsert('accounts', builtinBondsAccount(bond.purchaseDate)).id;
     const item = {
@@ -60,16 +60,6 @@ export default function BondsSection() {
       margin: Number(bond.margin) || 0,
       inflation: Number(bond.inflation) || 0,
     };
-    if (!bond.id && addDeposit) {
-      const cf = actions.upsert('cashflows', {
-        accountId: item.accountId,
-        date: item.purchaseDate,
-        type: 'DEPOSIT',
-        amount: item.quantity * 100,
-        note: `Zakup obligacji ${item.series}`,
-      });
-      item.linkedCashflowId = cf.id;
-    }
     actions.upsert('bonds', item);
     actions.notify(bond.id ? 'Zapisano transzę' : 'Dodano transzę obligacji', 'success');
     setForm(null);
@@ -202,7 +192,6 @@ export default function BondsSection() {
               icon={Trash2}
               onClick={() => {
                 actions.remove('bonds', toDelete.id);
-                if (deleteDeposit && toDelete.linkedCashflowId) actions.remove('cashflows', toDelete.linkedCashflowId);
                 actions.notify('Usunięto transzę', 'info');
                 setToDelete(null);
               }}
@@ -213,8 +202,7 @@ export default function BondsSection() {
         }
       >
         <div className="space-y-3 text-sm text-stone-600 dark:text-stone-300">
-          <p>Transza zniknie z wyceny majątku, a gotówka przeznaczona na jej zakup wróci do salda konta.</p>
-          {toDelete?.linkedCashflowId && <Toggle checked={deleteDeposit} onChange={setDeleteDeposit} label="Usuń także powiązaną wpłatę z rejestru" />}
+          <p>Transza zniknie z rejestru obligacji i z wyceny majątku (razem z jej historią w statystykach).</p>
         </div>
       </Modal>
     </Card>

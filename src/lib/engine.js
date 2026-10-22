@@ -42,6 +42,8 @@ export function depositsWithdrawals(state, cashflows) {
   for (const c of cashflows) {
     const amt = Number(c.amount) || 0;
     if (savings.has(c.accountId)) continue;
+    // Kupony i wykupy obligacji opuszczają portfel bez zapisu – to nie są wypłaty
+    if (c.source === 'BOND_COUPON' || c.source === 'BOND_REDEEM') continue;
     if (c.type === 'DEPOSIT') deposits += amt;
     else withdrawals += amt;
   }
@@ -194,13 +196,14 @@ export function computeHoldings(state, asOf, accountIds) {
 // Saldo gotówki na koncie: wpłaty − wypłaty − kupno + sprzedaż + przychody netto − zakup obligacji
 export function computeCashBalances(state, asOf, accountIds, incomeEvents) {
   const balances = {};
+  // Rejestr obligacji nie ma gotówki – kapitałem są wyłącznie aktywne transze (kupony i wykupy opuszczają portfel)
+  const noCash = new Set(state.accounts.filter((a) => a.type === 'BONDS').map((a) => a.id));
   const add = (accId, v) => {
-    if (!inFilter(accountIds, accId)) return;
+    if (!inFilter(accountIds, accId) || noCash.has(accId)) return;
     balances[accId] = (balances[accId] || 0) + v;
   };
   for (const a of state.accounts) if (inFilter(accountIds, a.id)) balances[a.id] = 0;
   for (const c of state.cashflows) {
-    // Wykup obligacji: kwota wykupu wpływa i od razu wychodzi z rejestru – saldo gotówki bez zmian
     if (c.date > asOf || isBondRedemption(c)) continue;
     const amt = Number(c.amount) || 0;
     add(c.accountId, c.type === 'DEPOSIT' ? amt : -amt);
@@ -227,33 +230,39 @@ export function computeCashBalances(state, asOf, accountIds, incomeEvents) {
 export const AUTO_FUND_PREFIX = 'autofund_';
 const LEGACY_FUND_PREFIX = 'bondfund_';
 
-// Wykup obligacji w terminie: transza znika z portfela (obligacje istnieją tylko, gdy są aktywne), a kwota wykupu
-// (nominał + odsetki netto) wychodzi z rejestru jako automatyczna wypłata „do rozdysponowania” – nie staje się wolną
-// gotówką. Użytkownik sam przypisuje środki (np. wpłata na konto oszczędnościowe lub zakup nowych obligacji).
-export const BOND_REDEEM_PREFIX = 'bondredeem_';
+// Obligacje skarbowe: rejestr bez gotówki – jedynym kapitałem są aktywne, posiadane transze. Zakup transzy to wpływ
+// kapitału do rejestru; kupony (netto) i wykup w terminie (nominał + odsetki netto) to odpływ – środki opuszczają portfel
+// i użytkownik sam księguje je tam, gdzie trafiły. Te przepływy liczą się w wyniku i stopach zwrotu (zysk transzy =
+// odsetki), ale nie są zapisami wpłat/wypłat w rejestrze. Dawne wpłaty/wypłaty na koncie obligacji są pomijane.
+const BOND_REDEEM_PREFIX = 'bondredeem_';
 
 export function isBondRedemption(c) {
   return String(c?.id || '').startsWith(BOND_REDEEM_PREFIX);
 }
 
-export function bondRedemptionCashflows(state, today = isoDay(new Date())) {
+const flowCache = new WeakMap();
+
+// Wszystkie przepływy kapitału: wpłaty/wypłaty z rejestru (poza kontem obligacji) + zakupy, kupony i wykupy obligacji
+export function flowItems(state) {
+  if (flowCache.has(state)) return flowCache.get(state);
+  const bondsAccounts = new Set(state.accounts.filter((a) => a.type === 'BONDS').map((a) => a.id));
+  const items = state.cashflows
+    .filter((c) => !bondsAccounts.has(c.accountId) && !isBondRedemption(c))
+    .map((c) => ({ accountId: c.accountId, date: c.date, type: c.type, amount: Number(c.amount) || 0, source: c.source }));
+  const today = isoDay(new Date());
   const cpi = getCpiTable(state.settings);
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
-  const out = [];
   for (const b of state.bonds) {
+    if (!accountsById[b.accountId] || !b.purchaseDate) continue;
+    const nominal = (Number(b.quantity) || 0) * 100;
+    items.push({ accountId: b.accountId, date: b.purchaseDate, type: 'DEPOSIT', amount: nominal, source: 'BOND_BUY', bondId: b.id });
     const v = valueBond(b, today, bondBelkaRate(b, accountsById[b.accountId]), cpi);
-    if (!v.matured || !v.maturityDate || !accountsById[b.accountId]) continue;
-    out.push({
-      id: `${BOND_REDEEM_PREFIX}${b.id}`,
-      accountId: b.accountId,
-      date: v.maturityDate,
-      type: 'WITHDRAWAL',
-      amount: Math.round(v.netValue * 100) / 100,
-      note: `Wykup obligacji ${b.series || b.type || ''} – środki do rozdysponowania`.replace('  ', ' '),
-      source: 'BOND_REDEEM',
-    });
+    const belka = bondBelkaRate(b, accountsById[b.accountId]);
+    for (const c of v.coupons) items.push({ accountId: b.accountId, date: c.date, type: 'WITHDRAWAL', amount: c.gross * (1 - belka), source: 'BOND_COUPON', bondId: b.id });
+    if (v.matured && v.maturityDate) items.push({ accountId: b.accountId, date: v.maturityDate, type: 'WITHDRAWAL', amount: v.netValue, source: 'BOND_REDEEM', bondId: b.id, gain: v.netValue - nominal });
   }
-  return out;
+  flowCache.set(state, items);
+  return items;
 }
 
 export function isAutoFunding(c) {
@@ -262,7 +271,7 @@ export function isAutoFunding(c) {
 }
 
 export function autoFundingCashflows(state, today = isoDay(new Date())) {
-  const eligible = state.accounts.filter((a) => a.type !== 'SAVINGS' && !a.allowNegativeCash);
+  const eligible = state.accounts.filter((a) => a.type !== 'SAVINGS' && a.type !== 'BONDS' && !a.allowNegativeCash);
   if (eligible.length === 0) return [];
   const ids = new Set(eligible.map((a) => a.id));
   const instrumentsById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
@@ -415,15 +424,15 @@ export function otherAssetsValue(state) {
 
 // Suma przepływów (wpłaty − wypłaty) w przedziale (from, to]
 export function netFlows(state, accountIds, from, to) {
-  return state.cashflows
+  return flowItems(state)
     .filter((c) => inFilter(accountIds, c.accountId) && (!from || c.date > from) && c.date <= to)
-    .reduce((s, c) => s + (c.type === 'DEPOSIT' ? 1 : -1) * (Number(c.amount) || 0), 0);
+    .reduce((s, c) => s + (c.type === 'DEPOSIT' ? 1 : -1) * c.amount, 0);
 }
 
-function flowsList(state, accountIds, from, to) {
-  return state.cashflows
+export function flowsList(state, accountIds, from, to) {
+  return flowItems(state)
     .filter((c) => inFilter(accountIds, c.accountId) && (!from || c.date > from) && c.date <= to)
-    .map((c) => ({ date: c.date, amount: (c.type === 'DEPOSIT' ? 1 : -1) * (Number(c.amount) || 0) }));
+    .map((c) => ({ date: c.date, amount: (c.type === 'DEPOSIT' ? 1 : -1) * c.amount }));
 }
 
 // Wartość z migawki dla zbioru kont; null, jeśli brak migawki <= date
@@ -554,7 +563,7 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   const contributionsAll = netFlows(state, accountIds, null, todayIso);
   const { deposits: depositsInPeriod, withdrawals: withdrawalsInPeriod } = depositsWithdrawals(
     state,
-    state.cashflows.filter((c) => accountIds.includes(c.accountId) && (!startDate || c.date > startDate) && c.date <= todayIso),
+    flowItems(state).filter((c) => accountIds.includes(c.accountId) && (!startDate || c.date > startDate) && c.date <= todayIso),
   );
 
   const totalReturn = endValue - startValue - flowsInPeriod;
@@ -639,7 +648,7 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
 }
 
 function firstFlowDate(state, accountIds) {
-  return state.cashflows
+  return flowItems(state)
     .filter((c) => accountIds.includes(c.accountId))
     .reduce((m, c) => (!m || c.date < m ? c.date : m), null);
 }

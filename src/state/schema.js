@@ -232,11 +232,15 @@ function migrateBonds(state) {
     state.accounts = state.accounts.filter((a) => !merged.has(a.id));
   }
   const accById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  // Rejestr obligacji bez gotówki: wpłaty/wypłaty na koncie obligacji (np. „Środki na obligacje”) i dawne
+  // automatyczne wypłaty z wykupu są zbędne – kapitałem są wyłącznie aktywne transze (zakup = wpływ kapitału)
+  state.cashflows = state.cashflows.filter((c) => accById[c.accountId]?.type !== 'BONDS' && !String(c.id).startsWith('bondredeem_'));
   const moved = state.bonds.filter((b) => b.accountId !== target.id);
   if (!moved.length) return;
   const extraFlows = [];
   const linked = new Set(moved.map((b) => b.linkedCashflowId).filter(Boolean));
-  state.cashflows = state.cashflows.map((c) => (linked.has(c.id) ? { ...c, accountId: target.id } : c));
+  // Powiązana wpłata na zakup transzy jest zbędna – zakup transzy sam jest wpływem kapitału do rejestru
+  state.cashflows = state.cashflows.filter((c) => !linked.has(c.id));
   for (const b of moved) {
     const origin = accById[b.accountId];
     if (origin && origin.type !== 'SAVINGS' && !b.linkedCashflowId) {
