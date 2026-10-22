@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Copy, Eraser, Plus, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Copy, Eraser, Plus, ShoppingBag, X } from 'lucide-react';
 import { budgetTotals, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -52,6 +52,14 @@ export default function BudgetView() {
   };
   const copyPrev = () => setRows((data[prevKey] || []).map((r) => ({ ...r, id: newRowId(), spent: '' })));
   const clear = () => setRows([]);
+  // Szybki zakup: kwota dopisywana do „Kwoty Wydanej” wybranej kategorii
+  const addPurchase = (id, amount) => {
+    const row = rows.find((r) => r.id === id);
+    if (!row) return null;
+    const spent = Math.round((toNum(row.spent) + amount) * 100) / 100;
+    setRows(rows.map((r) => (r.id === id ? { ...r, spent } : r)));
+    return { name: row.name, left: toNum(row.planned) - spent };
+  };
 
   const navBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-white/5';
   const linkBtn = 'inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5';
@@ -146,6 +154,8 @@ export default function BudgetView() {
         </table>
       </div>
 
+      <PurchasePanel rows={rows} onAdd={addPurchase} />
+
       <div className="mt-2 flex flex-wrap items-center gap-1">
         <button type="button" className={linkBtn} onClick={add}>
           <Plus size={14} /> Dodaj kategorię
@@ -202,5 +212,82 @@ function EditableCell({ value, display, onChange, label, numeric = false, placeh
     >
       {display || <span className="text-stone-400">{placeholder}</span>}
     </button>
+  );
+}
+
+// Panel „Dodaj zakup” pod tabelą: kategoria z tabeli + kwota → dopisanie do Kwoty Wydanej (Pozostało i RAZEM liczą się same)
+function PurchasePanel({ rows, onAdd }) {
+  const options = rows.filter((r) => String(r.name || '').trim());
+  const [categoryId, setCategoryId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [msg, setMsg] = useState(null);
+  const selected = options.some((r) => r.id === categoryId) ? categoryId : options[0]?.id || '';
+  const value = toNum(amount);
+  const valid = !!selected && value > 0;
+
+  useEffect(() => {
+    if (!msg) return undefined;
+    const t = setTimeout(() => setMsg(null), 3500);
+    return () => clearTimeout(t);
+  }, [msg]);
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!valid) {
+      setMsg({ error: true, text: !selected ? 'Najpierw dodaj kategorię w tabeli.' : 'Wpisz kwotę zakupu większą od zera.' });
+      return;
+    }
+    const res = onAdd(selected, value);
+    if (!res) return;
+    setAmount('');
+    setMsg({ error: false, text: `Dodano ${zl(value)} do „${res.name}” · pozostało ${zl(res.left)}` });
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/10 dark:bg-white/[0.03]" aria-label="Dodaj zakup">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-[#1f3864] uppercase dark:text-blue-300">
+        <ShoppingBag size={14} /> Dodaj zakup
+      </div>
+      <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]">
+        <select
+          value={selected}
+          onChange={(e) => setCategoryId(e.target.value)}
+          disabled={options.length === 0}
+          aria-label="Kategoria zakupu"
+          className="h-10 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-sm outline-none focus:border-[#1f3864] focus:ring-1 focus:ring-[#1f3864]/30 disabled:opacity-60 dark:border-white/10 dark:bg-neutral-800"
+        >
+          {options.length === 0 && <option value="">Brak kategorii</option>}
+          {options.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+        <label className="flex h-10 items-center rounded-md border border-stone-200 bg-white pr-2 focus-within:border-[#1f3864] focus-within:ring-1 focus-within:ring-[#1f3864]/30 dark:border-white/10 dark:bg-neutral-800">
+          <span className="sr-only">Kwota zakupu</span>
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value.replace(/[^\d,.]/g, ''))}
+            inputMode="decimal"
+            placeholder="0,00"
+            aria-label="Kwota zakupu"
+            className="h-full min-w-0 flex-1 bg-transparent px-2 text-right text-sm tabular outline-none"
+          />
+          <span className="text-sm text-stone-500">zł</span>
+        </label>
+        <button
+          type="submit"
+          disabled={options.length === 0}
+          className="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#1f3864] px-4 text-sm font-semibold text-white hover:bg-[#2a4a80] disabled:opacity-50 sm:col-span-1 dark:bg-blue-500 dark:text-neutral-950 dark:hover:bg-blue-400"
+        >
+          <Plus size={16} /> Dodaj do wydanych
+        </button>
+      </div>
+      {msg && (
+        <p role="status" className={`mt-2 flex items-center gap-1.5 text-xs ${msg.error ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+          {!msg.error && <Check size={14} />} {msg.text}
+        </p>
+      )}
+    </form>
   );
 }
