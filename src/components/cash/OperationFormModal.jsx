@@ -62,15 +62,19 @@ function modesFor(account) {
   return [...base, { value: 'BUY', label: 'Kupno' }, { value: 'SELL', label: 'Sprzedaż' }];
 }
 
+// Konta dostępne w formularzu: only = 'TRADE' – tylko konta inwestycyjne (kupno/sprzedaż)
+const formAccounts = (accounts, only) => accounts.filter((a) => a.type !== 'BONDS' && (only !== 'TRADE' || a.type !== 'SAVINGS'));
+
 // Wpłata/wypłata (z opcjonalnym aktywem), kupno/sprzedaż instrumentu lub ustalenie salda konta oszczędnościowego.
 // onSave otrzymuje listę zapisów: [{ collection, item }] oraz nowe instrumenty.
-export default function OperationFormModal({ form, setForm, onSave }) {
+// inline – formularz wysuwany w karcie (zamiast okna); only – 'TRADE' (kupno/sprzedaż) albo 'CASH' (wpłaty/wypłaty, saldo oszczędności).
+export default function OperationFormModal({ form, setForm, onSave, inline = false, only = null }) {
   const { state } = useApp();
   const open = !!form;
   const f = form || emptyOperation();
   const set = (patch) => setForm({ ...f, ...patch });
   const account = state.accounts.find((a) => a.id === f.accountId);
-  const modes = modesFor(account);
+  const modes = modesFor(account).filter((m) => (only === 'TRADE' ? m.value === 'BUY' || m.value === 'SELL' : only === 'CASH' ? m.value !== 'BUY' && m.value !== 'SELL' : true));
   const mode = modes.some((m) => m.value === f.mode) ? f.mode : modes[0]?.value || 'DEPOSIT';
   const isTrade = mode === 'BUY' || mode === 'SELL';
   const isBroker = account && account.type !== 'SAVINGS' && account.type !== 'BONDS';
@@ -194,20 +198,16 @@ export default function OperationFormModal({ form, setForm, onSave }) {
     onSave({ writes, instruments });
   };
 
-  return (
-    <Modal
-      open={open}
-      onClose={() => setForm(null)}
-      title={f.id ? 'Edytuj operację' : 'Nowa operacja'}
-      footer={
-        <>
-          <Button onClick={() => setForm(null)}>Anuluj</Button>
-          <Button variant="primary" disabled={errors.length > 0} onClick={save}>
-            Zapisz
-          </Button>
-        </>
-      }
-    >
+  const title = f.id ? 'Edytuj operację' : only === 'TRADE' ? 'Nowa transakcja – kupno / sprzedaż' : only === 'CASH' ? 'Nowa wpłata / wypłata' : 'Nowa operacja';
+  const footer = (
+    <>
+      <Button onClick={() => setForm(null)}>Anuluj</Button>
+      <Button variant="primary" disabled={errors.length > 0} onClick={save}>
+        Zapisz
+      </Button>
+    </>
+  );
+  const body = (
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Konto">
@@ -215,7 +215,7 @@ export default function OperationFormModal({ form, setForm, onSave }) {
               <option value="" disabled>
                 Wybierz konto…
               </option>
-              {state.accounts.filter((a) => a.type !== 'BONDS').map((a) => (
+              {formAccounts(state.accounts, only).map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name} ({ACCOUNT_TYPES[a.type].label})
                 </option>
@@ -383,6 +383,24 @@ export default function OperationFormModal({ form, setForm, onSave }) {
         )}
         {account?.type === 'IKZE' && mode === 'DEPOSIT' && amount > 0 && <p className="text-xs text-stone-500 dark:text-stone-400">Wpłata obniży podstawę opodatkowania w PIT za {year}.</p>}
       </div>
+  );
+
+  if (inline) {
+    if (!open) return null;
+    return (
+      <div role="region" aria-label={title} className="border-b border-stone-100 bg-blue-50/40 px-4 py-4 sm:px-5 dark:border-white/5 dark:bg-blue-500/5">
+        <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+        <div className="max-w-2xl">
+          {body}
+          <div className="mt-4 flex justify-end gap-2">{footer}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Modal open={open} onClose={() => setForm(null)} title={title} footer={footer}>
+      {body}
     </Modal>
   );
 }

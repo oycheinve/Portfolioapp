@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronDown, Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronDown, Pencil, Plus, Receipt, Search, Trash2, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, CASHFLOW_TYPES } from '../lib/constants.js';
 import { depositsWithdrawals, isoDay, limitDeposits, tradeAmounts } from '../lib/engine.js';
@@ -25,6 +25,8 @@ export default function CashRegister() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   // Rejestr wpłat i wypłat domyślnie zwinięty – rozwijany jednym kliknięciem
   const [registerOpen, setRegisterOpen] = useState(false);
+  // Formularze nowych operacji wysuwane w kartach (domyślnie schowane, chowane po zapisaniu)
+  const [newCash, setNewCash] = useState(null);
 
   const accountsById = useMemo(() => Object.fromEntries(state.accounts.map((a) => [a.id, a])), [state.accounts]);
   const years = useMemo(() => {
@@ -76,7 +78,13 @@ export default function CashRegister() {
     });
   }, [state]);
 
-  const openNew = () => setForm(emptyOperation(accountFilter !== 'ALL' ? accountFilter : state.accounts[0]?.id));
+  const toggleNewCash = () => setNewCash((cur) => (cur ? null : emptyOperation(accountFilter !== 'ALL' ? accountFilter : state.accounts.find((a) => a.type !== 'BONDS')?.id)));
+  const saveOperation = (close) => ({ writes, instruments }, edited) => {
+    if (instruments.length) actions.addMany('instruments', instruments);
+    for (const w of writes) actions.upsert(w.collection, w.item);
+    actions.notify(edited ? 'Zapisano operację' : 'Dodano operację', 'success');
+    close();
+  };
   const openEdit = (c) => setForm(operationFromCashflow(c));
   const instById = useMemo(() => Object.fromEntries(state.instruments.map((i) => [i.id, i])), [state.instruments]);
 
@@ -152,20 +160,21 @@ export default function CashRegister() {
               <span className="block truncate text-sm font-semibold">Rejestr wpłat i wypłat</span>
               <span className="block truncate text-xs text-stone-500 dark:text-stone-400">
                 {registerOpen
-                  ? 'Wpłaty i wypłaty własne – podstawa wyliczenia wkładu netto i Zysku Total · kupno/sprzedaż i saldo oszczędności w „Dodaj operację”'
+                  ? 'Wpłaty i wypłaty własne – podstawa wyliczenia wkładu netto i Zysku Total · saldo oszczędności też przez „Wpłaty i wypłaty”'
                   : `${totals.count} operacji · wkład netto ${formatPLN(totals.net)}${accountFilter !== 'ALL' || yearFilter !== 'ALL' || typeFilter !== 'ALL' || query.trim() ? ' (aktywne filtry)' : ''} – rozwiń, aby przeglądać, filtrować i edytować`}
               </span>
             </span>
           </button>
           <div className="flex flex-wrap items-center gap-2">
             <Button icon={ChevronDown} onClick={() => setRegisterOpen((o) => !o)} aria-expanded={registerOpen} className={registerOpen ? '[&>svg]:rotate-180' : ''}>
-              {registerOpen ? 'Zwiń' : 'Pokaż wpłaty i wypłaty'}
+              {registerOpen ? 'Zwiń listę' : 'Pokaż listę'}
             </Button>
-            <Button variant="primary" icon={Plus} onClick={openNew} disabled={state.accounts.length === 0}>
-              Dodaj operację
+            <Button variant="primary" icon={newCash ? X : Plus} onClick={toggleNewCash} disabled={state.accounts.length === 0} aria-expanded={!!newCash}>
+              {newCash ? 'Schowaj formularz' : 'Wpłaty i wypłaty'}
             </Button>
           </div>
         </header>
+        <OperationFormModal inline only="CASH" form={newCash} setForm={setNewCash} onSave={(r) => saveOperation(() => setNewCash(null))(r, false)} />
         {registerOpen && (
           <div id="cash-register-body">
             <div className="flex flex-wrap items-end gap-2 border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
@@ -296,7 +305,7 @@ export default function CashRegister() {
         )}
       </section>
 
-      <TradesCard accountFilter={accountFilter} yearFilter={yearFilter} onEdit={(t) => setForm(operationFromTrade(t))} />
+      <TradesCard accountFilter={accountFilter} yearFilter={yearFilter} onEdit={(t) => setForm(operationFromTrade(t))} onSaveNew={saveOperation} />
 
       <XtbImportCard />
 
@@ -311,12 +320,7 @@ export default function CashRegister() {
       <OperationFormModal
         form={form}
         setForm={setForm}
-        onSave={({ writes, instruments }) => {
-          if (instruments.length) actions.addMany('instruments', instruments);
-          for (const w of writes) actions.upsert(w.collection, w.item);
-          actions.notify(form?.id ? 'Zapisano operację' : 'Dodano operację', 'success');
-          setForm(null);
-        }}
+        onSave={(r) => saveOperation(() => setForm(null))(r, !!form?.id)}
       />
 
       <Modal
@@ -363,10 +367,16 @@ function SummaryTile({ label, value, icon: Icon, tone = '' }) {
 }
 
 // Transakcje kupna/sprzedaży (ręczne i zaimportowane z XTB)
-function TradesCard({ accountFilter, yearFilter, onEdit }) {
+// Lista domyślnie zwinięta; „Dodaj transakcję” wysuwa formularz kupna/sprzedaży, chowany po zapisaniu.
+function TradesCard({ accountFilter, yearFilter, onEdit, onSaveNew }) {
   const { state, actions } = useApp();
   const [toDelete, setToDelete] = useState(null);
   const [limit, setLimit] = useState(15);
+  const [open, setOpen] = useState(false);
+  const [newTrade, setNewTrade] = useState(null);
+  const brokerAccounts = state.accounts.filter((a) => a.type !== 'SAVINGS' && a.type !== 'BONDS');
+  const toggleNewTrade = () =>
+    setNewTrade((cur) => (cur ? null : { ...emptyOperation(brokerAccounts.some((a) => a.id === accountFilter) ? accountFilter : brokerAccounts[0]?.id), mode: 'BUY' }));
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
   const list = state.trades
@@ -374,43 +384,69 @@ function TradesCard({ accountFilter, yearFilter, onEdit }) {
     .filter((t) => yearFilter === 'ALL' || t.date.startsWith(yearFilter))
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   return (
-    <Card title="Transakcje kupna i sprzedaży" subtitle={`${list.length} transakcji · koszt zawiera prowizje i przewalutowanie`} icon={ArrowLeftRight} bodyClassName="p-0 sm:p-0">
-      {list.length === 0 ? (
-        <EmptyState icon={ArrowLeftRight} title="Brak transakcji" description="Dodaj kupno przez „Dodaj operację” albo zaimportuj historię z XTB." />
-      ) : (
-        <>
-          <ul className="divide-y divide-stone-100 dark:divide-white/5">
-            {list.slice(0, limit).map((t) => {
-              const inst = instById[t.instrumentId];
-              const acc = accountsById[t.accountId];
-              const amt = tradeAmounts(t, acc, inst);
-              const buy = t.side === 'BUY';
-              return (
-                <li key={t.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
-                  <Badge tone={buy ? 'blue' : 'amber'}>{buy ? 'Kupno' : 'Sprzedaż'}</Badge>
-                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onEdit(t)}>
-                    <div className="truncate text-sm font-medium">
-                      {inst?.ticker || '?'} <span className="font-normal text-stone-500">· {formatNumber(Number(t.quantity), 4)} × {formatMoney(Number(t.price), t.currency || inst?.currency || 'PLN')}</span>
-                    </div>
-                    <div className="truncate text-xs text-stone-500 dark:text-stone-400">
-                      {formatDate(t.date)} · {acc?.name || 'Usunięte konto'}
-                      {t.source === 'XTB' ? ' · import XTB' : ''}
-                      {amt.fxFee > 0 ? ` · FX ${formatPLN(amt.fxFee)}` : ''}
-                    </div>
-                  </button>
-                  <div className={`text-sm font-semibold tabular ${buy ? '' : 'text-emerald-700 dark:text-emerald-400'}`}>{formatPLN(buy ? -amt.buyCost : amt.sellProceeds, { sign: true })}</div>
-                  <IconButton icon={Pencil} label="Edytuj transakcję" onClick={() => onEdit(t)} />
-                  <IconButton icon={Trash2} label="Usuń transakcję" onClick={() => setToDelete(t)} className="hover:text-red-600" />
-                </li>
-              );
-            })}
-          </ul>
-          {list.length > limit && (
-            <button type="button" onClick={() => setLimit((l) => l + 30)} className="w-full border-t border-stone-100 py-2.5 text-sm font-medium text-blue-600 hover:bg-stone-50 dark:border-white/5 dark:text-blue-400 dark:hover:bg-white/[0.03]">
-              Pokaż więcej ({list.length - limit})
-            </button>
+    <section className="min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900">
+      <header className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 ${open || newTrade ? 'border-b border-stone-100 dark:border-white/5' : ''}`}>
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="trades-list-body" className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-white/5 dark:text-stone-300">
+            <ArrowLeftRight size={16} />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold">Transakcje kupna i sprzedaży</span>
+            <span className="block truncate text-xs text-stone-500 dark:text-stone-400">
+              {list.length} transakcji · koszt zawiera prowizje i przewalutowanie{open ? '' : ' – rozwiń, aby przeglądać i edytować'}
+            </span>
+          </span>
+        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button icon={ChevronDown} onClick={() => setOpen((o) => !o)} aria-expanded={open} className={open ? '[&>svg]:rotate-180' : ''}>
+            {open ? 'Zwiń listę' : 'Pokaż listę'}
+          </Button>
+          <Button variant="primary" icon={newTrade ? X : Plus} onClick={toggleNewTrade} disabled={brokerAccounts.length === 0} aria-expanded={!!newTrade}>
+            {newTrade ? 'Schowaj formularz' : 'Dodaj transakcję (Kupno/Sprzedaż)'}
+          </Button>
+        </div>
+      </header>
+      <OperationFormModal inline only="TRADE" form={newTrade} setForm={setNewTrade} onSave={(r) => onSaveNew(() => setNewTrade(null))(r, false)} />
+      {open && (
+        <div id="trades-list-body">
+          {list.length === 0 ? (
+            <EmptyState icon={ArrowLeftRight} title="Brak transakcji" description="Dodaj kupno przyciskiem „Dodaj transakcję (Kupno/Sprzedaż)” albo zaimportuj historię z XTB." />
+          ) : (
+            <>
+              <ul className="divide-y divide-stone-100 dark:divide-white/5">
+                {list.slice(0, limit).map((t) => {
+                  const inst = instById[t.instrumentId];
+                  const acc = accountsById[t.accountId];
+                  const amt = tradeAmounts(t, acc, inst);
+                  const buy = t.side === 'BUY';
+                  return (
+                    <li key={t.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                      <Badge tone={buy ? 'blue' : 'amber'}>{buy ? 'Kupno' : 'Sprzedaż'}</Badge>
+                      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onEdit(t)}>
+                        <div className="truncate text-sm font-medium">
+                          {inst?.ticker || '?'} <span className="font-normal text-stone-500">· {formatNumber(Number(t.quantity), 4)} × {formatMoney(Number(t.price), t.currency || inst?.currency || 'PLN')}</span>
+                        </div>
+                        <div className="truncate text-xs text-stone-500 dark:text-stone-400">
+                          {formatDate(t.date)} · {acc?.name || 'Usunięte konto'}
+                          {t.source === 'XTB' ? ' · import XTB' : ''}
+                          {amt.fxFee > 0 ? ` · FX ${formatPLN(amt.fxFee)}` : ''}
+                        </div>
+                      </button>
+                      <div className={`text-sm font-semibold tabular ${buy ? '' : 'text-emerald-700 dark:text-emerald-400'}`}>{formatPLN(buy ? -amt.buyCost : amt.sellProceeds, { sign: true })}</div>
+                      <IconButton icon={Pencil} label="Edytuj transakcję" onClick={() => onEdit(t)} />
+                      <IconButton icon={Trash2} label="Usuń transakcję" onClick={() => setToDelete(t)} className="hover:text-red-600" />
+                    </li>
+                  );
+                })}
+              </ul>
+              {list.length > limit && (
+                <button type="button" onClick={() => setLimit((l) => l + 30)} className="w-full border-t border-stone-100 py-2.5 text-sm font-medium text-blue-600 hover:bg-stone-50 dark:border-white/5 dark:text-blue-400 dark:hover:bg-white/[0.03]">
+                  Pokaż więcej ({list.length - limit})
+                </button>
+              )}
+            </>
           )}
-        </>
+        </div>
       )}
       <Modal
         open={!!toDelete}
@@ -435,6 +471,6 @@ function TradesCard({ accountFilter, yearFilter, onEdit }) {
       >
         {toDelete && <p className="text-sm text-stone-600 dark:text-stone-300">Transakcja zostanie usunięta – zmieni to pozycje, gotówkę i statystyki portfela.</p>}
       </Modal>
-    </Card>
+    </section>
   );
 }
