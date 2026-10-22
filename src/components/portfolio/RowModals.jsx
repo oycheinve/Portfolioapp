@@ -140,6 +140,9 @@ export function InstrumentEditModal({ instrumentId, onClose }) {
           <Field label="TER (%)">
             <Input type="number" step="0.01" min="0" value={f.ter ?? 0} onChange={(e) => set({ ter: e.target.value })} />
           </Field>
+          <Field label="Strona firmy (logo w raporcie X)" className="col-span-2" hint="Domena, np. lpp.com – puste = wbudowana lista spółek">
+            <Input value={f.logoDomain || ''} onChange={(e) => set({ logoDomain: e.target.value.trim() })} placeholder="np. lpp.com" />
+          </Field>
           <Field label="Sektor" className="col-span-2">
             <Input value={f.sector || ''} onChange={(e) => set({ sector: e.target.value })} />
           </Field>

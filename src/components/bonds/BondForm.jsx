@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useApp } from '../../state/AppContext.jsx';
-import { ACCOUNT_TYPES, BOND_TYPES } from '../../lib/constants.js';
+import { BOND_TYPES } from '../../lib/constants.js';
 import { belkaRateForAccount } from '../../lib/tax.js';
 import { bondSchedule, getCpiTable } from '../../lib/bonds.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
@@ -32,7 +32,8 @@ export default function BondForm({ form, setForm, onSave }) {
   const open = !!form;
   const f = form || emptyBond('');
   const type = BOND_TYPES[f.type];
-  const account = state.accounts.find((a) => a.id === f.accountId);
+  // Wbudowany rejestr obligacji (osobna kategoria poduszki, nigdy IKE/IKZE)
+  const account = state.accounts.find((a) => a.id === f.accountId) || state.accounts.find((a) => a.type === 'BONDS');
   const accountBelka = account ? belkaRateForAccount(account) : 0.19;
   const belka = f.belkaEnabled === false ? 0 : accountBelka;
   const cpi = useMemo(() => getCpiTable(state.settings), [state.settings]);
@@ -50,7 +51,6 @@ export default function BondForm({ form, setForm, onSave }) {
 
   const qty = Math.floor(Number(f.quantity) || 0);
   const errors = [];
-  if (!f.accountId) errors.push('Wybierz konto');
   if (qty <= 0) errors.push('Liczba sztuk > 0');
   if (!f.purchaseDate) errors.push('Data zakupu');
   const cpiYears = type?.indexed === 'CPI' ? Array.from({ length: type.years - 1 }, (_, i) => i + 2) : [];
@@ -82,20 +82,6 @@ export default function BondForm({ form, setForm, onSave }) {
           </Field>
           <Field label="Seria" className="col-span-2 sm:col-span-1">
             <Input value={f.series} onChange={(e) => set({ series: e.target.value.toUpperCase() })} />
-          </Field>
-          <Field label="Konto" className="col-span-2" hint={account ? `Podatek Belki od odsetek: ${accountBelka === 0 ? '0% (konto emerytalne / zwolnione)' : `${Math.round(belka * 100)}%`}` : undefined}>
-            <Select value={f.accountId} onChange={(e) => set({ accountId: e.target.value })}>
-              <option value="" disabled>
-                Wybierz konto…
-              </option>
-              {state.accounts
-                .filter((a) => a.type !== 'SAVINGS')
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({ACCOUNT_TYPES[a.type].label})
-                  </option>
-                ))}
-            </Select>
           </Field>
           <Field label="Data zakupu">
             <Input type="date" value={f.purchaseDate} max={todayISO()} onChange={(e) => onDateChange(e.target.value)} />
@@ -184,11 +170,11 @@ export default function BondForm({ form, setForm, onSave }) {
           <Toggle
             checked={!!f.addDeposit}
             onChange={(v) => set({ addDeposit: v })}
-            label="Dodaj wpłatę na konto w wysokości nominału"
-            description="Zakup obligacji pobiera gotówkę z konta – wpłata zachowa poprawny wkład własny i saldo"
+            label="Zapisz wpłatę własną w wysokości nominału"
+            description="Obligacje to osobny rejestr poduszki finansowej (poza IKE/IKZE) – wpłata pokrywa zakup. Bez niej brak środków uzupełni automatyczne „Uzupełnienie środków”."
           />
         )}
-        {account && <Badge tone={belka === 0 ? 'green' : 'amber'}>Belka {belka === 0 ? '0%' : `${Math.round(belka * 100)}%`} – {account.name}</Badge>}
+        <Badge tone={belka === 0 ? 'green' : 'amber'}>Belka {belka === 0 ? '0%' : `${Math.round(belka * 100)}%`} – rejestr „Obligacje skarbowe” (poduszka finansowa)</Badge>
       </div>
     </Modal>
   );

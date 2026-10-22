@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Landmark, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { ACCOUNT_TYPES, BOND_TYPES } from '../../lib/constants.js';
+import { BOND_TYPES, BUILTIN_BONDS_ID, builtinBondsAccount } from '../../lib/constants.js';
 import { bondSchedule, getCpiTable, valueBond } from '../../lib/bonds.js';
 import { bondBelkaRate } from '../../lib/tax.js';
 import { formatDate, formatPLN, formatPercent, todayISO, uid } from '../../lib/format.js';
@@ -46,10 +46,15 @@ export default function BondsSection() {
   };
   const nextMaturity = active[0];
 
+  // Wbudowany rejestr obligacji – tworzony przy pierwszej transzy
+  const registry = state.accounts.find((a) => a.type === 'BONDS');
   const save = (f) => {
     const { addDeposit, ...bond } = f;
+    let accountId = registry?.id;
+    if (!accountId) accountId = actions.upsert('accounts', builtinBondsAccount(bond.purchaseDate)).id;
     const item = {
       ...bond,
+      accountId,
       id: bond.id || uid('bond'),
       firstYearRate: Number(bond.firstYearRate) || 0,
       margin: Number(bond.margin) || 0,
@@ -73,15 +78,25 @@ export default function BondsSection() {
   return (
     <Card
       title="Obligacje Skarbowe"
-      subtitle="Transze EDO / COI / TOS / ROR · odsetki narosłe na dziś, kupony i daty wykupu"
+      subtitle="Wbudowany rejestr poduszki finansowej (osobna kategoria, poza IKE/IKZE) · transze EDO / COI / TOS / ROR, odsetki narosłe, kupony i wykup"
       icon={Landmark}
       actions={
-        <Button variant="primary" icon={Plus} onClick={() => setForm(emptyBond((state.accounts.find((a) => a.type === 'BONDS') || state.accounts.find((a) => a.type !== 'SAVINGS'))?.id || ''))} disabled={!state.accounts.some((a) => a.type !== 'SAVINGS')}>
+        <Button variant="primary" icon={Plus} onClick={() => setForm(emptyBond(registry?.id || BUILTIN_BONDS_ID))}>
           Dodaj transzę
         </Button>
       }
       bodyClassName="p-0 sm:p-0"
     >
+      {registry && (
+        <div className="border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
+          <Toggle
+            checked={registry.belkaEnabled !== false}
+            onChange={(v) => actions.upsert('accounts', { ...registry, belkaEnabled: v })}
+            label="Wliczaj podatek Belki (19%) od odsetek obligacji"
+            description="Wyłącz, aby pokazywać odsetki brutto (np. przy samodzielnym rozliczeniu)."
+          />
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-4 border-b border-stone-100 px-4 py-4 sm:grid-cols-5 sm:px-5 dark:border-white/5">
         <Kpi label="Nominał aktywnych" value={formatPLN(totals.nominal)} />
         <Kpi label="Narosłe odsetki netto" value={formatPLN(totals.accruedNet)} tone="text-emerald-700 dark:text-emerald-400" />
@@ -103,7 +118,7 @@ export default function BondsSection() {
               <tr className="border-b border-stone-100 text-left text-xs text-stone-500 dark:border-white/5 dark:text-stone-400">
                 <th className="w-8 px-2 py-2" />
                 <th className="px-2 py-2 font-medium">Seria</th>
-                <th className="px-3 py-2 font-medium">Konto</th>
+                <th className="px-3 py-2 font-medium">Podatek</th>
                 <th className="px-3 py-2 font-medium">Zakup</th>
                 <th className="px-3 py-2 text-right font-medium">Sztuk</th>
                 <th className="px-3 py-2 text-right font-medium">Oprocent.</th>
@@ -128,10 +143,7 @@ export default function BondsSection() {
                         <div className="text-xs text-stone-500 dark:text-stone-400">{BOND_TYPES[r.bond.type]?.label.split(' – ')[1]}</div>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="max-w-[11rem] truncate">{r.account?.name}</div>
-                        <Badge tone={r.belka === 0 ? 'green' : 'amber'}>
-                          {ACCOUNT_TYPES[r.account?.type]?.label} · Belka {r.belka === 0 ? '0%' : `${Math.round(r.belka * 100)}%`}
-                        </Badge>
+                        <Badge tone={r.belka === 0 ? 'green' : 'amber'}>Belka {r.belka === 0 ? '0%' : `${Math.round(r.belka * 100)}%`}</Badge>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.bond.purchaseDate)}</td>
                       <td className="px-3 py-2 text-right">

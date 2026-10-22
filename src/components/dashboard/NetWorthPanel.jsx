@@ -81,8 +81,11 @@ export default function NetWorthPanel({ valuation, compact = false }) {
                 </PieChart>
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-[10px] text-stone-500 dark:text-stone-400">Klasy</span>
-                <span className={big ? 'text-lg font-semibold' : 'text-sm font-semibold'}>{segments.length}</span>
+                <span className={`${big ? 'text-xs' : 'text-[10px]'} text-stone-500 dark:text-stone-400`}>Łączny majątek</span>
+                <span className={`${big ? 'text-xl sm:text-2xl' : 'text-sm'} font-bold tabular leading-tight`}>
+                  {big ? `${Math.round(netWorth).toLocaleString('pl-PL')} zł` : formatPLN(netWorth, { compact: true })}
+                </span>
+                <span className={`${big ? 'text-[11px]' : 'text-[9px]'} text-stone-500 dark:text-stone-400`}>{segments.length} {segments.length === 1 ? 'klasa' : segments.length < 5 ? 'klasy' : 'klas'} aktywów</span>
               </div>
             </div>
             <ul className={big ? 'grid w-full grid-cols-1 gap-1.5 text-sm' : 'grid flex-1 grid-cols-1 gap-1.5 text-sm'}>

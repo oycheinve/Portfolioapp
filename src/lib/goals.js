@@ -77,8 +77,13 @@ function measure(goal, current, target) {
     const pct = span > 0 ? Math.max(0, (start - current) / span) : current <= target ? 1 : 0;
     return { current, target, start, pct, capped: Math.min(1, pct), done: current <= target, direction: 'DOWN' };
   }
-  const pct = target > 0 ? Math.max(0, current / target) : 0;
-  return { current, target, pct, capped: Math.min(1, pct), done: target > 0 && current >= target, direction: 'UP' };
+  // Postęp liczony od wartości startowej (stan w chwili ustawienia celu = 0%): np. cel 450 przy starcie 435 –
+  // 435 to 0%, 442,5 to 50%. Bez wartości startowej (lub gdy start ≥ cel) – od zera.
+  const rawStart = Number(goal.startValue);
+  const start = goal.startValue !== undefined && goal.startValue !== null && Number.isFinite(rawStart) && rawStart > 0 && rawStart < target ? rawStart : 0;
+  const span = target - start;
+  const pct = span > 0 ? Math.max(0, (current - start) / span) : 0;
+  return { current, target, start, pct, capped: Math.min(1, pct), done: target > 0 && current >= target, direction: 'UP' };
 }
 
 export function goalProgress(state, goal) {

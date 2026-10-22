@@ -13,8 +13,8 @@ import BondsSection from '../components/bonds/BondsSection.jsx';
 import { CpiCard, SavingsCards } from '../components/bonds/SavingsSection.jsx';
 
 // Poduszka finansowa = konta oszczędnościowe i konta obligacji skarbowych (obligacje + gotówka na nich).
-// Gotówka i obligacje na kontach inwestycyjnych należą do portfela inwestycyjnego – pokazane osobno, niewliczane.
-export default function SafeCapitalView({ onNavigate }) {
+// Oba instrumenty są wbudowane (nie konta tworzone w ustawieniach); gotówka na kontach inwestycyjnych pokazana osobno.
+export default function SafeCapitalView() {
   const { state, isDark } = useApp();
   const today = isoDay(new Date());
   const data = useMemo(() => {
@@ -28,26 +28,33 @@ export default function SafeCapitalView({ onNavigate }) {
     }
     const savingsAccounts = state.accounts.filter((a) => a.type === 'SAVINGS');
     const savingsIncome = savingsAccounts.reduce((s, a) => s + savingsProjection(state, a, today).yearlyNet, 0);
+    // Podkategorie poduszki: obligacje skarbowe (transze + gotówka rejestru z wykupów/kuponów) i konta oszczędnościowe
+    const bondAccounts = state.accounts.filter((a) => a.type === 'BONDS');
+    const bondItems = v.bonds
+      .filter((b) => b.account?.type === 'BONDS' && b.value > 0.005)
+      .sort((a, b) => b.value - a.value)
+      .map((b) => ({ key: b.id, label: `${b.series || b.type} · ${b.quantity} szt.`, value: b.value }));
+    const bondCash = bondAccounts.reduce((sum, a) => sum + (v.byAccount[a.id]?.cash || 0), 0);
+    if (Math.abs(bondCash) >= 0.5) bondItems.push({ key: 'bondcash', label: 'Gotówka z wykupów i kuponów', value: bondCash });
+    const savingsItems = savingsAccounts
+      .map((a) => ({ key: a.id, label: a.name, value: v.byAccount[a.id]?.cash || 0 }))
+      .sort((a, b) => b.value - a.value);
+    const groups = [
+      { key: 'bonds', label: 'Obligacje skarbowe', icon: Landmark, slot: 2, items: bondItems },
+      { key: 'savings', label: 'Konta oszczędnościowe', icon: PiggyBank, slot: 3, items: savingsItems },
+    ].map((g) => ({ ...g, value: g.items.reduce((sum, it) => sum + it.value, 0) }));
     const safeIds = new Set(state.accounts.filter(isSafeAccount).map((a) => a.id));
-    const sumBy = (pred, field) => Object.entries(v.byAccount).filter(([id]) => pred(id)).reduce((s, [, x]) => s + (x[field] || 0), 0);
-    const bondsSafe = sumBy((id) => safeIds.has(id), 'bonds');
-    const savingsCash = sumBy((id) => state.accounts.find((a) => a.id === id)?.type === 'SAVINGS', 'cash');
-    const bondCash = sumBy((id) => state.accounts.find((a) => a.id === id)?.type === 'BONDS', 'cash');
-    // Poza poduszką: wolna gotówka i obligacje na kontach inwestycyjnych
+    // Poza poduszką: wolna gotówka na kontach inwestycyjnych
     const brokerCash = state.accounts
       .filter((a) => !isSafeAccount(a))
       .map((a) => ({ account: a, cash: v.byAccount[a.id]?.cash || 0 }))
       .filter((x) => Math.abs(x.cash) >= 0.5);
-    const investBonds = sumBy((id) => !safeIds.has(id), 'bonds');
-    const investValue = sumBy((id) => !safeIds.has(id), 'total');
+    const investValue = Object.entries(v.byAccount)
+      .filter(([id]) => !safeIds.has(id))
+      .reduce((sum, [, x]) => sum + (x.total || 0), 0);
     const netWorth = v.totals.total + otherAssetsValue(state).includedValue;
-    const parts = [
-      { key: 'bonds', label: 'Obligacje skarbowe', value: bondsSafe, icon: Landmark, slot: 2 },
-      { key: 'savings', label: 'Konta oszczędnościowe', value: savingsCash, icon: PiggyBank, slot: 3 },
-      { key: 'bondcash', label: 'Gotówka na kontach obligacyjnych', value: bondCash, icon: Wallet, slot: 0 },
-    ];
-    const safe = parts.reduce((s, p) => s + p.value, 0);
-    return { parts, safe, share: netWorth > 0 ? safe / netWorth : 0, investValue, investBonds, income: bondsIncome + savingsIncome, brokerCash };
+    const safe = groups.reduce((sum, g) => sum + g.value, 0);
+    return { groups, safe, share: netWorth > 0 ? safe / netWorth : 0, investValue, income: bondsIncome + savingsIncome, brokerCash };
   }, [state, today]);
 
   return (
@@ -70,36 +77,57 @@ export default function SafeCapitalView({ onNavigate }) {
           </div>
         </div>
         <div className="mt-4 flex h-3 w-full gap-[2px] overflow-hidden rounded-full" aria-label="Struktura poduszki finansowej">
-          {data.parts
-            .filter((p) => p.value > 0)
-            .map((p) => (
-              <div key={p.key} className="h-full" style={{ width: `${(p.value / (data.safe || 1)) * 100}%`, background: seriesColor(p.slot, isDark) }} />
+          {data.groups
+            .filter((g) => g.value > 0)
+            .map((g) => (
+              <div key={g.key} className="h-full" style={{ width: `${(g.value / (data.safe || 1)) * 100}%`, background: seriesColor(g.slot, isDark) }} />
             ))}
         </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          {data.parts.map((p) => {
-            const Icon = p.icon;
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {data.groups.map((g) => {
+            const Icon = g.icon;
             return (
-              <div key={p.key} className="rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-white/[0.03]">
+              <div key={g.key} className="rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-white/[0.03]">
                 <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400">
-                  <span className="h-2 w-2 rounded-full" style={{ background: seriesColor(p.slot, isDark) }} />
-                  <Icon size={13} /> {p.label}
-                  <span className="ml-auto tabular">{formatPercent(data.safe > 0 ? p.value / data.safe : 0, { digits: 0 })}</span>
+                  <span className="h-2 w-2 rounded-full" style={{ background: seriesColor(g.slot, isDark) }} />
+                  <Icon size={13} /> {g.label}
+                  <span className="ml-auto tabular">{formatPercent(data.safe > 0 ? g.value / data.safe : 0, { digits: 0 })}</span>
                 </div>
-                <div className="mt-0.5 font-semibold tabular">{formatPLN(p.value)}</div>
+                <div className="mt-0.5 text-lg font-semibold tabular">{formatPLN(g.value)}</div>
+                {g.items.length > 0 ? (
+                  <ul className="mt-1.5 space-y-0.5 border-t border-stone-200/70 pt-1.5 text-xs dark:border-white/5">
+                    {g.items.map((it) => (
+                      <li key={it.key} className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-stone-600 dark:text-stone-300">{it.label}</span>
+                        <span className="tabular">{formatPLN(it.value)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mt-1 text-xs text-stone-500">Brak – dodaj poniżej</div>
+                )}
               </div>
             );
           })}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-x-2 text-xs text-stone-500 tabular dark:text-stone-400">
+          {data.groups.map((g, i) => (
+            <span key={g.key}>
+              {i > 0 && '+ '}
+              {g.label} {formatPLN(g.value)}
+            </span>
+          ))}
+          <span className="font-semibold text-stone-800 dark:text-stone-100">= {formatPLN(data.safe)}</span>
         </div>
       </section>
 
       <BondsSection />
 
       <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-2">
-        <SavingsCards onNavigate={onNavigate} />
+        <SavingsCards />
         <Card
           title="Gotówka na kontach inwestycyjnych"
-          subtitle={`Wolne środki czekające na inwestycję – część portfela inwestycyjnego, nie poduszki${data.investBonds > 0 ? ` · obligacje na kontach inwestycyjnych: ${formatPLN(data.investBonds)}` : ''}`}
+          subtitle="Wolne środki czekające na inwestycję – część portfela inwestycyjnego, nie poduszki"
           icon={Wallet}
           bodyClassName="p-0 sm:p-0"
         >

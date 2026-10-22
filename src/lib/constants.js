@@ -53,6 +53,12 @@ export const ACCOUNT_TYPES = {
 
 export const ACCOUNT_TYPE_LIST = Object.values(ACCOUNT_TYPES);
 
+// Obligacje skarbowe – jeden wbudowany rejestr (osobna kategoria poduszki finansowej, nigdy w IKE/IKZE)
+export const BUILTIN_BONDS_ID = 'acc_bonds';
+export function builtinBondsAccount(openedAt) {
+  return { id: BUILTIN_BONDS_ID, name: 'Obligacje skarbowe', type: 'BONDS', institution: 'Skarb Państwa', currency: 'PLN', openedAt, builtin: true };
+}
+
 // Banki dla kont oszczędnościowych; Revolut nie pobiera podatku Belki (rozliczenie samodzielne w PIT-38)
 export const SAVINGS_BANKS = [
   { id: 'PKO BP', label: 'PKO BP' },

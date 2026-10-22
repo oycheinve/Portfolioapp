@@ -1,5 +1,5 @@
 // Model danych aplikacji – jedno źródło prawdy dla wszystkich modułów (etapy 1–6).
-import { DEFAULT_CONTRIBUTION_LIMITS } from '../lib/constants.js';
+import { BUILTIN_BONDS_ID, DEFAULT_CONTRIBUTION_LIMITS, builtinBondsAccount } from '../lib/constants.js';
 
 export const STATE_VERSION = 1;
 export const STORAGE_KEY = 'wealth-app-state-v1';
@@ -163,6 +163,7 @@ export function migrateState(raw) {
     : [];
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
   out.accounts = migrateAccounts(out);
+  migrateBonds(out);
   // Nieruchomości/ruchomości: dawny przełącznik „wliczaj do majątku” = widoczność w Portfelu (do majątku zawsze)
   out.otherAssets = out.otherAssets.map((a) => (a && a.showInPortfolio === undefined ? { ...a, showInPortfolio: a.includeInNetWorth !== false } : a));
   out.priceHistory = {
@@ -198,6 +199,53 @@ function migrateAccounts(state) {
     out.push(a);
   }
   return out;
+}
+
+// Obligacje skarbowe jako wbudowany instrument: wszystkie transze w jednym rejestrze „Obligacje skarbowe”.
+// Kilka kont obligacji → scalane w jedno; transze z IKE/IKZE/konta maklerskiego przenoszone do rejestru
+// (z wypłatą kosztu zakupu z konta źródłowego albo przeniesieniem powiązanej wpłaty). Wywoływane przy każdym
+// wczytaniu – po migracji nic już nie zmienia.
+function migrateBonds(state) {
+  const bondAccounts = state.accounts.filter((a) => a.type === 'BONDS');
+  if (!bondAccounts.length && !state.bonds.length) return;
+  let target = bondAccounts.find((a) => a.id === BUILTIN_BONDS_ID) || bondAccounts[0];
+  if (!target) {
+    const first = state.bonds.reduce((m, b) => (!m || (b.purchaseDate && b.purchaseDate < m) ? b.purchaseDate : m), null);
+    target = builtinBondsAccount(first || new Date().toISOString().slice(0, 10));
+    if (state.accounts.some((a) => a.id === target.id)) target = { ...target, id: `${BUILTIN_BONDS_ID}_builtin` };
+    state.accounts = [...state.accounts, target];
+  } else if (!target.builtin) {
+    state.accounts = state.accounts.map((a) => (a.id === target.id ? { ...a, builtin: true } : a));
+  }
+  const merged = new Set(bondAccounts.filter((a) => a.id !== target.id).map((a) => a.id));
+  const remap = (x) => (merged.has(x.accountId) ? { ...x, accountId: target.id } : x);
+  if (merged.size) {
+    for (const c of ['cashflows', 'income', 'trades', 'bonds']) state[c] = state[c].map(remap);
+    state.accounts = state.accounts.filter((a) => !merged.has(a.id));
+  }
+  const accById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  const moved = state.bonds.filter((b) => b.accountId !== target.id);
+  if (!moved.length) return;
+  const extraFlows = [];
+  const linked = new Set(moved.map((b) => b.linkedCashflowId).filter(Boolean));
+  state.cashflows = state.cashflows.map((c) => (linked.has(c.id) ? { ...c, accountId: target.id } : c));
+  for (const b of moved) {
+    const origin = accById[b.accountId];
+    if (origin && origin.type !== 'SAVINGS' && !b.linkedCashflowId) {
+      extraFlows.push({
+        id: `bondmove_${b.id}`,
+        accountId: origin.id,
+        date: b.purchaseDate,
+        type: 'WITHDRAWAL',
+        amount: (Number(b.quantity) || 0) * 100,
+        note: `Przeniesienie obligacji ${b.series || b.type || ''} do rejestru „Obligacje skarbowe”`.replace('  ', ' '),
+        source: 'BOND_MOVE',
+      });
+    }
+  }
+  const movedIds = new Set(moved.map((b) => b.id));
+  state.bonds = state.bonds.map((b) => (movedIds.has(b.id) ? { ...b, accountId: target.id, movedFrom: b.accountId } : b));
+  state.cashflows = [...state.cashflows.filter((c) => !extraFlows.some((x) => x.id === c.id)), ...extraFlows];
 }
 
 export function validateImported(raw) {

@@ -154,7 +154,9 @@ export function computeHoldings(state, asOf, accountIds) {
     } else if (t.side === 'SELL' && h.quantity > 0) {
       const sellQty = Math.min(qty, h.quantity);
       const avg = h.costPLN / h.quantity;
-      const costOut = avg * sellQty;
+      // Sprzedaż konkretnej transzy (import zamkniętych pozycji XTB): koszt tej transzy zamiast średniej
+      const lotCost = Number(t.costBasisPLN);
+      const costOut = Number.isFinite(lotCost) && lotCost >= 0 ? Math.min(h.costPLN, lotCost * (sellQty / (qty || 1))) : avg * sellQty;
       h.realizedPLN += amt.sellProceeds - costOut;
       h.quantity -= sellQty;
       h.costPLN -= costOut;
@@ -242,7 +244,8 @@ export function autoFundingCashflows(state, today = isoDay(new Date())) {
     for (const ev of list) {
       balance += ev.delta;
       if (balance < -0.004) {
-        const amount = Math.round(-balance * 100) / 100;
+        // Zaokrąglenie w górę do grosza – suma drobnych niedoborów nie daje ujemnego salda (np. −0,02 zł)
+        const amount = Math.max(0.01, Math.ceil(Math.round(-balance * 1e6) / 1e4) / 100);
         if (amount > 0) {
           out.push({
             id: `${AUTO_FUND_PREFIX}${accountId}_${ev.key}`,
@@ -254,7 +257,7 @@ export function autoFundingCashflows(state, today = isoDay(new Date())) {
             source: 'AUTO_FUND',
           });
         }
-        balance = 0;
+        balance += amount;
       }
     }
   }
@@ -599,15 +602,19 @@ export function limitDeposits(state, accountId, year, { excludeId = null } = {})
   const y = String(year);
   const list = state.cashflows.filter((c) => c.accountId === accountId && c.type === 'DEPOSIT' && c.date.startsWith(y) && c.id !== excludeId);
   const real = list.filter((c) => !isSyntheticDeposit(c)).reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  if (real > 0) return real;
-  const synthetic = list.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  if (synthetic <= 0) return 0;
+  if (real > 0) return Math.round(real * 100) / 100;
+  // Automatyczne uzupełnienia powstają tylko przy braku gotówki – po sprzedaży zakup za uzyskane środki
+  // nie tworzy uzupełnienia, więc rotacja już daje 0 zł. Wpłaty „na transzę” (import otwartych pozycji)
+  // pokrywają każdy zakup, dlatego od nich odejmowane są przychody ze sprzedaży w roku.
+  const autoFund = list.filter((c) => isAutoFunding(c) || c.source === 'AUTO_FUND').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  const synthetic = list.filter((c) => !(isAutoFunding(c) || c.source === 'AUTO_FUND')).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  if (synthetic <= 0) return Math.round(autoFund * 100) / 100;
   const account = state.accounts.find((a) => a.id === accountId);
   const instrumentsById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
   const sales = state.trades
     .filter((t) => t.accountId === accountId && t.side === 'SELL' && t.date.startsWith(y))
     .reduce((s, t) => s + tradeAmounts(t, account, instrumentsById[t.instrumentId]).sellProceeds, 0);
-  return Math.max(0, Math.round((synthetic - sales) * 100) / 100);
+  return Math.round((autoFund + Math.max(0, synthetic - sales)) * 100) / 100;
 }
 
 export function computeLimitUsage(state, year = new Date().getFullYear()) {

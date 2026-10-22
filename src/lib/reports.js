@@ -247,9 +247,13 @@ export function scopedPeriodMetrics(state, period, resolver, scope, today = isoD
   const m = periodMetrics(state, period, resolver, today, scope.accountIds);
   if (!scope.assetsOnly) return m;
   const instruments = m.instruments.filter((r) => scope.pick(r.instrument));
-  const profit = instruments.reduce((s, r) => s + r.result, 0);
+  // Dywidendy okresu z rejestru – także spółek już sprzedanych (bez pozycji na początku i końcu okresu)
+  const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
+  const dividends = incomeEventsWithTax(state)
+    .filter((i) => i.type === 'DIVIDEND' && i.date > m.startDate && i.date <= m.endDate && scope.accountIds.includes(i.accountId) && scope.pick(instById[i.instrumentId]))
+    .reduce((s, i) => s + i.net, 0);
+  const profit = instruments.reduce((s, r) => s + r.result - r.dividends, 0) + dividends;
   const capital = instruments.reduce((s, r) => s + r.valueStart + Math.max(0, r.netBuys), 0);
-  const dividends = instruments.reduce((s, r) => s + r.dividends, 0);
   return {
     ...m,
     instruments,

@@ -168,7 +168,7 @@ export default function GoalsView() {
                 <p className="px-5 py-6 text-center text-sm text-stone-500">Brak celów w tej kategorii.</p>
               ) : (
                 <ul className="divide-y divide-stone-100 dark:divide-white/5">
-                  {c.rows.map(({ goal, current, target, pct, capped, done }) => {
+                  {c.rows.map(({ goal, current, target, start, pct, capped, done }) => {
                     const archived = goal.status === 'ARCHIVED';
                     const auto = goal.source && goal.source !== 'MANUAL' && !archived;
                     return (
@@ -200,6 +200,7 @@ export default function GoalsView() {
                               ) : (
                                 <>
                                   {fmtValue(current, goal.unit)} z {fmtValue(target, goal.unit)}
+                                  {start > 0 && ` · start ${fmtValue(start, goal.unit)} (0%)`}
                                 </>
                               )}
                             </div>
@@ -293,7 +294,7 @@ export default function GoalsView() {
                 ))}
               </Select>
             </Field>
-            <Field label="Wartość docelowa (Y)">
+            <Field label="Wartość docelowa (Y)" hint="Postęp rośnie od stanu w chwili ustawienia celu (ten stan = 0%)">
               <Input type="number" min="0" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
             </Field>
             <Field label="Kierunek celu" hint="Auto: gdy wartość docelowa jest niższa niż obecna, cel polega na zmniejszeniu wartości">

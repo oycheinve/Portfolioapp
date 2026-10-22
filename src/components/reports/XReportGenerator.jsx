@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ClipboardCopy, Download, Image as ImageIcon, Send, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { computePeriodStats, isSafeAccount, isoDay } from '../../lib/engine.js';
@@ -8,6 +8,7 @@ import { buildPortfolioSeries, defaultSelection } from '../../lib/series.js';
 import { listPeriods, reportScope, scopedPeriodMetrics, scopedTotals } from '../../lib/reports.js';
 import { buildPostText, fmtPct, xLength } from '../../lib/xReport.js';
 import { dividendKpis } from '../../lib/dividends.js';
+import { loadLogos } from '../../lib/logos.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
 import { Button, Card, Dropdown, Field, Input, Segmented, Select, Toggle } from '../ui.jsx';
 import ReportCard, { CARD_SIZES, svgToPngBlob } from './ReportCard.jsx';
@@ -168,6 +169,17 @@ export default function XReportGenerator() {
     </Dropdown>
   );
   const colors = useMemo(() => instrumentColorMap(state, true), [state]);
+  // Logotypy spółek z listy ruchów (data URI – karta eksportuje się do PNG razem z logo)
+  const [logos, setLogos] = useState({});
+  const logoKey = (metrics?.instruments || []).map((r) => `${r.instrument.id}:${r.instrument.logoDomain || ''}`).join('|');
+  useEffect(() => {
+    if (!logoKey) return undefined;
+    let alive = true;
+    loadLogos((metrics?.instruments || []).map((r) => r.instrument)).then((map) => alive && setLogos(map));
+    return () => {
+      alive = false;
+    };
+  }, [logoKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generated = metrics ? buildPostText({ metrics, totals, options }) : '';
   const text = edited ?? generated;
@@ -372,11 +384,11 @@ export default function XReportGenerator() {
         >
           <div className={`mx-auto ${size === 'SQUARE' ? 'max-w-xl' : ''}`}>
             <div className="overflow-hidden rounded-2xl shadow-lg ring-1 ring-black/5">
-              <ReportCard ref={svgRef} metrics={metrics} totals={totals} series={series} colors={colors} options={options} size={size} />
+              <ReportCard ref={svgRef} metrics={metrics} totals={totals} series={series} colors={colors} logos={logos} options={options} size={size} />
             </div>
           </div>
           <p className="mt-3 text-[11px] text-stone-500 dark:text-stone-500">
-            Logotypy spółek zastąpione monogramami w kolorach instrumentów. Ruchy instrumentów = zmiana ceny w PLN w okresie
+            Logotypy spółek obok nazw (z listy znanych spółek albo domeny wpisanej w edycji waloru); bez logo – monogram w kolorze instrumentu. Ruchy instrumentów = zmiana ceny w PLN w okresie
             {metrics.sources.includes('revaluation') ? ' (część wycen z historii cen / rekonstrukcji)' : ''}.
           </p>
         </Card>

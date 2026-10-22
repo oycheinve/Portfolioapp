@@ -151,11 +151,21 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Odświeżanie kursów** wyłącznie przy wejściu do aplikacji (start, powrót do karty lub okna) i tylko w godzinach sesji GPW: pn–pt 9:00–16:50 czasu polskiego (najczęściej raz na 5 minut). Brak timerów w tle. Automatyczna synchronizacja dywidend i historii cen też tylko w godzinach sesji (wyjątek: pierwsze pobranie, gdy danych jeszcze nie ma). Ręczne „Odśwież kursy” działa zawsze.
 - **Portfel**: sekcje w kolejności Akcje → ETF → Obligacje → Konta gotówkowe/oszczędnościowe → Nieruchomości. **Wykresy dywidend**: grubsze słupki (miesięczne i roczne).
 
+## Cele od stanu startowego, obligacje wbudowane, zamknięte pozycje XTB, logotypy
+
+- **Postęp celów** liczony od wartości w chwili ustawienia celu: cel 450 przy starcie 435 → 435 = 0%, 442,5 = 50%, 450 = 100%. Liczniki roczne (wpłaty, dywidendy, limit) startują od 0.
+- **Struktura majątku**: w środku wykresu kołowego kwota łącznego majątku.
+- **Obligacje skarbowe i konta oszczędnościowe – wbudowane instrumenty poduszki**. W ustawieniach tworzy się tylko konta inwestycyjne (IKE, IKZE, maklerskie). Obligacje trafiają do jednego rejestru „Obligacje skarbowe” (osobna kategoria, nigdy w IKE/IKZE); konta oszczędnościowe dodaje się i edytuje w zakładce Poduszka finansowa. Migracja: kilka kont obligacji scalanych w jedno, transze z IKE/IKZE/maklerskiego przenoszone do rejestru (z wypłatą kosztu zakupu z konta źródłowego). Poduszka pokazuje dwie podkategorie z rozbiciem (transze, konta) i sumą.
+- **Zamknięte pozycje XTB** (arkusz „Closed Positions”): przy imporcie otwartych pozycji dołączane domyślnie jako kupno + sprzedaż każdej transzy z wartościami w PLN z raportu. Sprzedaż zdejmuje koszt tej transzy (`costBasisPLN`), więc koszt otwartych pozycji zgadza się z XTB, a zrealizowany wynik = wynik z raportu. Dzięki temu znane są akcje posiadane w dniu dywidendy także dla spółek sprzedanych.
+- **Dywidendy sprzedanych spółek** liczone we wszystkich sumach – także w wyniku okresu raportu na X (wcześniej pomijane, gdy spółki nie było w portfelu na początku ani na końcu okresu).
+- **Limit IKE/IKZE**: prawdziwe wpłaty z „Cash Operations” (domyślny tryb importu). Bez nich: automatyczne uzupełnienia (rotacja już daje 0 zł) + wpłaty „na transzę” pomniejszone o sprzedaże. Uzupełnienia zaokrąglane w górę do grosza – gotówka nie spada do −0,02 zł.
+- **Logotypy na karcie raportu X**: obok nazw spółek na liście największych ruchów. Domena z edycji waloru („Strona firmy”) albo z wbudowanej listy (GPW, USA, emitenci ETF); ikona pobierana przez `/api/logo` (funkcja Vercel / middleware Vite) lub publiczne proxy i osadzana jako data URI – eksport PNG zawiera logo. Bez logo – monogram.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |
 |---|---|
-| `accounts` | Konta: `IKE`, `IKZE`, `BROKERAGE`, `BONDS` (obligacje skarbowe), `SAVINGS` (bank, oprocentowanie, kapitalizacja); `belkaEnabled`, `belkaDeferred`, `fxConversionPct` |
+| `accounts` | Konta: `IKE`, `IKZE`, `BROKERAGE`; wbudowane `BONDS` (rejestr obligacji, `builtin`) i `SAVINGS` (bank, oprocentowanie, kapitalizacja); `belkaEnabled`, `belkaDeferred`, `fxConversionPct` |
 | `instruments` | Akcje/ETF: ticker, symbol Yahoo (`.WA` dla GPW), waluta, TER |
 | `trades` | Kupno/sprzedaż (cena, kurs waluty, prowizja) – z nich liczone są pozycje (średni koszt) |
 | `cashflows` | Wpłaty/wypłaty własne – podstawa wkładu netto |

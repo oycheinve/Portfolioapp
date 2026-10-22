@@ -2,10 +2,18 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { proxyYahoo } from './api/yahoo.js';
+import { fetchLogo } from './api/logo.js';
 
-// /api/yahoo?path=… lokalnie (dev i preview) – ta sama logika co funkcja serwerowa Vercel w api/yahoo.js
+// /api/yahoo?path=… i /api/logo?domain=… lokalnie (dev i preview) – ta sama logika co funkcje serwerowe Vercel w api/
 function yahooApi() {
   const middleware = async (req, res, next) => {
+    if (req.url.startsWith('/api/logo')) {
+      const logo = await fetchLogo(new URL(req.url, 'http://localhost').searchParams.get('domain') || '');
+      res.statusCode = logo.status;
+      res.setHeader('Content-Type', logo.type);
+      res.end(logo.body);
+      return;
+    }
     if (!req.url.startsWith('/api/yahoo')) return next();
     const path = new URL(req.url, 'http://localhost').searchParams.get('path') || '';
     const result = await proxyYahoo(path);

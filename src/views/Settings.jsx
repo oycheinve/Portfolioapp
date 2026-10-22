@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Building2, Landmark, Pencil, Plus, Radio, Scale, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { ACCOUNT_TYPES, ACCOUNT_TYPE_LIST, CAPITALIZATION, OTHER_ASSET_CATEGORIES, SAVINGS_BANKS, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
-import { belkaRateForAccount } from '../lib/tax.js';
+import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
 import { formatDateTime, formatPLN, todayISO } from '../lib/format.js';
 import { Badge, Button, Card, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
 import LimitsCard from '../components/settings/LimitsCard.jsx';
 import BackupCard from '../components/settings/BackupCard.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
+import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
 export default function SettingsView() {
   return (
@@ -30,16 +30,16 @@ function AccountsSection() {
   const { state, actions } = useApp();
   const [form, setForm] = useState(null);
   const [toDelete, setToDelete] = useState(null);
+  const investAccounts = state.accounts.filter((a) => INVEST_ACCOUNT_TYPES.includes(a.type));
   const counts = (id) => ({
     flows: state.cashflows.filter((c) => c.accountId === id).length,
     trades: state.trades.filter((c) => c.accountId === id).length,
-    bonds: state.bonds.filter((c) => c.accountId === id).length,
   });
 
   return (
     <Card
-      title="Konta i wrappery podatkowe"
-      subtitle="IKE / IKZE – 0% podatku Belki · Maklerskie, Obligacje skarbowe i Oszczędnościowe – 19%"
+      title="Konta inwestycyjne"
+      subtitle="IKE / IKZE – 0% podatku Belki · Maklerskie – 19%"
       icon={Wallet}
       actions={
         <Button variant="primary" icon={Plus} onClick={() => setForm({ name: '', type: 'BROKERAGE', institution: '', currency: 'PLN', openedAt: todayISO(), interestRate: 0, capitalization: 'MONTHLY' })}>
@@ -50,8 +50,8 @@ function AccountsSection() {
     >
       <XtbIkeToggle />
       <ul className="divide-y divide-stone-100 dark:divide-white/5">
-        {state.accounts.length === 0 && <li className="px-5 py-6 text-center text-sm text-stone-500">Brak kont.</li>}
-        {state.accounts.map((a) => {
+        {investAccounts.length === 0 && <li className="px-5 py-6 text-center text-sm text-stone-500">Brak kont inwestycyjnych.</li>}
+        {investAccounts.map((a) => {
           const t = ACCOUNT_TYPES[a.type];
           const c = counts(a.id);
           return (
@@ -65,8 +65,7 @@ function AccountsSection() {
                   {accountFxPct(a) > 0 && <Badge tone="violet">przewalutowanie {String(accountFxPct(a)).replace('.', ',')}%</Badge>}
                 </div>
                 <div className="truncate text-xs text-stone-500 dark:text-stone-400">
-                  {a.institution || '—'} · {c.flows} wpłat/wypłat · {c.trades} transakcji{c.bonds ? ` · ${c.bonds} obligacji` : ''}
-                  {a.type === 'SAVINGS' && ` · ${a.interestRate || 0}% (${CAPITALIZATION[a.capitalization]?.label?.toLowerCase() || '—'} kapitalizacja)`}
+                  {a.institution || '—'} · {c.flows} wpłat/wypłat · {c.trades} transakcji
                 </div>
               </div>
               <IconButton icon={Pencil} label="Edytuj konto" onClick={() => setForm({ ...a })} />
@@ -75,188 +74,17 @@ function AccountsSection() {
           );
         })}
       </ul>
+      <p className="flex items-start gap-2 border-t border-stone-100 px-4 py-3 text-xs text-stone-500 sm:px-5 dark:border-white/5 dark:text-stone-400">
+        <Landmark size={14} className="mt-0.5 shrink-0" />
+        Obligacje skarbowe i konta oszczędnościowe to wbudowane instrumenty poduszki finansowej (osobna kategoria, nigdy w IKE/IKZE) – dodajesz je w zakładce „Poduszka finansowa”.
+      </p>
 
-      <Modal
-        open={!!form}
-        onClose={() => setForm(null)}
-        title={form?.id ? 'Edytuj konto' : 'Nowe konto'}
-        footer={
-          <>
-            <Button onClick={() => setForm(null)}>Anuluj</Button>
-            <Button
-              variant="primary"
-              disabled={!form?.name?.trim()}
-              onClick={() => {
-                const fx = form.fxConversionPct;
-                const item = {
-                  ...form,
-                  name: form.name.trim(),
-                  interestRate: Number(form.interestRate) || 0,
-                  fxConversionPct: fx === '' || fx === undefined || fx === null ? undefined : Number(fx) || 0,
-                };
-                actions.upsert('accounts', item);
-                actions.notify('Zapisano konto', 'success');
-                setForm(null);
-              }}
-            >
-              Zapisz
-            </Button>
-          </>
-        }
-      >
-        {form && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Nazwa" className="sm:col-span-2">
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="np. IKE – XTB" autoFocus />
-            </Field>
-            <Field label="Typ konta" hint={ACCOUNT_TYPES[form.type]?.fullName}>
-              <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                {ACCOUNT_TYPE_LIST.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            {form.type === 'SAVINGS' ? (
-              <BankField form={form} setForm={setForm} />
-            ) : (
-              <Field label="Instytucja">
-                <Input value={form.institution || ''} onChange={(e) => setForm({ ...form, institution: e.target.value })} placeholder={form.type === 'BONDS' ? 'np. PKO BP, Pekao' : 'np. XTB, mBank'} />
-              </Field>
-            )}
-            <Field label="Data otwarcia">
-              <Input type="date" value={form.openedAt || ''} onChange={(e) => setForm({ ...form, openedAt: e.target.value })} />
-            </Field>
-            {form.type !== 'SAVINGS' && form.type !== 'BONDS' && (
-              <Field
-                label="Przewalutowanie przy kupnie i sprzedaży (%)"
-                hint={`Konto w PLN, a instrument w USD/EUR – prowizja doliczana przy zakupie i potrącana przy sprzedaży. Puste = domyślnie ${String(accountFxPct({ ...form, fxConversionPct: undefined })).replace('.', ',')}% (XTB/IKE: ${String(XTB_FX_FEE_PCT).replace('.', ',')}%)`}
-                className="sm:col-span-2"
-              >
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="5"
-                  value={form.fxConversionPct ?? ''}
-                  placeholder={String(accountFxPct({ ...form, fxConversionPct: undefined }))}
-                  onChange={(e) => setForm({ ...form, fxConversionPct: e.target.value })}
-                />
-              </Field>
-            )}
-            {form.type !== 'SAVINGS' && (
-              <div className="sm:col-span-2">
-                <Toggle
-                  checked={!!form.allowNegativeCash}
-                  onChange={(v) => setForm({ ...form, allowNegativeCash: v })}
-                  label="Konto debetowe (dopuszczaj ujemne saldo gotówki)"
-                  description="Domyślnie wyłączone: zakup ponad dostępne środki dopisuje automatyczną wpłatę „Uzupełnienie środków”, więc gotówka nigdy nie jest ujemna."
-                />
-              </div>
-            )}
-            {ACCOUNT_TYPES[form.type]?.belkaRate > 0 && (
-              <div className="space-y-3 sm:col-span-2">
-                <Toggle
-                  checked={form.belkaEnabled !== false}
-                  onChange={(v) => setForm({ ...form, belkaEnabled: v })}
-                  label="Wliczaj podatek Belki (19%)"
-                  description="Odsetki i zyski pokazywane netto. Wyłącz, aby liczyć je brutto."
-                />
-                {form.type === 'SAVINGS' && (
-                  <Toggle
-                    checked={!!form.belkaDeferred}
-                    onChange={(v) => setForm({ ...form, belkaDeferred: v })}
-                    label="Podatek Belki odroczony (rozliczenie samodzielne w PIT)"
-                    description="Bank nie pobiera podatku – odsetki trafiają na konto brutto, a 19% rozliczasz w zeznaniu rocznym (PIT-38)."
-                  />
-                )}
-              </div>
-            )}
-            {form.type === 'SAVINGS' && (
-              <>
-                <Field label="Oprocentowanie (% w skali roku)">
-                  <Input type="number" step="0.01" value={form.interestRate ?? ''} onChange={(e) => setForm({ ...form, interestRate: e.target.value })} />
-                </Field>
-                <Field label="Kapitalizacja">
-                  <Select value={form.capitalization || 'MONTHLY'} onChange={(e) => setForm({ ...form, capitalization: e.target.value })}>
-                    {Object.values(CAPITALIZATION).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </>
-            )}
-          </div>
-        )}
-      </Modal>
-
-      <Modal
-        open={!!toDelete}
-        onClose={() => setToDelete(null)}
-        title="Usunąć konto?"
-        footer={
-          <>
-            <Button onClick={() => setToDelete(null)}>Anuluj</Button>
-            <Button
-              variant="danger"
-              icon={Trash2}
-              onClick={() => {
-                actions.deleteAccount(toDelete.id);
-                actions.notify('Usunięto konto wraz z historią', 'info');
-                setToDelete(null);
-              }}
-            >
-              Usuń konto i historię
-            </Button>
-          </>
-        }
-      >
-        {toDelete && (
-          <p className="text-sm text-stone-600 dark:text-stone-300">
-            Konto „{toDelete.name}” zostanie usunięte razem z powiązanymi wpłatami, transakcjami, dywidendami i obligacjami. Rozważ wcześniejszy eksport danych.
-          </p>
-        )}
-      </Modal>
+      <AccountFormModal form={form} setForm={setForm} types={INVEST_ACCOUNT_TYPES} />
+      <DeleteAccountModal account={toDelete} onClose={() => setToDelete(null)} />
     </Card>
   );
 }
 
-function BelkaBadge({ account }) {
-  const t = ACCOUNT_TYPES[account.type];
-  if (t?.belkaRate === 0) return <Badge tone="green">Belka 0%</Badge>;
-  if (account.belkaDeferred) return <Badge tone="violet">Belka odroczona (PIT)</Badge>;
-  if (account.belkaEnabled === false) return <Badge>bez Belki (brutto)</Badge>;
-  return <Badge tone="amber">Belka {Math.round(belkaRateForAccount(account) * 100)}%</Badge>;
-}
-
-// Bank konta oszczędnościowego – Revolut automatycznie oznacza podatek jako odroczony (rozliczany w PIT)
-function BankField({ form, setForm }) {
-  const known = SAVINGS_BANKS.find((b) => b.id === form.institution);
-  const value = known ? known.id : form.institution ? 'Inny' : '';
-  return (
-    <Field label="Bank" hint={known?.belkaDeferred ? 'Revolut nie pobiera podatku Belki – rozliczasz go sam w PIT' : undefined}>
-      <Select
-        value={value}
-        onChange={(e) => {
-          const bank = SAVINGS_BANKS.find((b) => b.id === e.target.value);
-          setForm({ ...form, institution: e.target.value, belkaDeferred: !!bank?.belkaDeferred });
-        }}
-      >
-        <option value="" disabled>
-          Wybierz bank…
-        </option>
-        {SAVINGS_BANKS.map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.label}
-          </option>
-        ))}
-      </Select>
-    </Field>
-  );
-}
 
 // Szybkie ustawienie: zakupy na IKE w XTB rozliczane w PLN z prowizją 0,05% za przewalutowanie
 function XtbIkeToggle() {

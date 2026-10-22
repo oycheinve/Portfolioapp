@@ -569,7 +569,7 @@ export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash
     addedCash: cashflows.filter((c) => !existingCash.has(c.id)).length,
     removeTrades,
     removeCashflows,
-    otherTrades: state.trades.filter((t) => t.accountId === accountId && !String(t.id).startsWith(tradePrefix)).length,
+    otherTrades: state.trades.filter((t) => t.accountId === accountId && !String(t.id).startsWith(tradePrefix) && !String(t.id).startsWith(`xtbcl_${accountId}_`)).length,
   };
 }
 
@@ -605,4 +605,165 @@ export function buildXtbRealCashflows(cashAnalysis, { state, account }) {
   const ops = { ...cashAnalysis, ops: cashAnalysis.ops.filter((o) => o.kind === 'DEPOSIT' || o.kind === 'WITHDRAWAL') };
   const plan = buildXtbImport(ops, {}, { state, account, fxPct: 0 });
   return plan.allCashflows;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Zamknięte pozycje („Closed Positions”): każda transza = kupno (otwarcie) + sprzedaż (zamknięcie) z wartościami
+// zakupu i sprzedaży w PLN wg XTB. Daje historię posiadania sprzedanych spółek (dywidendy sprzed sprzedaży),
+// zrealizowany zysk i rotację (sprzedaż → zakup) widoczną w limicie IKE/IKZE.
+
+const CLOSED_ALIASES = {
+  name: ['instrument'],
+  ticker: ['ticker', 'symbol'],
+  category: ['category', 'kategoria'],
+  type: ['type', 'typ'],
+  volume: ['volume', 'wolumen', 'liczba'],
+  openPrice: ['open price', 'cena otwarcia'],
+  openTime: ['open time (utc)', 'open time', 'czas otwarcia (utc)', 'czas otwarcia'],
+  closePrice: ['close price', 'cena zamknięcia', 'cena zamkniecia'],
+  closeTime: ['close time (utc)', 'close time', 'czas zamknięcia (utc)', 'czas zamknięcia', 'czas zamkniecia'],
+  purchaseValue: ['purchase value', 'wartość zakupu', 'wartosc zakupu'],
+  saleValue: ['sale value', 'wartość sprzedaży', 'wartosc sprzedazy'],
+  profit: ['profit/loss', 'zysk/strata', 'gross profit'],
+  positionId: ['position id', 'id pozycji', 'position'],
+};
+
+function findClosedHeader(rows) {
+  for (let i = 0; i < Math.min(rows.length, 60); i += 1) {
+    const cells = rows[i].map(norm);
+    const col = {};
+    for (const [key, aliases] of Object.entries(CLOSED_ALIASES)) {
+      for (const alias of aliases) {
+        const idx = cells.indexOf(alias);
+        if (idx >= 0) {
+          col[key] = idx;
+          break;
+        }
+      }
+    }
+    if (col.ticker !== undefined && col.volume !== undefined && col.openTime !== undefined && col.closeTime !== undefined && col.closePrice !== undefined) return { index: i, col };
+  }
+  return null;
+}
+
+export function analyzeXtbClosedPositions(sheets, { state }) {
+  const named = sheets.filter((s) => /closed\s*position|zamknięte\s*pozycje|zamkniete\s*pozycje/i.test(s.name));
+  let found = null;
+  for (const sheet of named) {
+    const header = findClosedHeader(sheet.rows);
+    if (header) {
+      found = { sheet, header };
+      break;
+    }
+  }
+  if (!found) return null;
+  const { sheet, header } = found;
+  const { col } = header;
+  const cell = (row, key) => (col[key] === undefined ? '' : row[col[key]]);
+  const lots = [];
+  for (let r = header.index + 1; r < sheet.rows.length; r += 1) {
+    const row = sheet.rows[r];
+    const ticker = String(cell(row, 'ticker') ?? '').trim().toUpperCase();
+    const type = norm(cell(row, 'type'));
+    if (!ticker || (type && type !== 'buy' && type !== 'kupno')) continue;
+    const lot = {
+      ticker,
+      name: String(cell(row, 'name') ?? '').trim() || ticker,
+      category: String(cell(row, 'category') ?? '').trim().toUpperCase(),
+      quantity: parseNumber(cell(row, 'volume')),
+      openPrice: parseNumber(cell(row, 'openPrice')),
+      closePrice: parseNumber(cell(row, 'closePrice')),
+      openDate: parseDate(cell(row, 'openTime')),
+      closeDate: parseDate(cell(row, 'closeTime')),
+      purchaseValue: parseNumber(cell(row, 'purchaseValue')),
+      saleValue: parseNumber(cell(row, 'saleValue')),
+      profit: parseNumber(cell(row, 'profit')),
+      positionId: String(cell(row, 'positionId') ?? '').trim().replace(/\.0+$/, '') || `${ticker}_${r + 1}`,
+      row: r + 1,
+    };
+    if (!(lot.quantity > 0) || !(lot.openPrice > 0) || !(lot.closePrice > 0) || !lot.openDate || !lot.closeDate) continue;
+    // Brak wartości w PLN (starsze eksporty) – wartość z ceny (instrumenty w PLN)
+    if (!(lot.purchaseValue > 0)) lot.purchaseValue = lot.quantity * lot.openPrice;
+    if (!(lot.saleValue >= 0)) lot.saleValue = lot.quantity * lot.closePrice;
+    lots.push(lot);
+  }
+  if (!lots.length) return null;
+  const symbols = {};
+  for (const l of lots) {
+    if (symbols[l.ticker]) continue;
+    const info = describeSymbol(l.ticker);
+    const kind = ['ETF', 'ETC', 'ETN'].includes(l.category) ? 'ETF' : l.category === 'STOCK' ? 'STOCK' : info.kind;
+    const merged = { ...info, kind };
+    const existing = matchInstrument(state, merged);
+    symbols[l.ticker] = { ...merged, name: l.name, instrumentId: existing?.id || null };
+  }
+  return {
+    sheetName: sheet.name,
+    lots,
+    symbols,
+    totals: {
+      lots: lots.length,
+      tickers: Object.keys(symbols).length,
+      purchase: lots.reduce((s, l) => s + l.purchaseValue, 0),
+      sale: lots.reduce((s, l) => s + l.saleValue, 0),
+      profit: lots.reduce((s, l) => s + (l.saleValue - l.purchaseValue), 0),
+    },
+  };
+}
+
+function xtbInstrumentId(m) {
+  return `inst_xtb_${m.ticker.toLowerCase().replace(/[^a-z0-9]/g, '')}_${m.currency.toLowerCase()}`;
+}
+
+// Zamknięte transze → para transakcji (kupno w dniu otwarcia, sprzedaż w dniu zamknięcia). Koszt i przychód
+// w PLN dokładnie jak w raporcie XTB; sprzedaż zdejmuje koszt tej transzy (costBasisPLN), nie średnią –
+// koszt pozostałych otwartych transz tej samej spółki zgadza się z XTB.
+export function buildXtbClosedImport(closed, openMapping, { state, account }) {
+  const accountId = account.id;
+  const prefix = `xtbcl_${accountId}_`;
+  const newInstruments = [];
+  const instIdFor = {};
+  const ccyFor = {};
+  for (const [ticker, s] of Object.entries(closed.symbols)) {
+    const m = openMapping?.[ticker] || s;
+    const id = m.instrumentId || xtbInstrumentId(m);
+    instIdFor[ticker] = id;
+    ccyFor[ticker] = state.instruments.find((i) => i.id === id)?.currency || m.currency;
+    if (!m.instrumentId && !state.instruments.some((i) => i.id === id) && !newInstruments.some((i) => i.id === id)) {
+      newInstruments.push({ id, ticker: m.ticker, yahooSymbol: m.yahooSymbol, name: m.name || m.ticker, kind: m.kind, currency: m.currency, ter: 0, sector: '' });
+    }
+  }
+  const trades = [];
+  const round = (v) => Math.round(v * 100) / 100;
+  for (const l of closed.lots) {
+    const ccy = ccyFor[l.ticker];
+    const base = { accountId, instrumentId: instIdFor[l.ticker], quantity: l.quantity, currency: ccy, source: 'XTB_CLOSED' };
+    const grossBuy = l.quantity * l.openPrice;
+    const grossSell = l.quantity * l.closePrice;
+    const buy = { ...base, id: `${prefix}${l.positionId}_b`, date: l.openDate, side: 'BUY', price: l.openPrice, note: `XTB: zamknięta pozycja ${l.positionId} (otwarcie)` };
+    const sell = { ...base, id: `${prefix}${l.positionId}_s`, date: l.closeDate, side: 'SELL', price: l.closePrice, costBasisPLN: round(l.purchaseValue), note: `XTB: zamknięta pozycja ${l.positionId} (zamknięcie)` };
+    if (ccy === 'PLN') {
+      buy.fxRate = 1;
+      sell.fxRate = 1;
+      buy.fee = Math.max(0, round(l.purchaseValue - grossBuy));
+      sell.fee = Math.max(0, round(grossSell - l.saleValue));
+    } else {
+      // Wartości z XTB zawierają przewalutowanie – kurs dobrany tak, by kwoty w PLN = kwoty z raportu
+      buy.fxRate = grossBuy > 0 ? Math.round((l.purchaseValue / grossBuy) * 1e6) / 1e6 : 1;
+      sell.fxRate = grossSell > 0 ? Math.round((l.saleValue / grossSell) * 1e6) / 1e6 : 1;
+      buy.fee = 0;
+      sell.fee = 0;
+      buy.fxFeePct = 0;
+      sell.fxFeePct = 0;
+    }
+    if (buy.fee < 0.01) buy.fee = 0;
+    if (sell.fee < 0.01) sell.fee = 0;
+    trades.push(buy, sell);
+  }
+  const ids = new Set(trades.map((t) => t.id));
+  return {
+    newInstruments,
+    trades,
+    removeTrades: state.trades.filter((t) => t.accountId === accountId && String(t.id).startsWith(prefix) && !ids.has(t.id)).map((t) => t.id),
+  };
 }

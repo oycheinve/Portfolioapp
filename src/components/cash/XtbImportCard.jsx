@@ -4,7 +4,7 @@ import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES } from '../../lib/constants.js';
 import { accountFxPct } from '../../lib/engine.js';
 import { readSpreadsheet } from '../../lib/xlsx.js';
-import { KIND_LABELS, analyzeXtb, analyzeXtbOpenPositions, buildXtbImport, buildXtbIncomeImport, buildXtbOpenImport, buildXtbRealCashflows, findOpenPositionsSheet } from '../../lib/xtbImport.js';
+import { KIND_LABELS, analyzeXtb, analyzeXtbClosedPositions, analyzeXtbOpenPositions, buildXtbClosedImport, buildXtbImport, buildXtbIncomeImport, buildXtbOpenImport, buildXtbRealCashflows, findOpenPositionsSheet } from '../../lib/xtbImport.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
 import { Badge, Button, Card, Input, Select } from '../ui.jsx';
 
@@ -51,12 +51,19 @@ export default function XtbImportCard() {
         // Ten sam raport zwykle zawiera arkusz „Cash Operations” – z niego dywidendy, podatki i odsetki
         let cashOps = null;
         try {
-          const c = analyzeXtb(sheets.filter((sh) => !/open\s*position/i.test(sh.name)), { state, accountId });
+          const c = analyzeXtb(sheets.filter((sh) => !/open\s*position|closed\s*position/i.test(sh.name)), { state, accountId });
           if (c.ops.some((o) => ['DIVIDEND', 'INTEREST', 'DEPOSIT', 'WITHDRAWAL'].includes(o.kind))) cashOps = c;
         } catch {
           cashOps = null;
         }
-        setAnalysis({ ...a, cashOps });
+        // Arkusz „Closed Positions” – historia sprzedanych transz (dywidendy sprzed sprzedaży, rotacja w limicie)
+        let closed = null;
+        try {
+          closed = analyzeXtbClosedPositions(sheets, { state });
+        } catch {
+          closed = null;
+        }
+        setAnalysis({ ...a, cashOps, closed });
         setMapping(a.symbols);
       } else {
         const a = analyzeXtb(sheets, { state, accountId });
@@ -352,10 +359,11 @@ export default function XtbImportCard() {
 // Podgląd i import otwartych pozycji (arkusz „Open Positions”)
 function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
   const { state, actions } = useApp();
-  const hasOther = state.trades.some((t) => t.accountId === account.id && !String(t.id).startsWith(`xtbpos_${account.id}_`));
+  const ownTrade = (t) => String(t.id).startsWith(`xtbpos_${account.id}_`) || String(t.id).startsWith(`xtbcl_${account.id}_`);
+  const hasOther = state.trades.some((t) => t.accountId === account.id && !ownTrade(t));
   const hasRealDeposits = !!analysis.cashOps?.ops.some((o) => o.kind === 'DEPOSIT');
   // Wpłaty: prawdziwe z raportu (limit IKE bez rotacji) / na pokrycie każdej transzy / brak
-  const [cashMode, setCashMode] = useState(hasRealDeposits ? 'REAL' : 'FUND');
+  const [cashMode, setCashMode] = useState(hasRealDeposits ? 'REAL' : analysis.closed ? 'NONE' : 'FUND');
   const fundCash = cashMode === 'FUND';
   const realCashflows = useMemo(
     () => (cashMode === 'REAL' && analysis.cashOps ? buildXtbRealCashflows(analysis.cashOps, { state, account }) : null),
@@ -363,6 +371,13 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
   );
   const [replaceAccount, setReplaceAccount] = useState(hasOther);
   const [withIncome, setWithIncome] = useState(!!analysis.cashOps);
+  // Zamknięte pozycje: przy wpłatach na pokrycie transz (FUND) sprzedaże zawyżałyby gotówkę – wtedy wyłączone
+  const [withClosedPref, setWithClosed] = useState(true);
+  const withClosed = !!analysis.closed && withClosedPref && cashMode !== 'FUND';
+  const closedPlan = useMemo(
+    () => (withClosed ? buildXtbClosedImport(analysis.closed, mapping, { state, account }) : null),
+    [withClosed, analysis, mapping, state, account],
+  );
   const plan = useMemo(
     () => buildXtbOpenImport(analysis, mapping, { state, account, fundCash, replaceAccount, realCashflows }),
     [analysis, mapping, state, account, fundCash, replaceAccount, realCashflows],
@@ -379,8 +394,19 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
     actions.removeMany('cashflows', [...plan.removeCashflows, ...plan.cashflows.map((x) => x.id)]);
     actions.addMany('trades', plan.trades);
     if (plan.cashflows.length) actions.addMany('cashflows', plan.cashflows);
+    const known = new Set([...state.instruments.map((i) => i.id), ...plan.newInstruments.map((i) => i.id)]);
+    if (closedPlan) {
+      const extra = closedPlan.newInstruments.filter((i) => !known.has(i.id));
+      if (extra.length) actions.addMany('instruments', extra);
+      extra.forEach((i) => known.add(i.id));
+      actions.removeMany('trades', [...closedPlan.removeTrades, ...closedPlan.trades.map((x) => x.id)]);
+      actions.addMany('trades', closedPlan.trades);
+    } else if (!analysis.closed || cashMode === 'FUND' || !withClosedPref) {
+      // Bez zamkniętych pozycji: usuń transze z wcześniejszego importu tego arkusza
+      const stale = state.trades.filter((t) => t.accountId === account.id && String(t.id).startsWith(`xtbcl_${account.id}_`)).map((t) => t.id);
+      if (stale.length) actions.removeMany('trades', stale);
+    }
     if (incomePlan) {
-      const known = new Set([...state.instruments.map((i) => i.id), ...plan.newInstruments.map((i) => i.id)]);
       const extra = incomePlan.newInstruments.filter((i) => !known.has(i.id));
       if (extra.length) actions.addMany('instruments', extra);
       // Przy zastąpieniu historii konta: dywidendy/odsetki konta spoza raportu są usuwane, z raportu – dodawane bez duplikatów
@@ -389,7 +415,7 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
     }
     if (Object.keys(plan.quotes).length) actions.mergeQuotes(plan.quotes);
     actions.clearSnapshots();
-    actions.notify(`Zaimportowano otwarte pozycje XTB na „${account.name}”: ${analysis.groups.length} walorów, ${plan.trades.length} transz`, 'success');
+    actions.notify(`Zaimportowano otwarte pozycje XTB na „${account.name}”: ${analysis.groups.length} walorów, ${plan.trades.length} transz${closedPlan ? ` + ${analysis.closed.lots.length} zamkniętych` : ''}`, 'success');
     onDone();
   };
 
@@ -515,6 +541,18 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
                 {incomePlan
                   ? `(${incomePlan.dividends} dywidend · ${formatPLN(incomePlan.gross)} brutto${incomePlan.tax > 0 ? ` · podatek ${formatPLN(incomePlan.tax)}` : ''}${incomePlan.interest ? ` · ${incomePlan.interest} wypłat odsetek` : ''})`
                   : '(rejestr wypłat dywidend dla zakładki Dywidendy)'}
+              </span>
+            </span>
+          </label>
+        )}
+        {analysis.closed && (
+          <label className={`flex items-start gap-2 ${cashMode === 'FUND' ? 'opacity-60' : ''}`}>
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={withClosed} disabled={cashMode === 'FUND'} onChange={(e) => setWithClosed(e.target.checked)} />
+            <span>
+              Dołącz zamknięte pozycje z arkusza „{analysis.closed.sheetName}”{' '}
+              <span className="text-stone-500">
+                ({analysis.closed.totals.lots} transz, {analysis.closed.totals.tickers} spółek · zrealizowany wynik {formatPLN(analysis.closed.totals.profit, { sign: true })} – historia sprzedaży: dywidendy ze sprzedanych akcji, zrealizowany zysk i rotacja w limicie
+                {cashMode === 'FUND' ? '; niedostępne przy wpłatach pokrywających transze' : ''})
               </span>
             </span>
           </label>

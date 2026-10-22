@@ -1,40 +1,79 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { HandCoins, PiggyBank, Table2 } from 'lucide-react';
+import { HandCoins, Pencil, PiggyBank, Plus, Table2, Trash2 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { CAPITALIZATION } from '../../lib/constants.js';
 import { getCpiTable } from '../../lib/bonds.js';
 import { passiveIncomeByMonth, savingsProjection } from '../../lib/savings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatDate, formatPLN, formatPercent, todayISO } from '../../lib/format.js';
-import { Badge, Button, Card, ChartTooltip, EmptyState, Field, Input, Select, Toggle } from '../ui.jsx';
+import { Badge, Button, Card, ChartTooltip, EmptyState, Field, IconButton, Input, Select, Toggle } from '../ui.jsx';
+import { AccountFormModal, DeleteAccountModal } from '../settings/AccountForm.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
 
-export function SavingsCards({ onNavigate }) {
+const emptySavings = () => ({ name: '', type: 'SAVINGS', institution: '', currency: 'PLN', openedAt: todayISO(), interestRate: 0, capitalization: 'MONTHLY' });
+
+// Konta oszczędnościowe – wbudowany instrument poduszki finansowej (dodawanie, edycja i usuwanie w tej zakładce)
+export function SavingsCards() {
   const { state } = useApp();
+  const [form, setForm] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
   const accounts = state.accounts.filter((a) => a.type === 'SAVINGS');
+  const modals = (
+    <>
+      <AccountFormModal form={form} setForm={setForm} types={['SAVINGS']} />
+      <DeleteAccountModal account={toDelete} onClose={() => setToDelete(null)} />
+    </>
+  );
   if (accounts.length === 0) {
     return (
-      <Card title="Konto Oszczędnościowe" icon={PiggyBank}>
+      <Card title="Konta oszczędnościowe" icon={PiggyBank}>
         <EmptyState
           icon={PiggyBank}
           title="Brak kont oszczędnościowych"
-          description="Dodaj konto typu „Oszczędnościowe” w ustawieniach."
-          action={onNavigate && <Button onClick={() => onNavigate('settings')}>Przejdź do ustawień</Button>}
+          description="Dodaj konto oszczędnościowe – saldo, oprocentowanie i kapitalizacja odsetek."
+          action={
+            <Button variant="primary" icon={Plus} onClick={() => setForm(emptySavings())}>
+              Dodaj konto oszczędnościowe
+            </Button>
+          }
         />
+        {modals}
       </Card>
     );
   }
-  return accounts.map((a) => <SavingsCard key={a.id} account={a} />);
+  return (
+    <>
+      {accounts.map((a, i) => (
+        <SavingsCard key={a.id} account={a} onEdit={() => setForm({ ...a })} onDelete={() => setToDelete(a)} onAdd={i === 0 ? () => setForm(emptySavings()) : null} />
+      ))}
+      {modals}
+    </>
+  );
 }
 
-function SavingsCard({ account }) {
+function SavingsCard({ account, onEdit, onDelete, onAdd }) {
   const { state, actions } = useApp();
   const p = useMemo(() => savingsProjection(state, account), [state, account]);
   const update = (patch) => actions.upsert('accounts', { ...account, ...patch });
 
   return (
-    <Card title={account.name} subtitle={`Konto oszczędnościowe · ${account.institution || ''}`} icon={PiggyBank}>
+    <Card
+      title={account.name}
+      subtitle={`Konto oszczędnościowe · ${account.institution || ''}`}
+      icon={PiggyBank}
+      actions={
+        <div className="flex items-center gap-1">
+          {onAdd && (
+            <Button size="sm" icon={Plus} onClick={onAdd}>
+              Dodaj konto
+            </Button>
+          )}
+          <IconButton icon={Pencil} label="Edytuj konto oszczędnościowe" onClick={onEdit} />
+          <IconButton icon={Trash2} label="Usuń konto oszczędnościowe" onClick={onDelete} className="hover:text-red-600" />
+        </div>
+      }
+    >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-xs text-stone-500 dark:text-stone-400">Saldo</div>

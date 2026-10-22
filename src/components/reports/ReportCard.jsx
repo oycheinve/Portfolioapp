@@ -2,7 +2,7 @@ import { forwardRef } from 'react';
 import { fmtPct, fmtZl, reportHeader } from '../../lib/xReport.js';
 
 // Karta graficzna raportu – czyste SVG (stały ciemny motyw), gotowe do eksportu PNG bez zewnętrznych bibliotek.
-// Logotypy spółek zastąpione monogramami (inicjały tickera) w stałym kolorze instrumentu.
+// Logotypy spółek osadzone jako data URI (eksport PNG bez blokady CORS); bez logo – monogram tickera w kolorze instrumentu.
 
 const C = {
   bg1: '#0b0b0b',
@@ -48,6 +48,21 @@ function Monogram({ x, y, r, ticker, color }) {
   );
 }
 
+// Logo w białym kółku obok nazwy spółki (przycięte do koła)
+function Logo({ x, y, r, href, id }) {
+  return (
+    <g>
+      <defs>
+        <clipPath id={id}>
+          <circle cx={x} cy={y} r={r} />
+        </clipPath>
+      </defs>
+      <circle cx={x} cy={y} r={r} fill="#ffffff" />
+      <image href={href} x={x - r * 0.78} y={y - r * 0.78} width={r * 1.56} height={r * 1.56} clipPath={`url(#${id})`} preserveAspectRatio="xMidYMid meet" />
+    </g>
+  );
+}
+
 function Stat({ x, y, label, value, sub, valueColor = C.text, size = 34 }) {
   return (
     <g>
@@ -66,7 +81,7 @@ function Stat({ x, y, label, value, sub, valueColor = C.text, size = 34 }) {
   );
 }
 
-const ReportCard = forwardRef(function ReportCard({ metrics, totals, series, colors, options, size = 'WIDE' }, ref) {
+const ReportCard = forwardRef(function ReportCard({ metrics, totals, series, colors, logos = {}, options, size = 'WIDE' }, ref) {
   const { w, h } = CARD_SIZES[size];
   const hide = options.hideAmounts;
   const pad = 56;
@@ -179,7 +194,11 @@ const ReportCard = forwardRef(function ReportCard({ metrics, totals, series, col
         return (
           <g key={`${m.instrument.id}-${m.kind}`}>
             <rect x={rightX} y={y} width={rightW} height={rowH - 10} rx="12" fill={C.panel} />
-            <Monogram x={rightX + 26} y={y + (rowH - 10) / 2} r={16} ticker={m.instrument.ticker} color={colors[m.instrument.id] || C.accent} />
+            {logos[m.instrument.id] ? (
+              <Logo x={rightX + 26} y={y + (rowH - 10) / 2} r={16} href={logos[m.instrument.id]} id={`rc-logo-${i}`} />
+            ) : (
+              <Monogram x={rightX + 26} y={y + (rowH - 10) / 2} r={16} ticker={m.instrument.ticker} color={colors[m.instrument.id] || C.accent} />
+            )}
             <text x={rightX + 54} y={y + (rowH - 10) / 2 + 7} fontFamily={FONT} fontSize={m.instrument.ticker.length > 7 ? 16 : 20} fontWeight="700" fill={C.text}>
               {m.instrument.ticker.length > 10 ? `${m.instrument.ticker.slice(0, 9)}…` : m.instrument.ticker}
             </text>
