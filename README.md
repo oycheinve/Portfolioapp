@@ -222,6 +222,10 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - Kalkulator obligacyjny: dla każdej obligacji „zysk przed opłatą” (po podatku, gdyby opłaty nie było), „opłata za wykup” i „zysk na rękę” – po odjęciu opłaty od wypracowanych odsetek i podatku Belki od odsetek pomniejszonych o opłatę. Stopa roczna, wynik realny, wykres i wybór najlepszej obligacji liczone z kwoty na rękę. Opłata zgodnie z listem emisyjnym nie wyższa niż naliczone odsetki (nie zmniejsza wpłaconego kapitału).
 - Rejestr obligacji (Poduszka): kolumna „Na rękę przy wykupie dziś” – nominał + naliczone odsetki − opłata za wykup (ROR 0,50 zł, TOS i COI 0,70 zł, EDO 2,00 zł za sztukę) − podatek; wycena portfela bez zmian.
 
+## Kalkulator opłacalności ETF – waluta
+
+- Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

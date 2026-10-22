@@ -7,19 +7,36 @@ export const ETF_ACCOUNTS = {
   BROKERAGE: { id: 'BROKERAGE', label: 'Maklerskie (19% przy sprzedaży)', tax: BELKA_RATE },
 };
 
+// Waluty kalkulatora (waluta konta i kwot) oraz notowań ETF-ów
+export const ETF_CALC_CURRENCIES = ['PLN', 'USD', 'EUR'];
+export const ETF_QUOTE_CURRENCIES = ['PLN', 'USD', 'EUR', 'GBP'];
+
 export function defaultEtfCalc() {
   return {
+    currency: 'PLN',
     initial: 10000,
     monthly: 1000,
     years: 20,
     grossReturn: 7,
     account: 'IKE',
     etfs: [
-      { id: 'e1', name: 'ETF globalny (EUR)', ter: 0.22, foreign: true, fxPct: XTB_FX_FEE_PCT },
-      { id: 'e2', name: 'ETF S&P 500 (USD)', ter: 0.07, foreign: true, fxPct: XTB_FX_FEE_PCT },
-      { id: 'e3', name: 'ETF na GPW (PLN)', ter: 0.5, foreign: false, fxPct: 0 },
+      { id: 'e1', name: 'ETF globalny (EUR)', ter: 0.22, currency: 'EUR', fxPct: XTB_FX_FEE_PCT },
+      { id: 'e2', name: 'ETF S&P 500 (USD)', ter: 0.07, currency: 'USD', fxPct: XTB_FX_FEE_PCT },
+      { id: 'e3', name: 'ETF na GPW (PLN)', ter: 0.5, currency: 'PLN', fxPct: XTB_FX_FEE_PCT },
     ],
   };
+}
+
+// Waluta notowań ETF-u (starsze zapisy: foreign true/false bez waluty)
+export function etfCurrency(e) {
+  if (e.currency) return e.currency;
+  if (!e.foreign) return 'PLN';
+  return /\(EUR\)|EUR/i.test(e.name || '') ? 'EUR' : 'USD';
+}
+
+// Przewalutowanie tylko, gdy waluta ETF-u różni się od waluty kalkulatora (konta)
+export function needsFx(e, calcCurrency = 'PLN') {
+  return etfCurrency(e) !== calcCurrency;
 }
 
 // Pojedyncza symulacja; zwraca ścieżkę wartości (przed sprzedażą) i rozliczenie końcowe
@@ -78,13 +95,14 @@ export function compareEtfs(params) {
   const baselineReturn = effectiveAnnualReturn({ ...base, net: noCost.net });
   const rows = params.etfs.map((e) => {
     const ter = Math.max(0, Number(e.ter) || 0);
-    const fxPct = e.foreign ? Math.max(0, Number(e.fxPct) || 0) : 0;
+    const fxPct = needsFx(e, params.currency || 'PLN') ? Math.max(0, Number(e.fxPct) || 0) : 0;
     const sim = simulateEtf({ ...base, ter, fxPct });
     const noTer = simulateEtf({ ...base, ter: 0, fxPct });
     const noFx = simulateEtf({ ...base, ter, fxPct: 0 });
     const eff = effectiveAnnualReturn({ ...base, net: sim.net });
     return {
       ...e,
+      currency: etfCurrency(e),
       ter,
       fxPct,
       sim,
