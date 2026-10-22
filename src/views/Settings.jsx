@@ -13,7 +13,6 @@ import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES 
 export default function SettingsView() {
   return (
     <div className="space-y-4 sm:space-y-6">
-      <BackupCard />
       <AccountsSection />
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
         <TaxSection />
@@ -22,6 +21,7 @@ export default function SettingsView() {
       <LimitsCard />
       <FireGoalsCard />
       <OtherAssetsSection />
+      <BackupCard />
     </div>
   );
 }
