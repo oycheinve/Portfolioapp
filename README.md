@@ -213,6 +213,10 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Grafika raportu pokazuje zamiast listy ruchów dwa walory okresu: największy wzrost i największy spadek (zmiana ceny w PLN), w dużych kafelkach z logotypem (słownik logotypów / domena / monogram), tickerem, nazwą i zmianą %. Przy jednym walorze – jeden kafelek. Tekst posta na X bez zmian.
 
+## Wykluczenie Syn2Bio z podsumowań
+
+- Walory z listy `SUMMARY_EXCLUDED_TICKERS` (src/lib/engine.js; obecnie Syn2Bio – S2B) są pomijane w podsumowaniach okresowych i rocznych: podsumowanie roku, miesiące, lata kalendarzowe, okresy raportu na X i statystyka „od początku roku”. Liczone tak, jakby waloru nie było w portfelu (bez jego transakcji, wyniku i dywidend; wyceny z cen historycznych, bo migawki dzienne zawierają jego wartość). Wartość portfela, Portfel i statystyki całościowe bez zmian.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

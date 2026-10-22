@@ -1,6 +1,6 @@
 // Etap 5: raporty okresowe – tydzień ISO, miesiąc i rok kalendarzowy (1.01–31.12).
 // Wynik okresu = wartość na koniec − wartość na początek − wpłaty netto; stopa metodą Modified Dietz.
-import { bondIncomeEvents, computeHoldings, depositsWithdrawals, flowItems, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
+import { bondIncomeEvents, computeHoldings, depositsWithdrawals, flowItems, summaryState, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -161,7 +161,9 @@ function instrumentResults(state, start, end, resolver, income, accountIds = nul
 }
 
 // accountIds (opcjonalnie) – metryki tylko dla wybranych kont (np. portfel inwestycyjny bez poduszki)
-export function periodMetrics(state, period, resolver, today = isoDay(new Date()), accountIds = null) {
+export function periodMetrics(stateIn, period, resolver, today = isoDay(new Date()), accountIds = null) {
+  // Podsumowania okresowe i roczne – bez walorów wykluczonych (np. Syn2Bio)
+  const state = summaryState(stateIn);
   const inAcc = (id) => !accountIds || accountIds.includes(id);
   const s = valuationAt(state, period.start, resolver, today, accountIds);
   const e = valuationAt(state, period.end, resolver, today, accountIds);
@@ -249,7 +251,7 @@ export function scopedPeriodMetrics(state, period, resolver, scope, today = isoD
   const instruments = m.instruments.filter((r) => scope.pick(r.instrument));
   // Dywidendy okresu z rejestru – także spółek już sprzedanych (bez pozycji na początku i końcu okresu)
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
-  const dividends = incomeEventsWithTax(state)
+  const dividends = incomeEventsWithTax(summaryState(state))
     .filter((i) => i.type === 'DIVIDEND' && i.date > m.startDate && i.date <= m.endDate && scope.accountIds.includes(i.accountId) && scope.pick(instById[i.instrumentId]))
     .reduce((s, i) => s + i.net, 0);
   const profit = instruments.reduce((s, r) => s + r.result - r.dividends, 0) + dividends;
