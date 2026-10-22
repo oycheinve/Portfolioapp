@@ -229,6 +229,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 ## FIRE {rok} i porządek w „Więcej”
 
 - **FIRE {rok docelowy}** (`#/fire`, `src/views/FireGoal.jsx`) – osobna sekcja w „Więcej” i w menu bocznym (nazwa z rokiem z celów FIRE): pierścień „osiągnięte”, główny wskaźnik „Do celu FIRE brakuje X%” wg kryterium (oba cele / dochód / majątek), karty postępu majątku i miesięcznego dochodu pasywnego (z kwotą brakującą), szacowany termin osiągnięcia z symulacji FIRE, przyciski „Symulacja i projekcja FIRE” i „Zmień cele FIRE” (`#/settings/fire`). Dawny adres `#/fire` prowadzi teraz tutaj (symulacja: `#/simulations/fire`).
+- **Wykres prognozy FIRE** (`src/components/fire/FireProjectionChart.jsx`, w widoku FIRE i w symulacji FIRE): majątek i dochód pasywny na liniowej osi czasu kończącej się w miesiącu, w którym wybrany scenariusz osiąga cel FIRE (wg kryterium z ustawień) – wcześniej lub później niż rok docelowy; znacznik „FIRE” w punkcie osiągnięcia, pionowa linia roku docelowego (gdy wypada przed końcem), scenariusze skrajne ucięte w tym samym miejscu; bez osiągnięcia celu – prognoza do 2100 z komunikatem (`fireChartPoints` w `src/lib/fire.js`).
 - **Ustawienia → Cele FIRE** – sekcja zwijana, domyślnie zwinięta (otwiera się sama po wejściu z widoku FIRE).
 - **Kolejność w „Więcej”**: Poduszka finansowa, Symulacje i kalkulator, Alokacja i Dopłaty, FIRE, Statystyki, Raport na X, Rejestr Wpłat/Wypłat, a na końcu Konta i ustawienia oraz przełącznik motywu (`MORE_ORDER` w `Layout.jsx`).
 

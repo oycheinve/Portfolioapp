@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
-import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CalendarCheck, Flag, Flame, Gauge, Settings2, SlidersHorizontal, Target } from 'lucide-react';
+import { CalendarCheck, Flag, Flame, Settings2, SlidersHorizontal, Target } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { SCENARIOS, coastFireNumber, fireProgress, requiredContribution, runScenarios } from '../lib/fire.js';
 import { dividendKpis } from '../lib/dividends.js';
@@ -8,10 +7,10 @@ import { savingsProjection } from '../lib/savings.js';
 import { getCpiTable, valueBond } from '../lib/bonds.js';
 import { isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../lib/engine.js';
 import { bondBelkaRate } from '../lib/tax.js';
-import { chartChrome, seriesColor } from '../lib/colors.js';
-import { formatAxisPLN, formatNumber, formatPLN, formatPercent } from '../lib/format.js';
+import { seriesColor } from '../lib/colors.js';
+import { formatNumber, formatPLN, formatPercent } from '../lib/format.js';
 import { Button, Card, Segmented, Slider, Toggle } from '../components/ui.jsx';
-import { Legend } from '../components/charts/chartUtils.jsx';
+import FireProjectionChart from '../components/fire/FireProjectionChart.jsx';
 import { PassiveIncomeCard } from '../components/bonds/SavingsSection.jsx';
 
 const MONTHS = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
@@ -40,7 +39,6 @@ export default function FireView({ onNavigate }) {
   const { state, actions, isDark } = useApp();
   const fire = state.settings.fire;
   const setFire = (patch) => actions.updateSettings({ fire: { ...fire, ...patch } });
-  const chrome = chartChrome(isDark);
 
   const current = useMemo(() => {
     const v = valuePortfolio(state, { asOf: isoDay(new Date()), accountIds: null, priceLookup: livePriceLookup(state) });
@@ -69,27 +67,6 @@ export default function FireView({ onNavigate }) {
   const sel = scenarios[fire.scenario];
   const onTrack = sel.reached && sel.reached.year <= fire.targetYear;
   const real = fire.realValues !== false;
-
-  // Punkty roczne do wykresu (grudzień każdego roku + punkt startowy)
-  const chartData = useMemo(() => {
-    const pick = (pts) => pts.filter((p, i) => i === 0 || (p.month === 11 && p.year !== pts[0].year));
-    const main = pick(sel.points);
-    const pess = pick(scenarios.PESSIMISTIC.points);
-    const opt = pick(scenarios.OPTIMISTIC.points);
-    return main.map((p, i) => {
-      // współczynnik inflacji od dziś = nominalnie / realnie
-      const deflate = real || !(p.valueReal > 0) ? 1 : p.value / p.valueReal;
-      return {
-        year: String(p.year),
-        value: real ? p.valueReal : p.value,
-        income: real ? p.monthlyIncomeReal : p.monthlyIncome,
-        pess: real ? pess[i]?.valueReal : pess[i]?.value,
-        opt: real ? opt[i]?.valueReal : opt[i]?.value,
-        targetValue: fire.targetNetWorth * deflate,
-        targetIncome: fire.targetMonthlyIncome * deflate,
-      };
-    });
-  }, [sel, scenarios, fire, real]);
 
   const valueColor = seriesColor(0, isDark);
   const incomeColor = seriesColor(4, isDark);
@@ -172,83 +149,8 @@ export default function FireView({ onNavigate }) {
             </div>
       </Card>
 
-      {/* 2. Wykres wynikowy */}
-          <Card
-            title={`Ścieżka do ${fire.targetYear}`}
-            subtitle="Lewa oś: majątek · prawa oś: miesięczny dochód pasywny"
-            icon={Gauge}
-            actions={
-              <Segmented
-                size="sm"
-                value={real ? 'REAL' : 'NOMINAL'}
-                onChange={(v) => setFire({ realValues: v === 'REAL' })}
-                ariaLabel="Kwoty"
-                options={[
-                  { value: 'REAL', label: 'Realnie' },
-                  { value: 'NOMINAL', label: 'Nominalnie' },
-                ]}
-              />
-            }
-          >
-            <Legend
-              items={[
-                { key: 'v', label: `Majątek (${SCENARIOS[fire.scenario].label.toLowerCase()})`, color: valueColor },
-                { key: 'b', label: 'Pesymistyczny / optymistyczny', color: bandColor, dashed: true },
-                { key: 'i', label: 'Dochód pasywny / mies. (prawa oś)', color: incomeColor },
-                { key: 't', label: 'Cele', color: chrome.primary, dashed: true },
-              ]}
-            />
-            <div className="mt-2 h-80 sm:h-96">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="fireFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={valueColor} stopOpacity={0.25} />
-                      <stop offset="100%" stopColor={valueColor} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={chrome.grid} vertical={false} />
-                  <XAxis dataKey="year" tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={{ stroke: chrome.axis }} minTickGap={24} />
-                  <YAxis yAxisId="v" tick={{ fill: valueColor, fontSize: 11 }} tickLine={false} axisLine={false} width={58} tickFormatter={formatAxisPLN} />
-                  <YAxis yAxisId="i" orientation="right" tick={{ fill: incomeColor, fontSize: 11 }} tickLine={false} axisLine={false} width={52} tickFormatter={formatAxisPLN} />
-                  <Tooltip
-                    content={({ active, payload, label }) =>
-                      active && payload?.length ? (
-                        <div className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs shadow-lg dark:border-white/10 dark:bg-neutral-900">
-                          <div className="mb-1 font-medium">{label}</div>
-                          {payload
-                            .filter((p) => p.dataKey !== 'targetValue' && p.dataKey !== 'targetIncome')
-                            .map((p) => (
-                              <div key={p.dataKey} className="flex items-center gap-2">
-                                <span className="h-2 w-2 rounded-full" style={{ background: p.stroke }} />
-                                <span className="text-stone-500">{p.name}</span>
-                                <span className="ml-auto pl-4 font-medium tabular">{formatPLN(p.value)}</span>
-                              </div>
-                            ))}
-                        </div>
-                      ) : null
-                    }
-                    cursor={{ stroke: chrome.axis }}
-                  />
-                  <Line type="monotone" yAxisId="v" dataKey="pess" name="Pesymistyczny" stroke={bandColor} strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                  <Line type="monotone" yAxisId="v" dataKey="opt" name="Optymistyczny" stroke={bandColor} strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                  <Area type="monotone" yAxisId="v" dataKey="value" name="Majątek" stroke={valueColor} strokeWidth={2.5} fill="url(#fireFill)" dot={false} isAnimationActive={false} />
-                  <Line type="monotone" yAxisId="i" dataKey="income" name="Dochód / mies." stroke={incomeColor} strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                  {real ? (
-                    <>
-                      <ReferenceLine yAxisId="v" y={fire.targetNetWorth} stroke={valueColor} strokeDasharray="6 4" label={{ value: 'cel majątku', position: 'insideTopLeft', fill: valueColor, fontSize: 11 }} />
-                      <ReferenceLine yAxisId="i" y={fire.targetMonthlyIncome} stroke={incomeColor} strokeDasharray="6 4" label={{ value: 'cel dochodu', position: 'insideBottomRight', fill: incomeColor, fontSize: 11 }} />
-                    </>
-                  ) : (
-                    <>
-                      <Line type="monotone" yAxisId="v" dataKey="targetValue" name="Cel majątku" stroke={valueColor} strokeDasharray="6 4" strokeWidth={1} dot={false} isAnimationActive={false} />
-                      <Line type="monotone" yAxisId="i" dataKey="targetIncome" name="Cel dochodu" stroke={incomeColor} strokeDasharray="6 4" strokeWidth={1} dot={false} isAnimationActive={false} />
-                    </>
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
+      {/* 2. Wykres wynikowy – do momentu osiągnięcia celu FIRE */}
+      <FireProjectionChart scenarios={scenarios} />
 
       {/* 3. Wyniki liczbowe */}
       {/* Wskaźnik bliskości FIRE */}

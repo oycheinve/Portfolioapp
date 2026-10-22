@@ -102,6 +102,7 @@ export function runScenarios(base, fire) {
     const points = simulateFire({ ...base, annualReturn, untilYear: MAX_YEAR_SEARCH });
     out[key] = {
       points: points.filter((p) => p.year <= fire.targetYear),
+      all: points,
       reached: firstMet(points, fire),
       atTarget: points.filter((p) => p.year <= fire.targetYear).at(-1),
     };
@@ -136,4 +137,44 @@ export function coastFireNumber(fire, now = new Date()) {
   const inf = (Number(fire.inflation) || 0) / 100;
   const nominalTarget = fire.targetNetWorth * Math.pow(1 + inf, years);
   return nominalTarget / Math.pow(1 + r, years);
+}
+
+// Punkty wykresu prognozy: horyzont kończy się w miesiącu, w którym wybrany scenariusz osiąga cel FIRE
+// (kryterium z ustawień: majątek / dochód / oba), a nie na roku docelowym. Bez osiągnięcia celu – do 2100.
+// Punkty roczne (grudzień) + start + dokładny punkt osiągnięcia celu; scenariusze skrajne ucinane w tym samym miejscu.
+const SHORT_MONTHS = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
+export function fireChartPoints(scenarios, fire) {
+  const sel = scenarios[fire.scenario] || scenarios.BASE;
+  const all = sel.all || sel.points;
+  const last = all[all.length - 1];
+  const end = sel.reached || { year: last.year, month: last.month };
+  const within = (p) => p.year < end.year || (p.year === end.year && p.month <= end.month);
+  const pick = (pts) => {
+    const cut = (pts || []).filter(within);
+    return cut.filter((p, i) => i === 0 || i === cut.length - 1 || (p.month === 11 && p.year !== cut[0].year));
+  };
+  const main = pick(all);
+  const byKey = (pts) => Object.fromEntries(pick(pts).map((p) => [`${p.year}-${p.month}`, p]));
+  const pess = byKey(scenarios.PESSIMISTIC?.all);
+  const opt = byKey(scenarios.OPTIMISTIC?.all);
+  const endKey = `${end.year}-${end.month}`;
+  return {
+    reached: sel.reached || null,
+    end,
+    endLabel: sel.reached ? `${SHORT_MONTHS[end.month]} ${end.year}` : `${end.year}`,
+    points: main.map((p, i) => {
+      const key = `${p.year}-${p.month}`;
+      const isEnd = i === main.length - 1;
+      return {
+        ...p,
+        key,
+        // oś czasu liniowa: rok + miesiąc/12 (grudzień 2055 = 2055,92)
+        t: p.year + p.month / 12,
+        x: isEnd && sel.reached && p.month !== 11 ? `${SHORT_MONTHS[p.month]} ${p.year}` : String(p.year),
+        isEnd: isEnd && key === endKey,
+        pess: pess[key] || null,
+        opt: opt[key] || null,
+      };
+    }),
+  };
 }

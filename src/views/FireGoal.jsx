@@ -6,6 +6,7 @@ import { isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../li
 import { formatPLN, formatPercent } from '../lib/format.js';
 import { Card } from '../components/ui.jsx';
 import { currentPassiveIncome } from './Fire.jsx';
+import FireProjectionChart from '../components/fire/FireProjectionChart.jsx';
 
 const MONTHS = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'];
 const CRITERION = { BOTH: 'oba cele: majątek i dochód pasywny', INCOME: 'cel dochodu pasywnego', NETWORTH: 'cel majątku' };
@@ -31,8 +32,9 @@ export default function FireGoalView({ onNavigate }) {
       dgr: (Number(fire.dgr) || 0) / 100,
       inflation: (Number(fire.inflation) || 0) / 100,
     };
-    const scenario = runScenarios(base, fire)[fire.scenario] || null;
-    return { value, monthlyIncome, income, progress, reached: scenario?.reached || null };
+    const scenarios = runScenarios(base, fire);
+    const scenario = scenarios[fire.scenario] || null;
+    return { value, monthlyIncome, income, progress, scenarios, reached: scenario?.reached || null };
   }, [state, fire]);
 
   const p = data.progress;
@@ -102,6 +104,8 @@ export default function FireGoalView({ onNavigate }) {
           note={`Dywidendy ${formatPLN(data.income.dividends / 12)} · obligacje ${formatPLN(data.income.bonds / 12)} · oszczędności ${formatPLN(data.income.savings / 12)} / mies.`}
         />
       </div>
+
+      <FireProjectionChart scenarios={data.scenarios} />
 
       <Card title="Dalej" icon={TrendingUp} bodyClassName="p-4 sm:p-5">
         <div className="flex flex-wrap gap-2">
