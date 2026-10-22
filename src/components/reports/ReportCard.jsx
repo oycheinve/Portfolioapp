@@ -226,7 +226,7 @@ const ReportCard = forwardRef(function ReportCard({ metrics, totals, series, col
       {/* Stopka */}
       <line x1={pad} x2={w - pad} y1={h - pad - 6} y2={h - pad - 6} stroke={C.line} strokeWidth="2" />
       <text x={pad} y={h - pad + 26} fontFamily={FONT} fontSize="18" fill={C.muted}>
-        Portfolio App · portfel inwestycyjny
+        Mój Majątek · portfel inwestycyjny
       </text>
       <text x={w - pad} y={h - pad + 26} textAnchor="end" fontFamily={FONT} fontSize="18" fill={C.muted}>
         {options.hashtags?.split(/\s+/).slice(0, 3).join(' ')}

@@ -9,9 +9,16 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 );
 
-// Service worker (tylko wersja produkcyjna) – wymagany do instalacji aplikacji na telefonie (PWA)
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((e) => console.warn('[PWA] Rejestracja service workera nie powiodła się:', e));
-  });
+// Sprzątanie po wycofanym service workerze (wcześniejsza wersja PWA) – aplikacja działa bez niego
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => regs.forEach((r) => r.unregister()))
+    .catch(() => {});
+}
+if (typeof caches !== 'undefined') {
+  caches
+    .keys()
+    .then((keys) => keys.filter((k) => k.startsWith('portfolio-app-')).forEach((k) => caches.delete(k)))
+    .catch(() => {});
 }
