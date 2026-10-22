@@ -12,6 +12,7 @@ import { uid } from '../lib/format.js';
 import { reconcileDividends } from '../lib/dividends.js';
 import { runDividendSync } from '../lib/dividendSync.js';
 import { isWarsawMarketOpen, mayAutoFetch } from '../lib/marketHours.js';
+import { useCloudSync } from './useCloudSync.js';
 
 const AppContext = createContext(null);
 
@@ -49,7 +50,7 @@ function useSystemDark() {
   return dark;
 }
 
-export function AppProvider({ children }) {
+export function AppProvider({ children, cloud = null }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadInitialState);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
@@ -313,9 +314,12 @@ export function AppProvider({ children }) {
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Konto w chmurze: zapis każdej zmiany w bazie zalogowanego użytkownika (w trybie lokalnym – nieaktywne)
+  const cloudSync = useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs });
+
   const value = useMemo(
-    () => ({ state, actions, isDark, refreshing, historyLoading, toast, dismissToast: () => setToast(null) }),
-    [state, actions, isDark, refreshing, historyLoading, toast],
+    () => ({ state, actions, isDark, refreshing, historyLoading, toast, dismissToast: () => setToast(null), cloud: cloudSync }),
+    [state, actions, isDark, refreshing, historyLoading, toast, cloudSync],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

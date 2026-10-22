@@ -7,6 +7,7 @@ import { formatDateTime, formatPLN, todayISO } from '../lib/format.js';
 import { Badge, Button, Card, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
 import LimitsCard from '../components/settings/LimitsCard.jsx';
 import BackupCard from '../components/settings/BackupCard.jsx';
+import CloudCard from '../components/settings/CloudCard.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
@@ -21,6 +22,7 @@ export default function SettingsView() {
       <LimitsCard />
       <FireGoalsCard />
       <OtherAssetsSection />
+      <CloudCard />
       <BackupCard />
     </div>
   );

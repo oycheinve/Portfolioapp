@@ -226,6 +226,27 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
 
+## Konta użytkowników i synchronizacja w chmurze (Supabase)
+
+Logowanie i rejestracja e-mail + hasło (z resetem hasła), dane portfela zapisane w bazie przypisanej do konta.
+
+**Konfiguracja (jednorazowo):**
+1. Załóż bezpłatny projekt na [supabase.com](https://supabase.com).
+2. W projekcie: *SQL Editor* → wklej i uruchom `supabase/schema.sql` (tabela `portfolios` + Row Level Security – każdy użytkownik widzi wyłącznie swój wiersz).
+3. *Project Settings → API*: skopiuj *Project URL* i klucz *anon public* do zmiennych `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (plik `.env.local` lokalnie albo zmienne środowiskowe hostingu, np. Vercel – wzór w `.env.example`). Alternatywnie wpisz je w aplikacji: Ustawienia → „Konto i synchronizacja w chmurze”.
+4. *Authentication → URL Configuration*: ustaw *Site URL* na adres aplikacji (linki potwierdzające e-mail i reset hasła). Potwierdzanie adresu e-mail można wyłączyć w *Authentication → Providers → Email*.
+
+**Działanie:**
+- Bez konfiguracji aplikacja działa jak dotąd – dane tylko w tej przeglądarce. Z konfiguracją: ekran logowania przed startem, z opcją „Kontynuuj bez konta”.
+- Po zalogowaniu stan portfela (transakcje, konta, obligacje, dywidendy, cele, ustawienia oraz ustawienia widoków i kalkulatorów) pobierany jest z chmury; każda zmiana zapisuje się w bazie po ~1 s. Ikona chmury w nagłówku pokazuje stan (zsynchronizowano / zapisywanie / błąd).
+- Pierwsze logowanie na nowe konto przenosi do chmury dane z tej przeglądarki. Dane innego użytkownika z tej samej przeglądarki nigdy nie są przenoszone.
+- localStorage pozostaje kopią roboczą: praca bez internetu, zaległe zmiany wysyłane automatycznie po odzyskaniu połączenia (ponawianie co 30 s i przy zdarzeniu `online`).
+- Kilka urządzeń: po powrocie do aplikacji pobierana jest nowsza wersja z chmury; przed każdym zapisem sprawdzane jest, czy inne urządzenie nie zapisało nowszej wersji (wtedy wygrywa wersja z chmury, a lokalne zmiany trafiają do kopii awaryjnej `portfolio-cloud-conflict-backup`).
+- Wylogowanie wysyła zaległe zmiany i usuwa dane portfela z tej przeglądarki (zostają w chmurze).
+- Kopia zapasowa JSON w Ustawieniach działa bez zmian (eksport / import – po zalogowaniu wczytana kopia od razu trafia do chmury).
+
+Pliki: `src/lib/cloud.js` (klient Supabase, ładowany dopiero przy skonfigurowanej chmurze), `src/components/auth/AuthGate.jsx` (ekran logowania i pobranie danych), `src/state/useCloudSync.js` (synchronizacja), `src/components/settings/CloudCard.jsx`, `supabase/schema.sql`.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

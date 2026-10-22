@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppProvider } from './state/AppContext.jsx';
+import AuthGate from './components/auth/AuthGate.jsx';
 import { Layout, NAV_ITEMS, Toast } from './components/Layout.jsx';
 import Dashboard from './views/Dashboard.jsx';
 import CashRegister from './views/CashRegister.jsx';
@@ -61,12 +62,16 @@ export default function App() {
   const View = VIEWS[view] || Dashboard;
 
   return (
-    <AppProvider>
-      <Layout view={view} onNavigate={navigate}>
-        <View key={view} onNavigate={navigate} param={route.param} />
-      </Layout>
-      <GoalsRolloverHost onNavigate={navigate} />
-      <Toast />
-    </AppProvider>
+    <AuthGate>
+      {(cloud) => (
+        <AppProvider key={cloud?.user.id || 'local'} cloud={cloud}>
+          <Layout view={view} onNavigate={navigate}>
+            <View key={view} onNavigate={navigate} param={route.param} />
+          </Layout>
+          <GoalsRolloverHost onNavigate={navigate} />
+          <Toast />
+        </AppProvider>
+      )}
+    </AuthGate>
   );
 }

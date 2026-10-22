@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, BarChart3, Coins, FileText, FlaskConical, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, Cloud, CloudOff, Coins, FileText, FlaskConical, LayoutDashboard, LineChart, Menu, Monitor, Moon, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -43,6 +43,21 @@ function PriceStatus() {
       <span>{s.text}</span>
       {lastRefresh && <span className="hidden lg:inline">· {formatDateTime(lastRefresh)}</span>}
     </div>
+  );
+}
+
+// Stan synchronizacji z chmurą (tylko po zalogowaniu) – kliknięcie prowadzi do Ustawień
+const CLOUD_LABEL = { synced: 'Zsynchronizowano z chmurą', pending: 'Zmiany czekają na zapis w chmurze', saving: 'Zapisywanie w chmurze…', error: 'Błąd synchronizacji z chmurą – spróbuję ponownie' };
+function CloudStatus({ onNavigate }) {
+  const { cloud } = useApp();
+  if (!cloud?.enabled) return null;
+  const Icon = cloud.status === 'error' ? CloudOff : Cloud;
+  const color = cloud.status === 'error' ? 'text-red-600 dark:text-red-400' : cloud.status === 'synced' ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400 animate-pulse';
+  const label = `${CLOUD_LABEL[cloud.status] || ''} · ${cloud.user.email}`;
+  return (
+    <button type="button" onClick={() => onNavigate('settings')} className={`inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-white/5 ${color}`} aria-label={label} title={label}>
+      <Icon size={18} />
+    </button>
   );
 }
 
@@ -124,6 +139,7 @@ export function Layout({ view, onNavigate, children }) {
           </div>
           <h1 className="truncate text-base font-semibold">{current?.longLabel}</h1>
           <div className="ml-auto flex items-center gap-2">
+            <CloudStatus onNavigate={onNavigate} />
             <PriceStatus />
             <button
               type="button"
