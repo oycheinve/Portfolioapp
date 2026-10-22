@@ -31,7 +31,7 @@ function escapeIcs(text) {
 
 export function buildIcs(events) {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Moj Majatek//Dywidendy//PL', 'CALSCALE:GREGORIAN'];
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Portfolio App//Dywidendy//PL', 'CALSCALE:GREGORIAN'];
   for (const e of events) {
     lines.push(
       'BEGIN:VEVENT',

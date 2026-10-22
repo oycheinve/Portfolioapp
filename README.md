@@ -1,4 +1,4 @@
-# Mój Majątek – aplikacja do zarządzania majątkiem i portfelem
+# Portfolio App – aplikacja do zarządzania majątkiem i portfelem
 
 React + Vite + Tailwind CSS v4 + Recharts + Lucide Icons. Dane trzymane lokalnie (`localStorage`) z eksportem/importem całego stanu do pliku JSON.
 
@@ -225,6 +225,10 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 ## Kalkulator opłacalności ETF – waluta
 
 - Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
+
+## Logo i instalacja jako aplikacja (PWA)
+
+Nazwa aplikacji: **Portfolio App**. Ikony (favicon 16/32/48 + `favicon.ico`, `apple-touch-icon` 180 px, ikony PWA 192/512 px oraz wersje `maskable` dla Androida) leżą w `public/icons/`, a `public/manifest.webmanifest` opisuje aplikację do instalacji na ekranie głównym (tryb `standalone`, kolor motywu `#0c0c10`).
 
 ## Architektura danych (`src/state/schema.js`)
 
