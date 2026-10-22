@@ -20,8 +20,10 @@ const FILTER_HINT = {
   SAFE: 'tylko poduszka finansowa',
 };
 
-// Statystyki: wspólny wybór konta / portfela dla wszystkich sekcji, zwijana lista statystyk
-export default function StatsView() {
+// Podsumowania (dawna zakładka Statystyki, teraz część zakładki Wykresy): wspólny wybór konta / portfela
+// dla wszystkich sekcji, zwijana lista – Podsumowanie roku i miesiące (domyślnie rozwinięte), Lata kalendarzowe,
+// Prawdziwy Zysk i wskaźniki
+export default function StatsSummaries() {
   const [filter, setFilterState] = useState(readFilter);
   const setFilter = (v) => {
     setFilterState(v);
@@ -32,12 +34,13 @@ export default function StatsView() {
     }
   };
   const items = [
-    { id: 'true-return', title: 'Prawdziwy Zysk i wskaźniki', subtitle: 'Zysk całkowity, TWR, CAGR, TER, wykorzystanie limitów', icon: Sigma, render: () => <PortfolioStatsCard filter={filter} onFilterChange={setFilter} /> },
     { id: 'year', title: 'Podsumowanie roku i miesiące', subtitle: 'Wynik roku kalendarzowego, najlepszy i najsłabszy miesiąc, tabela miesięcy', icon: CalendarDays, render: () => <Summaries parts={['year', 'months']} filter={filter} /> },
     { id: 'years', title: 'Lata kalendarzowe', subtitle: '1 stycznia – 31 grudnia każdego roku', icon: CalendarRange, render: () => <Summaries parts={['years']} filter={filter} /> },
+    { id: 'true-return', title: 'Prawdziwy Zysk i wskaźniki', subtitle: 'Zysk całkowity, TWR, CAGR, TER, wykorzystanie limitów', icon: Sigma, render: () => <PortfolioStatsCard filter={filter} onFilterChange={setFilter} /> },
   ];
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" id="podsumowania">
+      <h2 className="px-1 pt-2 text-sm font-semibold text-stone-500 uppercase tracking-wide dark:text-stone-400">Podsumowania</h2>
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-neutral-900">
         <span className="flex items-center gap-2 text-sm font-semibold">
           <Filter size={16} className="text-blue-600 dark:text-blue-400" /> Konto / portfel
@@ -45,7 +48,7 @@ export default function StatsView() {
         <AccountFilterSelect value={filter} onChange={setFilter} />
         <span className="text-xs text-stone-500 dark:text-stone-400">{FILTER_HINT[filter] || 'wybrane konto – wszystkie sekcje liczone tylko dla niego'}</span>
       </div>
-      <Accordion items={items} storageKey="wealth-app-stats-open" defaultOpen={['true-return']} />
+      <Accordion items={items} storageKey="wealth-app-charts-summaries-open" defaultOpen={['year']} />
     </div>
   );
 }

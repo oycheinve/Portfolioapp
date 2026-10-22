@@ -7,7 +7,6 @@ import CashRegister from './views/CashRegister.jsx';
 import AllocationView from './views/Allocation.jsx';
 import ChartsBondsView from './views/ChartsBonds.jsx';
 import PortfolioView from './views/Portfolio.jsx';
-import StatsView from './views/Stats.jsx';
 import SafeCapitalView from './views/SafeCapital.jsx';
 import DividendsView from './views/Dividends.jsx';
 import ReportsView from './views/Reports.jsx';
@@ -21,7 +20,6 @@ import BudgetView from './views/Budget.jsx';
 const VIEWS = {
   dashboard: Dashboard,
   portfolio: PortfolioView,
-  stats: StatsView,
   safe: SafeCapitalView,
   allocation: AllocationView,
   charts: ChartsBondsView,
@@ -36,7 +34,8 @@ const VIEWS = {
 };
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc
-const ALIASES = { stress: 'simulations/stress', quotes: 'charts/quotes' };
+// Dawna zakładka Statystyki – podsumowania są teraz w Wykresach
+const ALIASES = { stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes' };
 
 function readHash() {
   let h = window.location.hash.replace('#/', '').replace('#', '');
