@@ -200,6 +200,10 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - Po każdym odświeżeniu subtelny komunikat: „Kursy pobrane na żywo z Yahoo Finance (n) · trasa: …”, częściowo na żywo / z danych awaryjnych albo „Yahoo Finance niedostępne – kursy z danych awaryjnych (ostatnie znane i ceny z transakcji)”. W konsoli podsumowanie `[Kursy]` z listą walorów, które nie przyszły na żywo, i powodami; historia zapytań w `window.__yahooDiag`.
 - Mapowanie tickerów przed zapytaniem: końcówki XTB → Yahoo (`.PL` → `.WA`, `.UK` → `.L`, `.US` → bez końcówki, `.DE`, `.NL` → `.AS` itd.), także gdy końcówka jest w samym tickerze; ticker bez końcówki – giełda wg waluty (PLN `.WA`, EUR `.DE`, GBP `.L`, CHF `.SW`, USD bez końcówki).
 
+## Klasy aktywów – wagi docelowe z Poduszką finansową
+
+- W Alokacji klasy aktywów liczone są ze stanu faktycznego: akcje i ETF (oraz wolna gotówka) z kont w wybranym zakresie, a obligacje i konto oszczędnościowe zawsze z Poduszki finansowej – aktywne transze z rejestru obligacji i saldo konta oszczędnościowego (także przy zakresie „Portfel inwestycyjny”). Klasy: Akcje, ETF, Obligacje (Poduszka), Oszczędności i gotówka. Przy wyborze pojedynczego konta lub typu konta – tylko ten zakres. TER portfela liczony względem kont w zakresie.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

@@ -28,7 +28,9 @@ export default function TerAnalysis({ analysis }) {
   const horizonCost = rows.reduce((s, r) => s + r.horizonCost, 0);
   const terEtf = etfValue > 0 ? annualCost / etfValue : 0;
   const terSleeve = analysis.sleeveValue > 0 ? annualCost / analysis.sleeveValue : 0;
-  const terPortfolio = analysis.total > 0 ? annualCost / analysis.total : 0;
+  // TER względem kont w zakresie (bez Poduszki dołączanej do klas aktywów)
+  const scopeTotal = analysis.valuation.totals.total;
+  const terPortfolio = scopeTotal > 0 ? annualCost / scopeTotal : 0;
   const maxCost = Math.max(1, ...rows.map((r) => r.annualCost));
   // Przewalutowanie (XTB 0,05%): zapłacone przy dotychczasowych transakcjach + szacunek przy sprzedaży – wszystkie instrumenty
   const fxPaid = analysis.instruments.reduce((s, r) => s + (r.fxFees || 0), 0);

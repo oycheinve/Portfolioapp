@@ -50,7 +50,7 @@ export default function AllocationView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <Card title="Zakres i próg alertu" subtitle="Wagi liczone dla wybranych kont · nieruchomości nie są uwzględniane" icon={SlidersHorizontal}>
+      <Card title="Zakres i próg alertu" subtitle="Akcje i ETF – z wybranych kont; obligacje i konto oszczędnościowe – z Poduszki finansowej · bez nieruchomości" icon={SlidersHorizontal}>
         <div className="flex flex-wrap items-end gap-4">
           <Field label="Zakres kont">
             <AccountFilterSelect value={alloc.scope || 'ALL'} onChange={(scope) => setAlloc({ scope })} />
@@ -67,7 +67,7 @@ export default function AllocationView() {
           </Field>
           <div className="ml-auto grid grid-cols-2 gap-6 text-sm">
             <div>
-              <div className="text-xs text-stone-500 dark:text-stone-400">Wartość portfela</div>
+              <div className="text-xs text-stone-500 dark:text-stone-400">Wartość (klasy aktywów)</div>
               <div className="font-semibold tabular">{formatPLN(analysis.total)}</div>
             </div>
             <div>

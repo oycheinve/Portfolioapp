@@ -40,10 +40,29 @@ export function computeAllocation(state, scopeOverride) {
   const t = valuation.totals;
   const threshold = Number(alloc.driftThreshold) || 0;
 
-  // Klasy aktywów – udział w całym portfelu (bez nieruchomości)
-  const classValues = { STOCKS: t.stocks, ETF: t.etf, BONDS: t.bonds, CASH: t.cash };
+  // Klasy aktywów – udział w całym portfelu (bez nieruchomości). Akcje, ETF i wolna gotówka – z kont w zakresie;
+  // obligacje i konto oszczędnościowe – zawsze z Poduszki finansowej (aktywne transze z rejestru obligacji i saldo
+  // konta oszczędnościowego), także gdy zakres to portfel inwestycyjny. Wybór jednego konta / typu konta – bez dodatków.
+  const groupScope = scope === 'INVEST' || scope === 'ALL' || scope === 'SAFE';
+  const safeIds = resolveAccountIds(state, 'SAFE');
+  const safe = groupScope ? valuePortfolio(state, { asOf: isoDay(new Date()), accountIds: safeIds, priceLookup: livePriceLookup(state) }) : null;
+  const inScope = new Set(accountIds);
+  const scopeNonSafe = (field) =>
+    Object.entries(valuation.byAccount)
+      .filter(([id]) => inScope.has(id) && !safeIds.includes(id))
+      .reduce((sum, [, x]) => sum + (x[field] || 0), 0);
+  const classValues = groupScope
+    ? {
+        STOCKS: scopeNonSafe('stocks'),
+        ETF: scopeNonSafe('etf'),
+        BONDS: safe.totals.bonds + scopeNonSafe('bonds'),
+        CASH: safe.totals.cash + scopeNonSafe('cash'),
+      }
+    : { STOCKS: t.stocks, ETF: t.etf, BONDS: t.bonds, CASH: t.cash };
+  const classTotal = Object.values(classValues).reduce((sum, v) => sum + v, 0);
+  const CLASS_LABELS = groupScope ? { BONDS: 'Obligacje (Poduszka)', CASH: 'Oszczędności i gotówka' } : {};
   const classes = ALLOCATION_CLASSES.map((key) =>
-    deviationRow({ key, label: ASSET_CLASSES[key].label, value: classValues[key], total: t.total, targetPct: alloc.classTargets?.[key] }),
+    deviationRow({ key, label: CLASS_LABELS[key] || ASSET_CLASSES[key].label, value: classValues[key], total: classTotal, targetPct: alloc.classTargets?.[key] }),
   );
 
   // Instrumenty – udział w części akcje + ETF
@@ -100,7 +119,8 @@ export function computeAllocation(state, scopeOverride) {
     scope,
     accountIds,
     valuation,
-    total: t.total,
+    total: classTotal,
+    poduszka: safe ? { bonds: safe.totals.bonds, savings: safe.totals.cash } : null,
     sleeveValue,
     classes,
     instruments,
