@@ -186,23 +186,20 @@ export function Layout({ view, onNavigate, children }) {
         />
       </nav>
 
-      {/* Arkusz „Więcej” – mobile */}
+      {/* Arkusz „Więcej” – mobile: siatka zaokrąglonych kart + przełącznik motywu */}
       {moreOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm md:hidden" onClick={() => setMoreOpen(false)}>
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Więcej sekcji"
-            className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-stone-200 bg-white p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:border-white/10 dark:bg-neutral-900"
+            className="absolute inset-x-0 bottom-0 rounded-t-[28px] bg-white px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl dark:bg-neutral-900"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-2 flex items-center justify-between px-2">
-              <span className="text-sm font-semibold">Więcej</span>
-              <button type="button" onClick={() => setMoreOpen(false)} aria-label="Zamknij" className="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-white/5">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="grid max-h-[65vh] grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+            <button type="button" onClick={() => setMoreOpen(false)} aria-label="Zamknij" className="mx-auto mb-3 flex h-6 w-16 items-center justify-center">
+              <span className="h-1.5 w-12 rounded-full bg-stone-300 dark:bg-white/20" />
+            </button>
+            <div className="grid max-h-[62vh] grid-cols-2 gap-3 overflow-y-auto">
               {NAV_ITEMS.filter((n) => !n.mobile).map((item) => {
                 const Icon = item.icon;
                 const active = item.id === view;
@@ -214,16 +211,46 @@ export function Layout({ view, onNavigate, children }) {
                       setMoreOpen(false);
                       onNavigate(item.id);
                     }}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
-                      active ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : 'hover:bg-stone-100 dark:hover:bg-white/5'
+                    aria-current={active ? 'page' : undefined}
+                    className={`relative flex min-h-[4.75rem] items-center gap-3 rounded-[22px] px-3.5 py-3 text-left text-[15px] leading-tight font-semibold transition-colors ${
+                      active
+                        ? 'bg-blue-100/80 text-blue-900 dark:bg-blue-500/15 dark:text-blue-200'
+                        : 'bg-stone-100/80 text-stone-800 active:bg-stone-200 dark:bg-white/[0.06] dark:text-stone-100 dark:active:bg-white/10'
                     }`}
                   >
-                    <Icon size={20} />
-                    {item.longLabel}
-                    {badges[item.id] && <span className="ml-auto rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${active ? 'bg-white/80 dark:bg-white/10' : 'bg-white/70 dark:bg-white/10'}`}>
+                      <Icon size={20} strokeWidth={1.8} />
+                    </span>
+                    <span className="min-w-0">{item.longLabel}</span>
+                    {badges[item.id] && <span className="absolute top-2 right-2.5 rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
                   </button>
                 );
               })}
+            </div>
+            <div className="mt-3 flex items-center justify-between rounded-[22px] bg-stone-100/80 py-2.5 pr-2.5 pl-4 dark:bg-white/[0.06]">
+              <span className="text-[15px] font-semibold">Motyw</span>
+              <div className="flex items-center gap-1 rounded-full bg-white/70 p-1 dark:bg-white/10" role="radiogroup" aria-label="Motyw aplikacji">
+                {['light', 'dark', 'system'].map((t) => {
+                  const TIcon = THEME_ICON[t];
+                  const on = theme === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      aria-label={THEME_LABEL[t]}
+                      title={THEME_LABEL[t]}
+                      onClick={() => actions.updateSettings({ theme: t })}
+                      className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+                        on ? 'bg-white text-amber-500 shadow-sm dark:bg-neutral-700 dark:text-amber-300' : 'text-stone-500 dark:text-stone-400'
+                      }`}
+                    >
+                      <TIcon size={18} />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

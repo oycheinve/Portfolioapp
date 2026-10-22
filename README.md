@@ -226,6 +226,13 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
 
+## Odświeżony wygląd (UI)
+
+- **Więcej** (telefon): arkusz z uchwytem, dwukolumnowa siatka zaokrąglonych kart z ikoną w kółku (te same sekcje co dotąd), przełącznik motywu (jasny / ciemny / systemowy) na dole.
+- **Kalkulator Inteligentnej Dopłaty**: duże pole kwoty z dopiskiem PLN, szybkie kwoty 500 / 1000 / 1500 / 3000 jako pill-buttony, „min. zlecenie”, przycisk „Kopiuj plan” i tabela rozbicia Aktywo / Teraz / Cel / Dokup (wszystkie walory; bez zakupu – wyszarzone). Algorytm water-filling bez zmian.
+- **Mapa cieplna dnia**: kafelki proporcjonalne do wartości pozycji, pastelowe zielenie (wzrost) i róże/czerwienie (spadek) w skali −2% … +2%, ticker z kropką koloru waloru i zmiana %.
+- **Pasywny dochód** (Pulpit, `PassiveIncomeTile`): prognoza netto z posiadanych jednostek „X PLN / mc”, suma roczna i otrzymane łącznie, paski postępu celów (dywidendy / dochód pasywny z Celów rocznych, cel FIRE), karty „Ostatnie 12 mies.” i „W drodze”, przycisk „Projekcja” (symulacja FIRE).
+
 ## Kalkulator PPK (Symulacje)
 
 `src/lib/ppkCalc.js`, `src/components/simulations/PpkCalculator.jsx` – symulacja miesiąc po miesiącu:

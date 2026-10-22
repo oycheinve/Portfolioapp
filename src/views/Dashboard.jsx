@@ -7,6 +7,7 @@ import { formatPLN, formatPercent, signClass } from '../lib/format.js';
 import { Badge, Button, Card, EmptyState } from '../components/ui.jsx';
 import NetWorthPanel from '../components/dashboard/NetWorthPanel.jsx';
 import QuickStatsPanel from '../components/dashboard/QuickStatsPanel.jsx';
+import PassiveIncomeTile from '../components/dashboard/PassiveIncomeTile.jsx';
 
 // Pulpit (minimalistyczny): majątek całkowity ze strukturą oraz podsumowanie kont
 export default function Dashboard({ onNavigate }) {
@@ -40,6 +41,7 @@ export default function Dashboard({ onNavigate }) {
     <div className="space-y-4 sm:space-y-6">
       <QuickStatsPanel />
       <NetWorthPanel valuation={valuation} compact />
+      <PassiveIncomeTile onNavigate={onNavigate} />
       <AccountsSummary valuation={valuation} onNavigate={onNavigate} />
     </div>
   );

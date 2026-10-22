@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ResponsiveContainer, Tooltip, Treemap } from 'recharts';
 import { Grid3x3 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { divergingColor, readableTextOn } from '../../lib/colors.js';
+import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
 import { formatMoney, formatPLN, formatPercent } from '../../lib/format.js';
 import { Card, EmptyState, Segmented } from '../ui.jsx';
 
@@ -16,35 +16,44 @@ function dailyChange(quote) {
   return quote.price / quote.prevClose - 1;
 }
 
+// Pastelowe tło i kolor tekstu kafelka wg zmiany dziennej (skala −2% … +2%): zielenie – wzrost, róże/czerwienie – spadek
+const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mixHex = (a, b, t) => `rgb(${hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * t)).join(',')})`;
+export function heatStyle(change, isDark, maxAbs = 0.02) {
+  const P = isDark
+    ? { zero: '#2a2a28', upLo: '#1f2e24', upHi: '#1f6b3a', downLo: '#33201f', downHi: '#8a2a2a', upText: '#86efac', downText: '#fca5a5', zeroText: '#d6d3d1' }
+    : { zero: '#efeee9', upLo: '#e5f4e8', upHi: '#a6dcb4', downLo: '#f9e4e4', downHi: '#eeaaaa', upText: '#1f7a3d', downText: '#c23030', zeroText: '#57534e' };
+  if (!Number.isFinite(change) || Math.abs(change) < 0.0005) return { fill: P.zero, text: P.zeroText };
+  const t = Math.pow(Math.min(1, Math.abs(change) / maxAbs), 0.8);
+  return change > 0 ? { fill: mixHex(P.upLo, P.upHi, t), text: P.upText } : { fill: mixHex(P.downLo, P.downHi, t), text: P.downText };
+}
+
 function HeatTile(props) {
-  const { x, y, width, height, depth, name, change, isDark } = props;
+  const { x, y, width, height, depth, name, change, isDark, color } = props;
   if (depth !== 1 || width <= 0 || height <= 0) return null;
-  const fill = divergingColor(change, isDark);
-  const text = readableTextOn(fill);
-  const showName = width > 44 && height > 26;
-  const showChange = width > 44 && height > 42;
-  const fontSize = Math.max(10, Math.min(16, Math.sqrt(width * height) / 7));
+  const gap = 3;
+  const w = Math.max(0, width - gap * 2);
+  const h = Math.max(0, height - gap * 2);
+  const { fill, text } = heatStyle(change, isDark);
+  const r = Math.min(16, w / 4, h / 4);
+  const fontSize = Math.max(11, Math.min(15, Math.sqrt(w * h) / 9));
+  const showName = w > 56 && h > 30;
+  const showChange = w > 56 && h > 48;
+  const showDot = w > 18 && h > 18;
+  const px = x + gap + 10;
+  const py = y + gap + 8 + fontSize;
   return (
     <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        rx={4}
-        ry={4}
-        fill={fill}
-        stroke={isDark ? '#171717' : '#ffffff'}
-        strokeWidth={2}
-      />
+      <rect x={x + gap} y={y + gap} width={w} height={h} rx={r} ry={r} fill={fill} />
+      {showDot && <circle cx={showName ? px + 4 : x + gap + Math.min(14, w / 2)} cy={showName ? py - fontSize * 0.35 : y + gap + Math.min(14, h / 2)} r={4.5} fill={color || text} />}
       {showName && (
-        <text x={x + width / 2} y={y + height / 2 - (showChange ? fontSize * 0.45 : -fontSize * 0.35)} textAnchor="middle" fill={text} fontSize={fontSize} fontWeight={600}>
+        <text x={px + 13} y={py} fill={isDark ? '#f5f5f4' : '#1c1917'} fontSize={fontSize} fontWeight={700}>
           {name}
         </text>
       )}
       {showChange && (
-        <text x={x + width / 2} y={y + height / 2 + fontSize * 0.85} textAnchor="middle" fill={text} fontSize={Math.max(10, fontSize * 0.75)} opacity={0.9}>
-          {Number.isFinite(change) ? `${change > 0 ? '+' : ''}${(change * 100).toFixed(2)}%` : '—'}
+        <text x={px} y={py + fontSize * 1.45} fill={text} fontSize={fontSize} fontWeight={700}>
+          {Number.isFinite(change) ? `${change > 0 ? '+' : ''}${(change * 100).toFixed(2).replace('.', ',')}%` : '—'}
         </text>
       )}
     </g>
@@ -83,6 +92,7 @@ export default function HeatmapCard({ valuation }) {
   const { state, isDark } = useApp();
   const [group, setGroup] = useState('INSTRUMENT');
   const quotes = state.prices.quotes;
+  const instColors = useMemo(() => instrumentColorMap(state, isDark), [state, isDark]);
 
   const { data, dayChangePLN, dayChangePct, total } = useMemo(() => {
     const map = new Map();
@@ -102,6 +112,7 @@ export default function HeatmapCard({ valuation }) {
         currency: q?.currency || p.instrument.currency,
       };
       prev.value += p.value;
+      prev.color = instColors[p.instrumentId];
       map.set(key, prev);
     }
     const items = [...map.values()].filter((d) => d.value > 0);
@@ -114,14 +125,14 @@ export default function HeatmapCard({ valuation }) {
     }
     items.sort((a, b) => b.value - a.value);
     return { data: items, dayChangePLN: changePLN, dayChangePct: sum - changePLN > 0 ? changePLN / (sum - changePLN) : 0, total: sum };
-  }, [valuation.positions, quotes, group]);
+  }, [valuation.positions, quotes, group, instColors]);
 
-  const legendStops = [-0.03, -0.015, 0, 0.015, 0.03];
+  const legendStops = [-0.02, -0.01, 0, 0.01, 0.02];
 
   return (
     <Card
-      title="Mapa Cieplna Dnia"
-      subtitle={`Akcje i ETF · rozmiar = wartość, kolor = zmiana dzienna · ${formatPLN(total, { compact: true })}`}
+      title="Mapa cieplna dnia"
+      subtitle={`Wielkość kafelka = wartość pozycji · kolor = zmiana dzienna (−2% … +2%) · ${formatPLN(total, { compact: true })}`}
       icon={Grid3x3}
       actions={<Segmented options={GROUPS} value={group} onChange={setGroup} size="sm" ariaLabel="Grupowanie mapy" />}
     >
@@ -139,8 +150,8 @@ export default function HeatmapCard({ valuation }) {
             <div className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400" aria-label="Legenda skali kolorów">
               {legendStops.map((s) => (
                 <div key={s} className="flex flex-col items-center gap-0.5">
-                  <span className="h-3 w-8 rounded-sm" style={{ background: divergingColor(s, isDark) }} />
-                  <span className="tabular">{s > 0 ? '+' : ''}{(s * 100).toFixed(1)}%</span>
+                  <span className="h-3 w-8 rounded-full" style={{ background: heatStyle(s, isDark).fill }} />
+                  <span className="tabular">{s > 0 ? '+' : ''}{(s * 100).toFixed(0)}%</span>
                 </div>
               ))}
             </div>
