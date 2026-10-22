@@ -228,7 +228,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 ## Budżet miesięczny (Demo)
 
-Zakładka „Budżet (Demo)” (`#/budget`, w „Więcej” i menu bocznym; `src/views/Budget.jsx`, `src/lib/budget.js`): tabela jak w arkuszu – Kategoria (własna nazwa), Planowany budżet, Kwota wydana, Pozostało (plan − wydane, na czerwono po przekroczeniu), Typ / Uwagi (Transport, Inwestycje, Stałe koszty, Zdrowie, Życie, Oszczędności, Inne), wiersz RAZEM; dodawanie, edycja i usuwanie kategorii, zmiana miesiąca, „Kopiuj plan” z poprzedniego zapisanego miesiąca, kafelki podsumowania i zestawienie według typu. Miesiąc bez danych pokazuje przykładowe kategorie (zapis przy pierwszej edycji). Dane w localStorage `wealth-app-budget-v1` – w kopii zapasowej JSON i ustawieniach synchronizowanych z chmurą; nie wpływają na portfel.
+Zakładka „Budżet (Demo)” (`#/budget`, w „Więcej” i menu bocznym; `src/views/Budget.jsx`, `src/lib/budget.js`): minimalistyczna tabela wzorowana na arkuszu Excel – „Budżet na: {miesiąc}”, granatowy nagłówek, kolumny Kategoria, Planowany Budżet, Kwota Wydana, Pozostało (plan − wydane, na czerwono po przekroczeniu) i wyróżniony wiersz RAZEM. Komórki pokazują sformatowane wartości („2 300,00 zł”, nazwy zawijane), kliknięcie otwiera edycję (Enter / kliknięcie obok zatwierdza). Dodawanie (nowy wiersz od razu w edycji nazwy) i usuwanie kategorii, zmiana miesiąca, „Kopiuj plan” z poprzedniego miesiąca. Miesiąc bez danych pokazuje przykładowe kategorie (zapis przy pierwszej edycji). Dane w localStorage `wealth-app-budget-v1` – w kopii zapasowej JSON i ustawieniach synchronizowanych z chmurą; nie wpływają na portfel.
 
 ## FIRE {rok} i porządek w „Więcej”
 

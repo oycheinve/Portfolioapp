@@ -6,19 +6,20 @@ export const BUDGET_KEY = 'wealth-app-budget-v1';
 
 export const BUDGET_TYPES = ['Transport', 'Inwestycje', 'Stałe koszty', 'Zdrowie', 'Życie', 'Oszczędności', 'Inne'];
 
-// Przykładowe kategorie miesiąca bez zapisanych danych
+// Przykładowe kategorie miesiąca bez zapisanych danych (wzór z arkusza „Budżet na: Grudzień”)
 export const DEMO_ROWS = [
-  { name: 'Karta miejska', planned: 110, spent: 110, type: 'Transport' },
-  { name: 'Pociągi', planned: 150, spent: 96.4, type: 'Transport' },
-  { name: 'Czynsz i media', planned: 1800, spent: 1765.2, type: 'Stałe koszty' },
-  { name: 'Telefon i internet', planned: 120, spent: 119.99, type: 'Stałe koszty' },
-  { name: 'Jedzenie', planned: 1200, spent: 1034.55, type: 'Życie' },
-  { name: 'Kosmetyki', planned: 150, spent: 182.3, type: 'Zdrowie' },
-  { name: 'Leki i lekarz', planned: 100, spent: 40, type: 'Zdrowie' },
-  { name: 'Rozrywka', planned: 250, spent: 210, type: 'Życie' },
-  { name: 'Inwestycje (IKE / IKZE)', planned: 1500, spent: 1500, type: 'Inwestycje' },
-  { name: 'Poduszka finansowa', planned: 500, spent: 500, type: 'Oszczędności' },
-  { name: 'Inne', planned: 200, spent: 64, type: 'Inne' },
+  { name: 'Karta miejska', planned: 55, spent: 0, type: 'Transport' },
+  { name: 'Pociągi', planned: 220, spent: 0, type: 'Transport' },
+  { name: 'Inwestycje', planned: 300, spent: 0, type: 'Inwestycje' },
+  { name: 'Canal+', planned: 35, spent: 0, type: 'Stałe koszty' },
+  { name: 'Soczewki', planned: 48, spent: 0, type: 'Zdrowie' },
+  { name: 'Ubery', planned: 40, spent: 0, type: 'Życie' },
+  { name: 'Kosmetyki i chemia', planned: 50, spent: 0, type: 'Życie' },
+  { name: 'Nieprzewidziane wydatki', planned: 200, spent: 53.35, type: 'Inne' },
+  { name: 'Wakacje (odkładanie)', planned: 150, spent: 0, type: 'Oszczędności' },
+  { name: 'S&P 500', planned: 300, spent: 0, type: 'Inwestycje' },
+  { name: 'Suplementy', planned: 22, spent: 0, type: 'Oszczędności' },
+  { name: 'Jedzenie (Reszta)', planned: 880, spent: 0, type: 'Życie' },
 ];
 
 let seq = 0;
