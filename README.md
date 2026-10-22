@@ -209,6 +209,10 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - `LOGO_DICTIONARY` w `src/lib/logos.js`: ręczne przypisanie tickerów z portfela do grafik – ma pierwszeństwo przed domeną firmy i monogramem. Logotypy dostarczone jako pliki aplikacji w `public/logos/` (Digital Network – `dig.png`, cyber_Folks – `cbf.png` na żółtym tle, iShares – `ishares.png` dla CSPX/EIMI/IWDA/SXR8/EUNL) ładują się zawsze, bez sieci; pozostałe spółki z portfela (LPP, XTB, SNT, KTY, KRU, ACP, DIA i in.) – ikony stron pod stałymi adresami, pobierane przez `/api/logo?url=` lub publiczne proxy. Ticker spoza słownika → domena z edycji waloru / wbudowanej listy → monogram.
 
+## Karta raportu na X – lider i maruder
+
+- Grafika raportu pokazuje zamiast listy ruchów dwa walory okresu: największy wzrost i największy spadek (zmiana ceny w PLN), w dużych kafelkach z logotypem (słownik logotypów / domena / monogram), tickerem, nazwą i zmianą %. Przy jednym walorze – jeden kafelek. Tekst posta na X bez zmian.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

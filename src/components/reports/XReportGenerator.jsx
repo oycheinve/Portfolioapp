@@ -388,7 +388,7 @@ export default function XReportGenerator() {
             </div>
           </div>
           <p className="mt-3 text-[11px] text-stone-500 dark:text-stone-500">
-            Logotypy spółek obok nazw (z listy znanych spółek albo domeny wpisanej w edycji waloru); bez logo – monogram w kolorze instrumentu. Ruchy instrumentów = zmiana ceny w PLN w okresie
+            Na grafice: lider (największy wzrost) i maruder (największy spadek) okresu z logotypami (z listy znanych spółek albo domeny wpisanej w edycji waloru); bez logo – monogram w kolorze instrumentu. Ruchy instrumentów = zmiana ceny w PLN w okresie
             {metrics.sources.includes('revaluation') ? ' (część wycen z historii cen / rekonstrukcji)' : ''}.
           </p>
         </Card>

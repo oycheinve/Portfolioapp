@@ -89,11 +89,14 @@ const ReportCard = forwardRef(function ReportCard({ metrics, totals, series, col
   const hide = options.hideAmounts;
   const pad = 56;
   const wide = size === 'WIDE';
+  // Tylko dwa kluczowe walory: największy wzrost i największy spadek w okresie (lista posortowana malejąco po zmianie %)
   const movers = metrics.instruments;
-  const n = Math.min(3, movers.length);
-  const top = movers.slice(0, n);
-  const bottom = movers.length > n ? movers.slice(-Math.min(2, movers.length - n)) : [];
-  const list = [...top.map((m) => ({ ...m, kind: 'top' })), ...bottom.map((m) => ({ ...m, kind: 'bottom' }))];
+  const best = movers[0] || null;
+  const worst = movers.length > 1 ? movers[movers.length - 1] : null;
+  const list = [
+    best && { ...best, kind: 'top', title: best.pct >= 0 ? '▲ NAJWIĘKSZY WZROST' : 'NAJLEPSZY WYNIK' },
+    worst && { ...worst, kind: 'bottom', title: worst.pct < 0 ? '▼ NAJWIĘKSZY SPADEK' : 'NAJSŁABSZY WYNIK' },
+  ].filter(Boolean);
   const periodUp = metrics.profit >= 0;
 
   // Układ: szeroki = dwie kolumny; kwadrat = jedna kolumna
@@ -104,7 +107,7 @@ const ReportCard = forwardRef(function ReportCard({ metrics, totals, series, col
   const sparkY = wide ? 168 : 520;
   const sparkH = wide ? 112 : 120;
   const listY = wide ? 330 : 690;
-  const rowH = wide ? 50 : 56;
+  const rowH = wide ? 112 : 118;
   const spark = sparkPath(series, rightX, sparkY, rightW, sparkH);
   const header = reportHeader(metrics.period).replace('📊 ', '');
 
@@ -183,30 +186,37 @@ const ReportCard = forwardRef(function ReportCard({ metrics, totals, series, col
         </g>
       )}
 
-      {/* Najlepsze / najsłabsze */}
+      {/* Najlepsza i najsłabsza pozycja okresu */}
       <text x={rightX} y={listY - 18} fontFamily={FONT} fontSize="18" fill={C.muted} letterSpacing="0.5">
-        NAJWIĘKSZE RUCHY W OKRESIE
+        LIDER I MARUDER OKRESU
       </text>
       {list.map((m, i) => {
         const y = listY + i * rowH;
         const up = m.pct >= 0;
-        const barX = rightX + 205;
-        const barMax = rightW - 205 - 100;
-        const maxAbs = Math.max(...list.map((x) => Math.abs(x.pct)), 0.0001);
-        const bw = Math.max(4, (Math.abs(m.pct) / maxAbs) * barMax);
+        const boxH = rowH - 14;
+        const cy = y + boxH / 2;
+        const name = m.instrument.name && m.instrument.name !== m.instrument.ticker ? m.instrument.name : '';
         return (
           <g key={`${m.instrument.id}-${m.kind}`}>
-            <rect x={rightX} y={y} width={rightW} height={rowH - 10} rx="12" fill={C.panel} />
+            <rect x={rightX} y={y} width={rightW} height={boxH} rx="16" fill={C.panel} />
+            <rect x={rightX} y={y} width="6" height={boxH} rx="3" fill={up ? C.up : C.down} />
             {logos[m.instrument.id] ? (
-              <Logo x={rightX + 26} y={y + (rowH - 10) / 2} r={16} logo={logos[m.instrument.id]} id={`rc-logo-${i}`} />
+              <Logo x={rightX + 52} y={cy} r={28} logo={logos[m.instrument.id]} id={`rc-logo-${i}`} />
             ) : (
-              <Monogram x={rightX + 26} y={y + (rowH - 10) / 2} r={16} ticker={m.instrument.ticker} color={colors[m.instrument.id] || C.accent} />
+              <Monogram x={rightX + 52} y={cy} r={28} ticker={m.instrument.ticker} color={colors[m.instrument.id] || C.accent} />
             )}
-            <text x={rightX + 54} y={y + (rowH - 10) / 2 + 7} fontFamily={FONT} fontSize={m.instrument.ticker.length > 7 ? 16 : 20} fontWeight="700" fill={C.text}>
-              {m.instrument.ticker.length > 10 ? `${m.instrument.ticker.slice(0, 9)}…` : m.instrument.ticker}
+            <text x={rightX + 96} y={cy - 14} fontFamily={FONT} fontSize="14" fontWeight="600" fill={up ? C.up : C.down} letterSpacing="1">
+              {m.title}
             </text>
-            <rect x={barX} y={y + (rowH - 10) / 2 - 5} width={bw} height="10" rx="5" fill={up ? C.up : C.down} opacity="0.85" />
-            <text x={rightX + rightW - 16} y={y + (rowH - 10) / 2 + 7} textAnchor="end" fontFamily={FONT} fontSize="20" fontWeight="700" fill={up ? C.up : C.down}>
+            <text x={rightX + 96} y={cy + 14} fontFamily={FONT} fontSize={m.instrument.ticker.length > 8 ? 22 : 28} fontWeight="700" fill={C.text}>
+              {m.instrument.ticker.length > 12 ? `${m.instrument.ticker.slice(0, 11)}…` : m.instrument.ticker}
+            </text>
+            {name && (
+              <text x={rightX + 96} y={cy + 36} fontFamily={FONT} fontSize="15" fill={C.muted}>
+                {name.length > 26 ? `${name.slice(0, 25)}…` : name}
+              </text>
+            )}
+            <text x={rightX + rightW - 20} y={cy + 13} textAnchor="end" fontFamily={FONT} fontSize="38" fontWeight="800" fill={up ? C.up : C.down}>
               {fmtPct(m.pct)}
             </text>
           </g>
