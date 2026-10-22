@@ -43,9 +43,15 @@ export function readBudget() {
   }
 }
 
+// Zapis tylko przy faktycznej zmianie; zgłoszenie zmiany ustawień (`wealth-app-prefs-changed`) – synchronizacja
+// z chmurą wysyła wtedy aktualny budżet, a po odświeżeniu nie nadpisuje go starszą kopią z chmury
+export const PREFS_CHANGED_EVENT = 'wealth-app-prefs-changed';
 export function writeBudget(data) {
   try {
-    localStorage.setItem(BUDGET_KEY, JSON.stringify(data));
+    const json = JSON.stringify(data);
+    if (localStorage.getItem(BUDGET_KEY) === json) return true;
+    localStorage.setItem(BUDGET_KEY, json);
+    window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: BUDGET_KEY } }));
     return true;
   } catch {
     return false;
@@ -71,4 +77,21 @@ export function budgetTotals(rows) {
     return { type: t, planned: list.reduce((s, r) => s + num(r.planned), 0), spent: list.reduce((s, r) => s + num(r.spent), 0) };
   }).filter((x) => x.planned > 0 || x.spent > 0);
   return { planned, spent, left: planned - spent, used: planned > 0 ? spent / planned : 0, over: rows.filter((r) => rowLeft(r) < -0.004).length, byType };
+}
+
+// Dzienna statystyka kategorii jedzeniowej: dni do końca miesiąca (z dzisiejszym) i średnia dzienna kwota do wydania
+export const DAILY_KEY = 'wealth-app-budget-daily';
+const FOOD_RE = /jedzeni|żywnoś|zywnos|spożyw|spozyw|zakupy spo|food/i;
+export function defaultFoodRow(rows) {
+  const named = rows.filter((r) => String(r.name || '').trim());
+  return named.find((r) => FOOD_RE.test(r.name)) || named.find((r) => r.type === 'Życie') || named[0] || null;
+}
+export function dailyAllowance(row, month, now = new Date()) {
+  const [y, m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const current = monthKey(now);
+  const daysLeft = month === current ? daysInMonth - now.getDate() + 1 : month > current ? daysInMonth : 0;
+  const planned = row ? num(row.planned) : 0;
+  const left = row ? rowLeft(row) : 0;
+  return { daysInMonth, daysLeft, planned, left, perDay: daysLeft > 0 ? Math.max(0, left) / daysLeft : 0, planPerDay: planned / daysInMonth, past: month < current };
 }

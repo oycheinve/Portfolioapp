@@ -31,6 +31,10 @@ export function useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs })
   const stateRef = useRef(state);
   stateRef.current = state;
   const lastJson = useRef(userId && !cloud.needsPush ? JSON.stringify(state) : null);
+  // Ustawienia widoków (np. Budżet) wysłane ostatnio – ich zmiana też wymaga zapisu w chmurze
+  const uiJson = () => JSON.stringify(collectUiPrefs());
+  const lastUi = useRef(userId && !cloud.needsPush && storage(PENDING_KEY) !== userId ? uiJson() : null);
+  const clean = () => JSON.stringify(stateRef.current) === lastJson.current && uiJson() === lastUi.current;
   const adoptNext = useRef(false); // stan wczytany z chmury – nie odsyłaj go z powrotem
   const timer = useRef(null);
   const inflight = useRef(null);
@@ -41,6 +45,7 @@ export function useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs })
       adoptNext.current = true;
       dispatch({ type: 'IMPORT_STATE', payload: remote.data });
       restoreUiPrefs(remote.uiPrefs);
+      lastUi.current = uiJson();
       storage(SYNCED_AT_KEY, remote.updatedAt);
       storage(PENDING_KEY, null);
       setLastSyncedAt(remote.updatedAt);
@@ -56,7 +61,8 @@ export function useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs })
     timer.current = null;
     if (inflight.current) await inflight.current.catch(() => {});
     const json = JSON.stringify(stateRef.current);
-    if (json === lastJson.current) {
+    const ui = uiJson();
+    if (json === lastJson.current && ui === lastUi.current) {
       setStatus('synced');
       return true;
     }
@@ -73,13 +79,14 @@ export function useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs })
           return;
         }
       }
-      const at = await pushCloud(userId, stateRef.current, collectUiPrefs());
+      const at = await pushCloud(userId, stateRef.current, JSON.parse(ui));
       lastJson.current = json;
+      lastUi.current = ui;
       storage(SYNCED_AT_KEY, at);
-      if (JSON.stringify(stateRef.current) === json) storage(PENDING_KEY, null);
+      if (clean()) storage(PENDING_KEY, null);
       setLastSyncedAt(at);
       setError(null);
-      setStatus(JSON.stringify(stateRef.current) === json ? 'synced' : 'pending');
+      setStatus(clean() ? 'synced' : 'pending');
     })();
     inflight.current = run;
     try {
@@ -110,7 +117,7 @@ export function useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs })
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       timer.current = null;
-      if (JSON.stringify(stateRef.current) === lastJson.current) {
+      if (clean()) {
         setStatus((s) => (s === 'pending' ? 'synced' : s));
         return;
       }
@@ -119,6 +126,22 @@ export function useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs })
     }, DEBOUNCE_MS);
     setStatus((s) => (s === 'error' ? s : 'pending'));
   }, [state, userId, push]);
+
+  // Zmiana ustawień widoków poza stanem portfela (np. Budżet) → ten sam zapis w chmurze
+  useEffect(() => {
+    if (!userId) return undefined;
+    const onPrefs = () => {
+      storage(PENDING_KEY, userId);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        push();
+      }, DEBOUNCE_MS);
+      setStatus((s) => (s === 'error' ? s : 'pending'));
+    };
+    window.addEventListener('wealth-app-prefs-changed', onPrefs);
+    return () => window.removeEventListener('wealth-app-prefs-changed', onPrefs);
+  }, [userId, push]);
 
   // Ponawianie po błędzie (np. brak sieci)
   useEffect(() => {
@@ -137,11 +160,11 @@ export function useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs })
     async ({ silent = true } = {}) => {
       if (!userId) return;
       try {
-        if (timer.current || inflight.current || JSON.stringify(stateRef.current) !== lastJson.current) return;
+        if (timer.current || inflight.current || !clean()) return;
         const remoteAt = await fetchCloudUpdatedAt(userId);
         if (!remoteAt || sameVersion(remoteAt, storage(SYNCED_AT_KEY))) return;
         const remote = await fetchCloud(userId);
-        if (!remote?.data || timer.current || inflight.current || JSON.stringify(stateRef.current) !== lastJson.current) return;
+        if (!remote?.data || timer.current || inflight.current || !clean()) return;
         adoptRemote(remote);
         notify('Wczytano nowszą wersję portfela z chmury (zmiany z innego urządzenia).', 'info');
       } catch (e) {

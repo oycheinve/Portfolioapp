@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Copy, Eraser, Plus, ShoppingBag, X } from 'lucide-react';
-import { budgetTotals, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Copy, Eraser, Plus, ShoppingBag, X } from 'lucide-react';
+import { DAILY_KEY, budgetTotals, dailyAllowance, defaultFoodRow, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 const monthName = (key) => {
@@ -155,6 +155,7 @@ export default function BudgetView() {
       </div>
 
       <PurchasePanel rows={rows} onAdd={addPurchase} />
+      <DailyTile rows={rows} month={month} />
 
       <div className="mt-2 flex flex-wrap items-center gap-1">
         <button type="button" className={linkBtn} onClick={add}>
@@ -289,5 +290,71 @@ function PurchasePanel({ rows, onAdd }) {
         </p>
       )}
     </form>
+  );
+}
+
+const plDays = (n) => (n === 1 ? 'dzień' : 'dni');
+
+// Kafelek dzienny: ile dni zostało do końca miesiąca i ile średnio można wydawać dziennie na jedzenie
+function DailyTile({ rows, month }) {
+  const named = rows.filter((r) => String(r.name || '').trim());
+  const [pick, setPickState] = useState(() => {
+    try {
+      return localStorage.getItem(DAILY_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const setPick = (name) => {
+    setPickState(name);
+    try {
+      localStorage.setItem(DAILY_KEY, name);
+    } catch {
+      // brak localStorage – wybór nie zostanie zapamiętany
+    }
+  };
+  const row = named.find((r) => r.name === pick) || defaultFoodRow(rows);
+  if (!row) return null;
+  const d = dailyAllowance(row, month);
+  const over = d.left < -0.004;
+  return (
+    <div className="mt-3 rounded-lg border border-stone-200 p-3 dark:border-white/10" role="region" aria-label="Statystyka dzienna">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-[#1f3864] uppercase dark:text-blue-300">
+          <CalendarDays size={14} /> Na co dzień
+        </span>
+        <select
+          value={row.name}
+          onChange={(e) => setPick(e.target.value)}
+          aria-label="Kategoria do statystyki dziennej"
+          className="h-8 max-w-[60%] rounded-md border border-stone-200 bg-white px-2 text-xs outline-none focus:border-[#1f3864] dark:border-white/10 dark:bg-neutral-800"
+        >
+          {named.map((r) => (
+            <option key={r.id} value={r.name}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {d.past ? (
+        <p className="text-sm">
+          Miesiąc zakończony – w kategorii <strong>{row.name}</strong> {over ? 'przekroczono plan o ' : 'zostało '}
+          <strong className={over ? 'text-red-600 dark:text-red-400' : ''}>{zl(Math.abs(d.left))}</strong>.
+        </p>
+      ) : over ? (
+        <p className="text-sm">
+          Do końca miesiąca {d.daysLeft === 1 ? 'pozostał' : 'pozostało'} <strong>{d.daysLeft} {plDays(d.daysLeft)}</strong>. Budżet na „{row.name}” jest już przekroczony o{' '}
+          <strong className="text-red-600 dark:text-red-400">{zl(-d.left)}</strong>.
+        </p>
+      ) : (
+        <p className="text-sm leading-relaxed">
+          Do końca miesiąca {d.daysLeft === 1 ? 'pozostał' : 'pozostało'} <strong>{d.daysLeft} {plDays(d.daysLeft)}</strong>. Na „{row.name}” możesz wydawać średnio{' '}
+          <strong className="text-lg text-[#1f3864] tabular dark:text-blue-300">{zl(d.perDay)}</strong> dziennie.
+        </p>
+      )}
+      <p className="mt-1 text-[11px] text-stone-500 tabular dark:text-stone-400">
+        Pozostało {zl(d.left)} z {zl(d.planned)} · plan na cały miesiąc to średnio {zl(d.planPerDay)} dziennie ({d.daysInMonth} dni)
+      </p>
+    </div>
   );
 }
