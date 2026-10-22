@@ -226,6 +226,17 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
 
+## Bezpieczny ponowny import z XTB (bez duplikatów)
+
+Zaktualizowany plik z XTB można wgrywać wielokrotnie – dodawane są wyłącznie nowe operacje (`src/lib/importDedupe.js`):
+- operacja z poprzedniego importu rozpoznawana po ID operacji XTB; plik bez kolumny ID dostaje identyfikatory z treści (data, czas, typ, kwota, symbol, komentarz), a nie z numeru wiersza – przesunięcie wierszy w nowszym pliku nie tworzy duplikatów;
+- operacja już obecna pod innym identyfikatorem (wpis ręczny, import innego arkusza: historia operacji ↔ otwarte/zamknięte pozycje) rozpoznawana po treści: konto, data, czas (gdy oba wpisy go mają), ticker, rodzaj, liczba jednostek i cena / kwota; dopasowanie jeden do jednego;
+- zlecenia realizowane w częściach (jedna transza w raporcie pozycji = kilka realizacji w historii operacji) dopasowywane grupowo: suma jednostek i średnia cena z tego samego dnia;
+- wpisy techniczne (automatyczne „Uzupełnienie środków”, dywidendy zaksięgowane z harmonogramu) nie blokują prawdziwych operacji z pliku;
+- import zapamiętuje godzinę operacji – sprzedaż i kupno z tego samego dnia liczone w prawidłowej kolejności (sprzedaż przekraczająca stan posiadania, po której tego dnia jest kupno, liczona po nim).
+
+Zakupy z importu finansowane z wolnych środków (wpłaty, dywidendy, sprzedaże) nie tworzą dopłat – automatyczne uzupełnienie powstaje tylko na faktyczny niedobór gotówki.
+
 ## Wolne środki, dywidendy i źródła zakupów
 
 - **Wolne środki na IKE / IKZE / rachunku maklerskim** są częścią wartości tego konta (portfel inwestycyjny). W Portfelu mają osobną sekcję „Wolne środki na kontach inwestycyjnych” (filtr „Portfel inwestycyjny”), a nie trafiają do „Kont oszczędnościowych” ani do Poduszki finansowej. Na Pulpicie: „Wolne środki (IKE, IKZE, makl.)” osobno od „Oszczędności”.

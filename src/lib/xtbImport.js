@@ -1,7 +1,10 @@
 // Import z XTB. Plik .xlsx z arkuszem „Open Positions” → import wyłącznie otwartych pozycji (każda transza osobno).
 // Bez tego arkusza (np. CSV) → historia operacji gotówkowych („Cash Operations” / „Historia operacji gotówkowych”).
 // Rozpoznaje wpłaty, wypłaty, zakupy i sprzedaże akcji/ETF, dywidendy, odsetki oraz podatki (dopinane do dywidend/odsetek).
-// Identyfikatory wpisów oparte na ID operacji XTB – ponowny import tego samego pliku nie tworzy duplikatów.
+// Identyfikatory wpisów oparte na ID operacji XTB (bez kolumny ID – na treści operacji), a operacje już obecne w danych
+// (także wpisane ręcznie lub z innego arkusza) rozpoznawane po treści – ponowny / zaktualizowany import nie tworzy duplikatów.
+
+import { dedupeImport } from './importDedupe.js';
 
 const HEADER_ALIASES = {
   id: ['id'],
@@ -54,6 +57,26 @@ export function parseNumber(v) {
   if (s.includes(',') && s.includes('.')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
   else s = s.replace(',', '.');
   return Number(s);
+}
+
+// Godzina operacji (HH:MM:SS) z tej samej komórki co data – do rozpoznawania duplikatów przy ponownym imporcie
+export function parseTime(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    const secs = Math.round((v - Math.floor(v)) * 86400) % 86400;
+    if (!secs) return null;
+    return [Math.floor(secs / 3600), Math.floor((secs % 3600) / 60), secs % 60].map((n) => String(n).padStart(2, '0')).join(':');
+  }
+  const m = /(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(v ?? ''));
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}:${m[3] || '00'}` : null;
+}
+
+// Stabilny identyfikator operacji bez kolumny ID: z treści (data, czas, typ, kwota, symbol, komentarz) zamiast
+// numeru wiersza – w zaktualizowanym pliku wiersze się przesuwają, a ta sama operacja dostaje ten sam identyfikator
+function contentId(parts) {
+  const str = parts.join('|');
+  let h = 5381;
+  for (let i = 0; i < str.length; i += 1) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  return h.toString(36);
 }
 
 // Daty: „17.01.2025 10:23:45”, „2025-01-17 10:23:45”, „01/17/2025”, numer seryjny Excela
@@ -174,18 +197,26 @@ export function analyzeXtb(sheets, { state, accountId }) {
   const { sheet, header } = found;
   const { col } = header;
   const ops = [];
+  const seen = {};
   for (let r = header.index + 1; r < sheet.rows.length; r += 1) {
     const row = sheet.rows[r];
     const type = row[col.type];
     const amount = parseNumber(row[col.amount]);
     const date = parseDate(row[col.time]);
     if (!type || !Number.isFinite(amount) || !date) continue;
+    const time = parseTime(row[col.time]);
     const comment = col.comment !== undefined ? String(row[col.comment] ?? '') : '';
     // Symbol z kolumny albo z komentarza (np. „XTB.PL PLN WHT 19%” przy podatku bez symbolu)
     const symbol = (col.symbol !== undefined ? String(row[col.symbol] ?? '').trim() : '') || (/^([A-Z0-9]+\.[A-Z]{2})\b/.exec(comment.trim()) || [])[1] || '';
-    const xtbId = col.id !== undefined && row[col.id] !== '' ? String(row[col.id]).trim() : `${date}_${r}`;
+    let xtbId = col.id !== undefined && row[col.id] !== '' && row[col.id] !== undefined ? String(row[col.id]).trim() : '';
+    if (!xtbId) {
+      // Bez kolumny ID: identyfikator z treści (+ numer kolejny identycznych operacji w pliku)
+      const base = `c${contentId([date, time || '', String(type).trim(), Math.round(amount * 100), symbol.toUpperCase(), comment.trim()])}`;
+      seen[base] = (seen[base] || 0) + 1;
+      xtbId = seen[base] > 1 ? `${base}_${seen[base]}` : base;
+    }
     const name = col.name !== undefined && col.name !== col.symbol ? String(row[col.name] ?? '').trim() : '';
-    ops.push({ row: r + 1, xtbId, type: String(type), kind: classifyOperation(type, comment, amount), date, amount, comment, symbol, name });
+    ops.push({ row: r + 1, xtbId, type: String(type), kind: classifyOperation(type, comment, amount), date, time, amount, comment, symbol, name });
   }
 
   const symbols = {};
@@ -231,7 +262,7 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
     const id = `${prefix}${o.xtbId}`;
     const sym = o.symbol.toUpperCase();
     if (o.kind === 'DEPOSIT' || o.kind === 'WITHDRAWAL') {
-      cashflows.push({ id, accountId, date: o.date, type: o.amount >= 0 ? 'DEPOSIT' : 'WITHDRAWAL', amount: Math.round(Math.abs(o.amount) * 100) / 100, note: `XTB: ${o.type}${o.comment ? ` – ${o.comment}` : ''}`, source: 'XTB' });
+      cashflows.push({ id, accountId, date: o.date, ...(o.time ? { time: o.time } : {}), type: o.amount >= 0 ? 'DEPOSIT' : 'WITHDRAWAL', amount: Math.round(Math.abs(o.amount) * 100) / 100, note: `XTB: ${o.type}${o.comment ? ` – ${o.comment}` : ''}`, source: 'XTB' });
     } else if (o.kind === 'BUY' || o.kind === 'SELL') {
       const parsed = parseTradeComment(o.comment);
       const instrumentId = instIdFor[sym];
@@ -253,6 +284,7 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
         accountId,
         instrumentId,
         date: o.date,
+        ...(o.time ? { time: o.time } : {}),
         side: o.kind,
         quantity: parsed.quantity,
         price: parsed.price,
@@ -270,6 +302,7 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
         accountId,
         instrumentId: instIdFor[sym] || null,
         date: o.date,
+        ...(o.time ? { time: o.time } : {}),
         type: 'DIVIDEND',
         gross: Math.round(o.amount * 100) / 100,
         foreignTax: 0,
@@ -278,7 +311,7 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
         source: 'XTB',
       });
     } else if (o.kind === 'INTEREST') {
-      income.push({ id, accountId, date: o.date, type: 'INTEREST', gross: Math.round(o.amount * 100) / 100, foreignTax: 0, note: `XTB: ${o.type}`, source: 'XTB' });
+      income.push({ id, accountId, date: o.date, ...(o.time ? { time: o.time } : {}), type: 'INTEREST', gross: Math.round(o.amount * 100) / 100, foreignTax: 0, note: `XTB: ${o.type}`, source: 'XTB' });
     } else if (o.kind === 'TAX' || o.kind === 'INTEREST_TAX') {
       taxes.push(o);
     } else if (o.kind === 'FEE' && sym) {
@@ -307,18 +340,20 @@ export function buildXtbImport(analysis, mapping, { state, account, fxPct = 0 })
     else skipped.push({ ...f, reason: 'prowizja bez transakcji z tego dnia' });
   }
 
-  const known = (col, item) => state[col].some((x) => x.id === item.id);
-  const fresh = {
-    cashflows: cashflows.filter((x) => !known('cashflows', x)),
-    trades: trades.filter((x) => !known('trades', x)),
-    income: income.filter((x) => !known('income', x)),
-  };
+  // Operacje już obecne w danych (ten sam identyfikator z poprzedniego importu albo ta sama treść – np. wpis ręczny
+  // lub import innego arkusza) są pomijane: zaktualizowany plik dodaje wyłącznie nowe operacje
+  const opts = { extraInstruments: newInstruments };
+  const dd = { cashflows: dedupeImport(state, 'cashflows', cashflows, opts), trades: dedupeImport(state, 'trades', trades, opts), income: dedupeImport(state, 'income', income, opts) };
+  const fresh = { cashflows: dd.cashflows.fresh, trades: dd.trades.fresh, income: dd.income.fresh };
+  const contentDuplicates = [...dd.cashflows.byContent, ...dd.trades.byContent, ...dd.income.byContent];
   return {
     newInstruments,
     allIncome: income,
     allCashflows: cashflows,
     ...fresh,
     duplicates: cashflows.length + trades.length + income.length - fresh.cashflows.length - fresh.trades.length - fresh.income.length,
+    contentDuplicates,
+    incomeContentMatches: dd.income.byContent,
     skipped,
   };
 }
@@ -541,6 +576,20 @@ export function buildXtbOpenImport(analysis, mapping, { state, account, replaceA
   }
 
   if (realCashflows) cashflows.push(...realCashflows);
+  // Bez zastępowania historii: transze i wpłaty już obecne w danych pod innym identyfikatorem (wpis ręczny, import
+  // historii operacji) są pomijane – zostaje istniejący wpis. Zamknięte pozycje (xtbcl_) to osobne transze.
+  let contentDuplicates = 0;
+  if (!replaceAccount) {
+    const own = (x) => String(x.id).startsWith(tradePrefix) || String(x.id).startsWith(`xtbcl_${accountId}_`);
+    const stTrades = { ...state, trades: state.trades.filter((t) => !own(t)) };
+    const dt = dedupeImport(stTrades, 'trades', trades, { extraInstruments: newInstruments });
+    const dc = dedupeImport(state, 'cashflows', cashflows, { ignoreIds: new Set(state.cashflows.filter((c) => c.accountId === accountId && String(c.id).startsWith(`xtb_${accountId}_`)).map((c) => c.id)) });
+    const skipT = new Set(dt.byContent.map((d) => d.item.id));
+    const skipC = new Set(dc.byContent.map((d) => d.item.id));
+    contentDuplicates = skipT.size + skipC.size;
+    trades.splice(0, trades.length, ...trades.filter((t) => !skipT.has(t.id)));
+    cashflows.splice(0, cashflows.length, ...cashflows.filter((c) => !skipC.has(c.id)));
+  }
   const newTradeIds = new Set(trades.map((t) => t.id));
   const newCashIds = new Set(cashflows.map((c) => c.id));
   // Usuwane: transze z poprzedniego importu, których już nie ma (sprzedane), albo – przy zastąpieniu – wszystkie transakcje i wpłaty konta
@@ -566,6 +615,7 @@ export function buildXtbOpenImport(analysis, mapping, { state, account, replaceA
     added: trades.filter((t) => !existingTrade.has(t.id)).length,
     updated: trades.filter((t) => existingTrade.has(t.id)).length,
     addedCash: cashflows.filter((c) => !existingCash.has(c.id)).length,
+    contentDuplicates,
     removeTrades,
     removeCashflows,
     otherTrades: state.trades.filter((t) => t.accountId === accountId && !String(t.id).startsWith(tradePrefix) && !String(t.id).startsWith(`xtbcl_${accountId}_`)).length,
@@ -582,14 +632,17 @@ export function buildXtbIncomeImport(cashAnalysis, openMapping, { state, account
   }
   const incomeOnly = { ...cashAnalysis, ops: cashAnalysis.ops.filter((o) => ['DIVIDEND', 'INTEREST', 'TAX', 'INTEREST_TAX'].includes(o.kind)) };
   const plan = buildXtbImport(incomeOnly, mapping, { state, account, fxPct });
-  // Pełna lista (także już zaimportowane) – przy zastępowaniu historii konta nie mogą zostać usunięte
-  const all = [...plan.allIncome];
+  // Pełna lista (także już zaimportowane) – przy zastępowaniu historii konta nie mogą zostać usunięte; operacje
+  // rozpoznane po treści (np. dywidenda wpisana ręcznie) nie są dodawane drugi raz, a istniejący wpis zostaje
+  const dupIds = new Set(plan.incomeContentMatches.map((d) => d.item.id));
+  const all = plan.allIncome.filter((i) => !dupIds.has(i.id));
   const existing = new Set(state.income.map((i) => i.id));
-  const allIds = new Set(all.map((i) => i.id));
+  const allIds = new Set([...all.map((i) => i.id), ...plan.incomeContentMatches.map((d) => d.match.id)]);
   return {
     income: all,
     newInstruments: plan.newInstruments,
     duplicates: plan.duplicates,
+    contentDuplicates: plan.incomeContentMatches.length,
     dividends: all.filter((i) => i.type === 'DIVIDEND').length,
     interest: all.filter((i) => i.type === 'INTEREST').length,
     gross: all.filter((i) => i.type === 'DIVIDEND').reduce((sum, i) => sum + i.gross, 0),
@@ -717,7 +770,7 @@ function xtbInstrumentId(m) {
 // Zamknięte transze → para transakcji (kupno w dniu otwarcia, sprzedaż w dniu zamknięcia). Koszt i przychód
 // w PLN dokładnie jak w raporcie XTB; sprzedaż zdejmuje koszt tej transzy (costBasisPLN), nie średnią –
 // koszt pozostałych otwartych transz tej samej spółki zgadza się z XTB.
-export function buildXtbClosedImport(closed, openMapping, { state, account }) {
+export function buildXtbClosedImport(closed, openMapping, { state, account, replaceAccount = false }) {
   const accountId = account.id;
   const prefix = `xtbcl_${accountId}_`;
   const newInstruments = [];
@@ -759,10 +812,20 @@ export function buildXtbClosedImport(closed, openMapping, { state, account }) {
     if (sell.fee < 0.01) sell.fee = 0;
     trades.push(buy, sell);
   }
+  // Bez zastępowania historii: kupno/sprzedaż już obecne w danych (wpis ręczny, import historii operacji) – pomijane
+  let contentDuplicates = 0;
+  if (!replaceAccount) {
+    const own = (x) => String(x.id).startsWith(prefix) || String(x.id).startsWith(`xtbpos_${accountId}_`);
+    const dt = dedupeImport({ ...state, trades: state.trades.filter((t) => !own(t)) }, 'trades', trades, { extraInstruments: newInstruments });
+    const skip = new Set(dt.byContent.map((d) => d.item.id));
+    contentDuplicates = skip.size;
+    trades.splice(0, trades.length, ...trades.filter((t) => !skip.has(t.id)));
+  }
   const ids = new Set(trades.map((t) => t.id));
   return {
     newInstruments,
     trades,
+    contentDuplicates,
     removeTrades: state.trades.filter((t) => t.accountId === accountId && String(t.id).startsWith(prefix) && !ids.has(t.id)).map((t) => t.id),
   };
 }

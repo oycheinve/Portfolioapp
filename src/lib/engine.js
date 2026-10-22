@@ -159,10 +159,36 @@ export function computeHoldings(state, asOf, accountIds) {
   const instrumentsById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const map = new Map();
+  // W obrębie dnia: według godziny (gdy obie transakcje ją mają – import XTB), w pozostałych przypadkach kolejność zapisu
   const trades = [...state.trades]
     .filter((t) => t.date <= asOf && inFilter(accountIds, t.accountId))
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  for (const t of trades) {
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.time && b.time ? (a.time < b.time ? -1 : a.time > b.time ? 1 : 0) : 0));
+  // Sprzedaż przekraczająca stan posiadania, po której tego samego dnia jest kupno tego waloru (np. wiersze pliku od
+  // najnowszych, bez godziny) – liczona po tym kupnie, zamiast zerować sprzedaż i zostawiać fałszywą pozycję
+  const ordered = [];
+  const held = {};
+  const apply = (t) => {
+    const k = `${t.accountId}|${t.instrumentId}`;
+    held[k] = Math.max(0, (held[k] || 0) + (t.side === 'BUY' ? 1 : -1) * (Number(t.quantity) || 0));
+    ordered.push(t);
+  };
+  for (let i = 0; i < trades.length; ) {
+    let j = i;
+    while (j < trades.length && trades[j].date === trades[i].date) j += 1;
+    const day = trades.slice(i, j);
+    const deferred = [];
+    day.forEach((t, idx) => {
+      const k = `${t.accountId}|${t.instrumentId}`;
+      if (t.side === 'SELL' && day.length > 1 && (held[k] || 0) + 1e-9 < (Number(t.quantity) || 0) && day.slice(idx + 1).some((x) => x.side === 'BUY' && `${x.accountId}|${x.instrumentId}` === k)) {
+        deferred.push(t);
+        return;
+      }
+      apply(t);
+    });
+    deferred.forEach(apply);
+    i = j;
+  }
+  for (const t of ordered) {
     const key = `${t.accountId}|${t.instrumentId}`;
     if (!map.has(key)) {
       map.set(key, {

@@ -193,7 +193,7 @@ export default function XtbImportCard() {
         {fileName && <span className="text-xs text-stone-500">{fileName}</span>}
       </div>
       <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">
-        Raport z xStation (Historia konta → Eksportuj, Excel): importowane są wyłącznie otwarte pozycje z arkusza „Open Positions” – każda transza z ceną i datą otwarcia, koszt w PLN wg XTB. Plik CSV bez tego arkusza = historia operacji gotówkowych. Ponowny import tego samego pliku nie tworzy duplikatów (rozpoznawanie po ID operacji XTB).
+        Raport z xStation (Historia konta → Eksportuj, Excel): importowane są wyłącznie otwarte pozycje z arkusza „Open Positions” – każda transza z ceną i datą otwarcia, koszt w PLN wg XTB. Plik CSV bez tego arkusza = historia operacji gotówkowych. Ponowny import tego samego lub zaktualizowanego pliku dodaje wyłącznie nowe operacje – już obecne (z poprzedniego importu, wpisane ręcznie albo z innego arkusza) są rozpoznawane po ID operacji XTB lub po treści: data, czas, ticker, rodzaj, cena i liczba jednostek / kwota.
       </p>
       {error && <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
 
@@ -330,11 +330,17 @@ export default function XtbImportCard() {
           )}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="primary" icon={CheckCircle2} disabled={total === 0 && plan.newInstruments.length === 0} onClick={doImport}>
-              Importuj {total} operacji na „{account?.name}”
+            <Button variant="primary" icon={CheckCircle2} disabled={total === 0} onClick={doImport}>
+              {total === 0 ? 'Brak nowych operacji – wszystko już zaimportowane' : `Importuj ${total} operacji na „${account?.name}”`}
             </Button>
             <Button onClick={() => setAnalysis(null)}>Anuluj</Button>
-            {plan.duplicates > 0 && <Badge>{plan.duplicates} już zaimportowanych – pominięte</Badge>}
+            {plan.duplicates > 0 && (
+              <span title="Operacje z pliku, które już są w danych (ten sam identyfikator z poprzedniego importu albo ta sama data, czas, ticker, rodzaj, cena i liczba jednostek / kwota) – nie zostaną dodane drugi raz">
+                <Badge>
+                  {plan.duplicates} już w danych – pominięte{plan.contentDuplicates.length ? ` (w tym ${plan.contentDuplicates.length} rozpoznanych po treści)` : ''}
+                </Badge>
+              </span>
+            )}
             {plan.skipped.length > 0 && (
               <button type="button" className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-400" onClick={() => setShowSkipped((v) => !v)}>
                 {plan.skipped.length} wierszy pominiętych {showSkipped ? '▲' : '▼'}
@@ -373,8 +379,8 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
   const [withClosedPref, setWithClosed] = useState(true);
   const withClosed = !!analysis.closed && withClosedPref;
   const closedPlan = useMemo(
-    () => (withClosed ? buildXtbClosedImport(analysis.closed, mapping, { state, account }) : null),
-    [withClosed, analysis, mapping, state, account],
+    () => (withClosed ? buildXtbClosedImport(analysis.closed, mapping, { state, account, replaceAccount }) : null),
+    [withClosed, analysis, mapping, state, account, replaceAccount],
   );
   const plan = useMemo(
     () => buildXtbOpenImport(analysis, mapping, { state, account, replaceAccount, realCashflows }),
@@ -565,6 +571,9 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
         </Button>
         <Button onClick={onDone}>Anuluj</Button>
         {plan.updated > 0 && <Badge>{plan.updated} transz już było – zostaną zaktualizowane</Badge>}
+        {plan.contentDuplicates + (closedPlan?.contentDuplicates || 0) + (incomePlan?.contentDuplicates || 0) > 0 && (
+          <Badge>{plan.contentDuplicates + (closedPlan?.contentDuplicates || 0) + (incomePlan?.contentDuplicates || 0)} operacji już w danych (ta sama treść) – pominięte</Badge>
+        )}
         {plan.removeTrades.length > 0 && <Badge tone="amber">usuniętych transakcji: {plan.removeTrades.length}</Badge>}
       </div>
     </div>
