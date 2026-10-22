@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CalendarRange, Database, Layers, LineChart as LineIcon, Plus, RefreshCw, Scale, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, BarChart3, CalendarRange, ChevronRight, Coins, Database, LayoutGrid, Layers, LineChart as LineIcon, PieChart, Plus, RefreshCw, Scale, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { ACCOUNT_TYPES, BENCHMARKS, benchmarkDefs } from '../../lib/constants.js';
 import { createPriceResolver, historyAgeDays } from '../../lib/history.js';
@@ -16,7 +16,7 @@ import {
 import { computeHoldings, isoDay, livePriceLookup, valuePortfolio } from '../../lib/engine.js';
 import { formatDate, formatDateTime, formatPLN, formatPercent, signClass } from '../../lib/format.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
-import { Button, Card, Dropdown, Input, Segmented, Select } from '../ui.jsx';
+import { Badge, Button, Card, Dropdown, Input, Segmented, Select } from '../ui.jsx';
 import { DrawdownChart, ProfitChart, ValueChart } from './PortfolioCharts.jsx';
 import { DividendsMonthlyChart, DividendsYearlyChart } from './DividendCharts.jsx';
 import CompositionChart from './CompositionChart.jsx';
@@ -38,6 +38,7 @@ export const CHART_OPTIONS = [
 
 const KIND_LABELS = { STOCK: 'Akcje', ETF: 'ETF', BONDS: 'Obligacje', CASH: 'Gotówka' };
 const CHART_KEY = 'wealth-app-chart-type';
+const CHART_ICONS = { value: LineIcon, profit: TrendingUp, drawdown: TrendingDown, composition: PieChart, divMonthly: Coins, divYearly: BarChart3, heatmap: LayoutGrid, quotes: Activity };
 
 function CheckItem({ checked, onChange, label, color, disabled }) {
   return (
@@ -125,7 +126,9 @@ function readChart(param) {
   }
 }
 
-export default function ChartsCenter({ param }) {
+// Pod wykresem pionowa lista rodzajów wykresów, a na jej końcu `children` (podsumowania roku i lat kalendarzowych)
+export default function ChartsCenter({ param, children }) {
+  const topRef = useRef(null);
   const { state, actions, isDark, historyLoading } = useApp();
   const [chart, setChartState] = useState(() => readChart(param));
   const [range, setRange] = useState('1Y');
@@ -239,7 +242,7 @@ export default function ChartsCenter({ param }) {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Pasek wyboru: wykres · aktywa · benchmarki · zakres */}
-      <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
+      <div ref={topRef} className="scroll-mt-20 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-0 flex-1 basis-56 sm:max-w-[18rem]">
             <LineIcon size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-blue-600 dark:text-blue-400" />
@@ -454,6 +457,40 @@ export default function ChartsCenter({ param }) {
           )}
         </Card>
       )}
+
+      {/* Rodzaje wykresów i podsumowania – jedna pionowa lista pod wykresem głównym */}
+      <div className="space-y-2.5" id="lista-wykresow">
+        {CHART_OPTIONS.map((c) => {
+          const Icon = CHART_ICONS[c.id] || LineIcon;
+          const active = c.id === chart;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              aria-current={active ? 'true' : undefined}
+              onClick={() => {
+                setChart(c.id);
+                topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left shadow-sm transition-colors sm:px-5 ${
+                active
+                  ? 'border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10'
+                  : 'border-stone-200 bg-white hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-900 dark:hover:bg-neutral-800'
+              }`}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-white/5 dark:text-stone-300">
+                <Icon size={16} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{c.label}</span>
+                <span className="block truncate text-xs text-stone-500 dark:text-stone-400">{c.group}</span>
+              </span>
+              {active ? <Badge tone="blue">na wykresie</Badge> : <ChevronRight size={18} className="shrink-0 text-stone-400" />}
+            </button>
+          );
+        })}
+        {children}
+      </div>
     </div>
   );
 }
