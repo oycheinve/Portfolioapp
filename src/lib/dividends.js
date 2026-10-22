@@ -245,10 +245,11 @@ export function buildCalendar(state, year, today = isoDay(new Date())) {
     covered.add(key);
   }
 
-  // Kalendarz pokazuje wyłącznie spółki obecnie w portfelu (sprzedane – tylko w rejestrze i sumach)
+  // Przeszłość: wypłaty faktycznie otrzymane (rejestr) – także od spółek już sprzedanych (sprzed sprzedaży).
+  // Przyszłość (w drodze / ogłoszone / prognoza): tylko spółki obecnie w portfelu – zamknięte pozycje nie mają kolejnych wypłat.
   const held = new Set(computeHoldings(state, today, null).filter((h) => h.quantity > 1e-9).map((h) => h.instrumentId));
   for (const m of months) {
-    m.items = m.items.filter((it) => held.has(it.instrumentId));
+    m.items = m.items.filter((it) => it.status === 'PAID' || held.has(it.instrumentId));
     // Pozycje bez kwoty (np. pusta stawka z Yahoo) nie zerują ani nie psują sum
     m.items = m.items.filter((it) => Number.isFinite(it.net));
     m.items.sort((a, b) => (a.date < b.date ? -1 : 1));
