@@ -8,3 +8,10 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 );
+
+// Service worker (tylko wersja produkcyjna) – wymagany do instalacji aplikacji na telefonie (PWA)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((e) => console.warn('[PWA] Rejestracja service workera nie powiodła się:', e));
+  });
+}
