@@ -6,6 +6,7 @@ import { ACCOUNT_TYPES } from '../lib/constants.js';
 import { formatPLN, formatPercent, signClass } from '../lib/format.js';
 import { Badge, Button, Card, EmptyState } from '../components/ui.jsx';
 import NetWorthPanel from '../components/dashboard/NetWorthPanel.jsx';
+import QuickStatsPanel from '../components/dashboard/QuickStatsPanel.jsx';
 
 // Pulpit (minimalistyczny): majątek całkowity ze strukturą oraz podsumowanie kont
 export default function Dashboard({ onNavigate }) {
@@ -37,6 +38,7 @@ export default function Dashboard({ onNavigate }) {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      <QuickStatsPanel />
       <NetWorthPanel valuation={valuation} compact />
       <AccountsSummary valuation={valuation} onNavigate={onNavigate} />
     </div>

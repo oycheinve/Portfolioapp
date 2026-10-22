@@ -97,12 +97,13 @@ export function dividendPositions(state, today = isoDay(new Date())) {
     });
 }
 
-// Wypłaty z rejestru pasujące do pozycji harmonogramu (ta sama spółka, od 5 dni przed dniem dywidendy
-// do 60 dni po wypłacie) – np. dywidenda z importu XTB sparowana z danymi Yahoo
+// Wypłaty z rejestru pasujące do pozycji harmonogramu – po konkretnej dacie, nie po miesiącu: ta sama spółka,
+// wypłata nie wcześniej niż dzień dywidendy (Ex-Date) i najpóźniej kilka dni po dniu wypłaty (przy dacie
+// szacowanej – do 45 dni po Ex-Date). Wcześniejsza rata tej samej spółki (np. LPP) nie oznacza kolejnej jako wypłaconej.
 export function matchingIncome(state, item) {
   if (!item?.instrumentId || !item.exDate) return [];
-  const from = addDays(item.exDate, -5);
-  const to = addDays(item.payDate || item.exDate, 60);
+  const from = item.exDate;
+  const to = item.payDate && !item.payDateEstimated ? addDays(item.payDate, 7) : addDays(item.exDate, 45);
   return state.income.filter((i) => i.type === 'DIVIDEND' && i.instrumentId === item.instrumentId && i.date >= from && i.date <= to);
 }
 
@@ -244,7 +245,10 @@ export function buildCalendar(state, year, today = isoDay(new Date())) {
     covered.add(key);
   }
 
+  // Kalendarz pokazuje wyłącznie spółki obecnie w portfelu (sprzedane – tylko w rejestrze i sumach)
+  const held = new Set(computeHoldings(state, today, null).filter((h) => h.quantity > 1e-9).map((h) => h.instrumentId));
   for (const m of months) {
+    m.items = m.items.filter((it) => held.has(it.instrumentId));
     // Pozycje bez kwoty (np. pusta stawka z Yahoo) nie zerują ani nie psują sum
     m.items = m.items.filter((it) => Number.isFinite(it.net));
     m.items.sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -287,8 +291,9 @@ export function dividendKpis(state, today = isoDay(new Date())) {
 export function upcomingReminders(state, days = 30, today = isoDay(new Date()), { includeEvents = false } = {}) {
   const out = [];
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
+  const held = new Set(computeHoldings(state, today, null).filter((h) => h.quantity > 1e-9).map((h) => h.instrumentId));
   for (const s of state.dividendSchedule) {
-    if (s.bookedAt) continue;
+    if (s.bookedAt || !held.has(s.instrumentId)) continue;
     const inst = instById[s.instrumentId];
     if (s.exDate && s.exDate >= today && daysUntil(s.exDate, today) <= days) {
       out.push({ id: `${s.id}-ex`, date: s.exDate, kind: 'EX', estimated: !!s.estimated, title: `${inst?.ticker || '—'}: Dzień dywidendy (Ex-Date)${s.estimated ? ' – prognoza' : ''}`, detail: `Kup najpóźniej sesję wcześniej, aby otrzymać ${Number(s.dps).toFixed(2)} ${s.currency || inst?.currency || 'PLN'}/akcję`, instrument: inst, scheduleId: s.id });
@@ -366,6 +371,12 @@ export function reconcileDividends(state, { autoBook = true, today = isoDay(new 
       if (!item.bookedAt || ids.join('|') !== current.join('|')) {
         updates.push({ ...item, bookedAt: item.bookedAt || new Date().toISOString(), incomeIds: ids, pairedWith: 'rejestr' });
       }
+      continue;
+    }
+    // Wcześniejsze parowanie z wypłatą spoza dokładnego okna dat (dawna reguła miesięczna) – cofnięte
+    if (item.bookedAt && item.pairedWith === 'rejestr') {
+      const { bookedAt, incomeIds, pairedWith, ...rest } = item; // eslint-disable-line no-unused-vars
+      updates.push(rest);
       continue;
     }
     if (!autoBook || item.bookedAt || item.estimated || !item.payDate || item.payDate > today || !(Number(item.dps) > 0)) continue;

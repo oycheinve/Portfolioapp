@@ -231,7 +231,8 @@ export default function ChartsCenter({ param }) {
   const historyStatus = state.priceHistory.status;
   const reconstructed = Object.values(resolver.sources).includes('reconstructed');
   const usesSelection = option.kind === 'series' || option.kind === 'dividends';
-  const usesBenchmarks = option.kind === 'series';
+  // Wartość vs wkład – bez benchmarków (porównanie z benchmarkiem tylko na wykresach stopy zwrotu i obsunięcia)
+  const usesBenchmarks = option.kind === 'series' && chart !== 'value';
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -372,7 +373,7 @@ export default function ChartsCenter({ param }) {
           <Tile label="Zysk w okresie" value={formatPLN(sum.profit, { sign: true })} tone={signClass(sum.profit)} />
           <Tile label="TWR w okresie" value={formatPercent(sum.twr, { sign: true })} tone={signClass(sum.twr)} sub={sum.annualized !== null ? `rocznie ${formatPercent(sum.annualized, { sign: true })}` : null} />
           <Tile label="Maks. obsunięcie" value={formatPercent(sum.maxDrawdown)} tone={sum.maxDrawdown < 0 ? 'text-red-600 dark:text-red-400' : ''} sub={`obecnie ${formatPercent(sum.currentDrawdown)}`} />
-          <Tile
+          {chart !== 'value' && <Tile
             label="vs benchmarki"
             value={
               benchmarks.length
@@ -383,7 +384,7 @@ export default function ChartsCenter({ param }) {
                 : '—'
             }
             small
-          />
+          />}
         </div>
       )}
 
@@ -392,7 +393,7 @@ export default function ChartsCenter({ param }) {
 
       {option.kind !== 'market' && (
         <Card title={option.label} bodyClassName="p-4 sm:p-5">
-          {chart === 'value' && <ValueChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} />}
+          {chart === 'value' && <ValueChart data={series.points} span={span} benchmarks={[]} compareIds={compareIds} />}
           {chart === 'profit' && <ProfitChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} mode={compareIds.length ? 'PCT' : profitMode} onModeChange={setProfitMode} />}
           {chart === 'drawdown' && <DrawdownChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} />}
           {option.kind === 'dividends' && (
@@ -417,7 +418,9 @@ export default function ChartsCenter({ param }) {
               <Tile plain label="Zysk kursowy" value={formatPLN(sum.profitPrice, { sign: true })} tone={signClass(sum.profitPrice)} />
               <Tile plain label="Dywidendy netto" value={formatPLN(sum.profitDividends, { sign: true })} tone={signClass(sum.profitDividends)} />
               <Tile plain label="Odsetki netto" value={formatPLN(sum.profitInterest, { sign: true })} tone={signClass(sum.profitInterest)} />
-              {firstBench ? (
+              {chart === 'value' ? (
+                <Tile plain label="Wkład netto" value={formatPLN(sum.contrib)} />
+              ) : firstBench ? (
                 <Tile
                   plain
                   label={defs[firstBench].label}

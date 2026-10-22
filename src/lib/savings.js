@@ -1,7 +1,7 @@
 // Etap 3: konto oszczędnościowe – projekcja odsetek, automatyczne księgowanie odsetek netto,
 // oraz zestawienie dochodu pasywnego (dywidendy + kupony obligacji + odsetki).
 import { BELKA_RATE, CAPITALIZATION } from './constants.js';
-import { computeCashBalances, incomeEventsWithTax, bondIncomeEvents, isoDay } from './engine.js';
+import { computeCashBalances, incomeEventsWithTax, bondIncomeEvents, isoDay, safeInterestFilter } from './engine.js';
 import { belkaRateForAccount } from './tax.js';
 
 function parse(iso) {
@@ -154,12 +154,13 @@ export function passiveIncomeByMonth(state, months = 12, today = new Date()) {
     });
   }
   const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
+  const isInterest = safeInterestFilter(state);
   for (const i of income) {
     const r = byKey[i.date.slice(0, 7)];
     if (!r || i.date > todayIso) continue;
     if (i.type === 'DIVIDEND') r.dividends += i.net;
     else if (i.source === 'BOND') r.bonds += i.net;
-    else r.interest += i.net;
+    else if (isInterest(i)) r.interest += i.net;
   }
   for (const r of rows) r.total = r.dividends + r.bonds + r.interest;
   return rows;

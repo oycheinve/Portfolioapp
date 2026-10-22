@@ -166,6 +166,14 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Konto oszczędnościowe** – jeden uniwersalny instrument poduszki o nazwie „Konto oszczędnościowe” (przy kilku kontach z numerem). Bez wyboru banku: w formularzu tylko data otwarcia, Belka, oprocentowanie i kapitalizacja. Starsze nazwy z bankiem („Konto oszczędnościowe – ING”) zmieniane automatycznie.
 - **Podatek Belki odroczony (np. Revolut)** – przełącznik dla każdego konta maklerskiego i konta oszczędnościowego na dole sekcji kont w zakładce Ustawienia (dochody brutto, 19% rozliczane w PIT-38).
 
+## Panel statystyk na Pulpicie, limit IKE z pliku, daty dywidend, wykresy
+
+- **Panel statystyk na górze Pulpitu**: wartość, wkład własny, zysk całkowity (z dywidendami), stopa zwrotu z przełącznikiem Prosta / TWR / MWR (ze średnią roczną), zmiana i zysk dzienny (z notowań), zmiana tygodniowa i miesięczna, od początku roku, CAGR, zysk bieżący (niezrealizowany), walory z zyskiem / ze stratą. Zakres: portfel inwestycyjny (domyślnie), całościowy z poduszką albo sama poduszka.
+- **Portfel**: tabela bez wierszy „Portfel inwestycyjny” i „Poduszka finansowa” – zaczyna się od grup aktywów.
+- **Limit IKE/IKZE** = wyłącznie faktyczne wpłaty z bieżącego roku: gdy są wpłaty z pliku XTB („IKE deposit” z Cash Operations) – tylko one; bez importu – wpłaty ręczne. Wpłaty techniczne i rotacja kapitału nie są liczone. Przy braku faktycznych wpłat karta limitów podpowiada import raportu.
+- **Dywidendy po konkretnej dacie**: wypłata z rejestru paruje się z pozycją harmonogramu tylko od dnia dywidendy do kilku dni po dniu wypłaty (wcześniejsza rata tej samej spółki nie oznacza kolejnej jako wypłaconej); wcześniejsze błędne parowania są cofane. Kalendarz, przypomnienia i synchronizacja harmonogramu obejmują tylko spółki obecnie w portfelu (dywidendy sprzedanych spółek zostają w rejestrze i sumach).
+- **Wykresy**: „Wartość vs wkład” bez benchmarków; „Zysk w czasie” z listą wyboru: zysk total / zysk kursowy (PLN) / stopa TWR – jedna seria zamiast dublujących się linii. Odsetki w statystykach, wykresach, raportach i dochodzie pasywnym – tylko z obligacji i konta oszczędnościowego (odsetki od wolnych środków na kontach inwestycyjnych zostają w gotówce konta).
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

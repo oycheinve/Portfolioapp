@@ -1,7 +1,7 @@
 // Etap 3: szeregi czasowe dla Centrum Wykresów – wycena historyczna wybranego wycinka portfela,
 // wkład własny, rozbicie zysku, TWR, drawdown, benchmarki oraz dywidendy miesięczne/roczne.
 import { benchmarkLabel } from './constants.js';
-import { isoDay, netFlows, resolveAccountIds, tradeCashDelta, valuePortfolio } from './engine.js';
+import { isoDay, netFlows, resolveAccountIds, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
 
@@ -106,7 +106,8 @@ function pointFor(state, sel, accountIds, date, resolver) {
   const income = v.income.filter(inAcc);
   const divNet = (filterFn) => income.filter((i) => i.type === 'DIVIDEND' && filterFn(instById[i.instrumentId])).reduce((s, i) => s + i.net, 0);
   const couponsNet = income.filter((i) => i.source === 'BOND').reduce((s, i) => s + i.net, 0);
-  const otherInterestNet = income.filter((i) => i.type === 'INTEREST' && i.source !== 'BOND').reduce((s, i) => s + i.net, 0);
+  const isInterest = safeInterestFilter(state);
+  const otherInterestNet = income.filter((i) => isInterest(i) && i.source !== 'BOND').reduce((s, i) => s + i.net, 0);
   const bondPurchases = state.bonds.filter((b) => accountIds.includes(b.accountId) && b.purchaseDate <= date).reduce((s, b) => s + (Number(b.quantity) || 0) * 100, 0);
   const bondAccrued = v.bonds.reduce((s, b) => s + b.valuation.accruedNet, 0);
   const flows = netFlows(state, accountIds, null, date);

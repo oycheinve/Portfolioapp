@@ -1,5 +1,5 @@
 // Etap 6: cele roczne – kategorie, postęp % (ręczny lub automatyczny z danych portfela) i wskaźnik zbiorczy
-import { computeLimitUsage, incomeEventsWithTax, isSafeAccount, isoDay, livePriceLookup, otherAssetsValue, resolveAccountIds, valuePortfolio } from './engine.js';
+import { computeLimitUsage, incomeEventsWithTax, isSafeAccount, safeInterestFilter, isoDay, livePriceLookup, otherAssetsValue, resolveAccountIds, valuePortfolio } from './engine.js';
 
 export const GOAL_CATEGORIES = {
   FINANCIAL: { id: 'FINANCIAL', label: 'Finansowe', slot: 0 },
@@ -40,10 +40,13 @@ export function autoGoalValue(state, goal) {
       return incomeEventsWithTax(state)
         .filter((i) => i.type === 'DIVIDEND' && i.date.startsWith(y) && i.date <= isoDay(new Date()))
         .reduce((s, i) => s + i.net, 0);
-    case 'PASSIVE':
+    case 'PASSIVE': {
+      // Dochód pasywny: dywidendy + odsetki z obligacji i konta oszczędnościowego
+      const isInterest = safeInterestFilter(state);
       return incomeEventsWithTax(state)
-        .filter((i) => i.date.startsWith(y) && i.date <= isoDay(new Date()))
+        .filter((i) => (i.type === 'DIVIDEND' || isInterest(i)) && i.date.startsWith(y) && i.date <= isoDay(new Date()))
         .reduce((s, i) => s + i.net, 0);
+    }
     case 'NET_WORTH': {
       const v = valuePortfolio(state, { asOf: isoDay(new Date()), accountIds: null, priceLookup: livePriceLookup(state) });
       return v.totals.total + otherAssetsValue(state).includedValue;

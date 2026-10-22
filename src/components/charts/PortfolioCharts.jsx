@@ -4,7 +4,7 @@ import { benchmarkLabel, isCustomBenchmark } from '../../lib/constants.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatPercent } from '../../lib/format.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
-import { Segmented } from '../ui.jsx';
+import { Select } from '../ui.jsx';
 import { Legend, PROFIT_COLORS, SeriesTooltip, axisDateFormatter, benchmarkColor } from './chartUtils.jsx';
 
 const pctAxis = (v) => `${Math.round(v * 1000) / 10}%`;
@@ -103,17 +103,13 @@ export function ProfitChart({ data, span, benchmarks, compareIds, mode, onModeCh
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
   const c = (slot) => seriesColor(slot, isDark);
 
-  const toggle = (
-    <Segmented
-      size="sm"
-      value={mode}
-      onChange={onModeChange}
-      ariaLabel="Jednostka"
-      options={[
-        { value: 'PLN', label: 'PLN' },
-        { value: 'PCT', label: '% TWR' },
-      ]}
-    />
+  // Wybór widoku z listy: zysk total / zysk kursowy (PLN) albo stopa TWR (%) – jedna linia, bez dublujących się serii
+  const toggle = compareIds.length ? null : (
+    <Select value={mode} onChange={(e) => onModeChange(e.target.value)} className="h-8 w-auto text-xs" aria-label="Widok zysku">
+      <option value="PLN">Zysk total (PLN)</option>
+      <option value="PRICE">Zysk kursowy (PLN)</option>
+      <option value="PCT">Stopa zwrotu TWR (%)</option>
+    </Select>
   );
 
   if (mode === 'PCT') {
@@ -157,12 +153,9 @@ export function ProfitChart({ data, span, benchmarks, compareIds, mode, onModeCh
     );
   }
 
-  const legend = [
-    { key: 'p', label: 'Zysk Total', color: chrome.primary },
-    { key: 'k', label: 'Zysk kursowy', color: c(PROFIT_COLORS.price) },
-    { key: 'd', label: 'Dywidendy netto', color: c(PROFIT_COLORS.dividends) },
-    { key: 'i', label: 'Odsetki netto', color: c(PROFIT_COLORS.interest) },
-  ];
+  const price = mode === 'PRICE';
+  const color = price ? c(PROFIT_COLORS.price) : chrome.primary;
+  const legend = [price ? { key: 'k', label: 'Zysk kursowy (bez dywidend i odsetek)', color } : { key: 'p', label: 'Zysk total (kursowy + dywidendy + odsetki)', color }];
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -177,10 +170,7 @@ export function ProfitChart({ data, span, benchmarks, compareIds, mode, onModeCh
             <YAxis {...y(formatAxisPLN)} />
             <ReferenceLine y={0} stroke={chrome.axis} />
             <Tooltip content={<SeriesTooltip />} cursor={{ stroke: chrome.axis }} />
-            <Area type="monotone" dataKey="profit" name="Zysk Total" stroke={chrome.primary} strokeWidth={2.5} fill={chrome.primary} fillOpacity={0.06} dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey="profitPrice" name="Kursowy" stroke={c(PROFIT_COLORS.price)} strokeWidth={2} dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey="profitDividends" name="Dywidendy" stroke={c(PROFIT_COLORS.dividends)} strokeWidth={2} dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey="profitInterest" name="Odsetki" stroke={c(PROFIT_COLORS.interest)} strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Area type="monotone" dataKey={price ? 'profitPrice' : 'profit'} name={price ? 'Zysk kursowy' : 'Zysk total'} stroke={color} strokeWidth={2.5} fill={color} fillOpacity={0.08} dot={false} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

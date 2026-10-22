@@ -1,6 +1,6 @@
 // Etap 5: raporty okresowe – tydzień ISO, miesiąc i rok kalendarzowy (1.01–31.12).
 // Wynik okresu = wartość na koniec − wartość na początek − wpłaty netto; stopa metodą Modified Dietz.
-import { bondIncomeEvents, computeHoldings, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, tradeCashDelta, valuePortfolio } from './engine.js';
+import { bondIncomeEvents, computeHoldings, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -172,7 +172,7 @@ export function periodMetrics(state, period, resolver, today = isoDay(new Date()
   const deposits = flowsList.filter((f) => f.amount > 0).reduce((acc, f) => acc + f.amount, 0);
   const income = [...incomeEventsWithTax(state), ...bondIncomeEvents(state, period.end)].filter((i) => i.date > s.date && i.date <= e.date && inAcc(i.accountId));
   const dividends = income.filter((i) => i.type === 'DIVIDEND').reduce((acc, i) => acc + i.net, 0);
-  const interest = income.filter((i) => i.type === 'INTEREST').reduce((acc, i) => acc + i.net, 0);
+  const interest = income.filter(safeInterestFilter(state)).reduce((acc, i) => acc + i.net, 0);
   const profit = e.value - s.value - flows;
   // Stopa okresu: zysk / kapitał zaangażowany (wartość na start + wpłaty w okresie); MWR (Modified Dietz) pomocniczo
   const capital = s.value + deposits;

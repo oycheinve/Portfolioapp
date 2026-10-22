@@ -522,7 +522,7 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
           <label className="flex items-start gap-2">
             <input type="radio" name="xtb-cash-mode" className="mt-1 accent-blue-600" checked={cashMode === 'FUND'} onChange={() => setCashMode('FUND')} />
             <span>
-              Wpłaty pokrywające koszt zakupu każdej transzy <span className="text-stone-500">(gotówka konta = 0 zł, wkład = koszt pozycji)</span>
+              Wpłaty pokrywające koszt zakupu każdej transzy <span className="text-stone-500">(gotówka konta = 0 zł, wkład = koszt pozycji; wpłaty techniczne – nie liczą się do limitu IKE/IKZE)</span>
             </span>
           </label>
           <label className="flex items-start gap-2">

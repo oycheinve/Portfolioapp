@@ -26,6 +26,13 @@ export function isSafeAccount(account) {
   return account?.type === 'SAVINGS' || account?.type === 'BONDS';
 }
 
+// Odsetki w statystykach: wyłącznie obligacje i konto oszczędnościowe (poduszka). Odsetki od wolnych środków
+// na kontach inwestycyjnych (np. „Free funds interest” w XTB) zostają w gotówce konta, ale nie są liczone jako odsetki.
+export function safeInterestFilter(state) {
+  const safe = new Set(state.accounts.filter(isSafeAccount).map((a) => a.id));
+  return (i) => i.type === 'INTEREST' && safe.has(i.accountId);
+}
+
 export function resolveAccountIds(state, filter) {
   if (!filter || filter === 'ALL') return state.accounts.map((a) => a.id);
   if (filter === 'INVEST') return state.accounts.filter((a) => !isSafeAccount(a)).map((a) => a.id);
@@ -392,6 +399,7 @@ export function periodStartDate(period, today = new Date()) {
   const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   if (period === 'YTD') return isoDay(new Date(t.getFullYear() - 1, 11, 31));
   if (period === '1M') return isoDay(new Date(t.getFullYear(), t.getMonth() - 1, t.getDate()));
+  if (period === '1W') return isoDay(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 7));
   return null;
 }
 
@@ -508,8 +516,9 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   const periodIncome = now.income.filter((i) => accountIds.includes(i.accountId) && inPeriod(i.date));
   const dividendsNet = periodIncome.filter((i) => i.type === 'DIVIDEND').reduce((s, i) => s + i.net, 0);
   const dividendsTax = periodIncome.filter((i) => i.type === 'DIVIDEND').reduce((s, i) => s + i.tax, 0);
-  const interestCashNet = periodIncome.filter((i) => i.type === 'INTEREST').reduce((s, i) => s + i.net, 0);
-  const interestTax = periodIncome.filter((i) => i.type === 'INTEREST').reduce((s, i) => s + i.tax, 0);
+  const isInterest = safeInterestFilter(state);
+  const interestCashNet = periodIncome.filter(isInterest).reduce((s, i) => s + i.net, 0);
+  const interestTax = periodIncome.filter(isInterest).reduce((s, i) => s + i.tax, 0);
 
   // Odsetki naliczone (skapitalizowane) w obligacjach w okresie
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
@@ -595,26 +604,25 @@ export function isSyntheticDeposit(c) {
   return SYNTHETIC_SOURCES.has(c?.source) || isAutoFunding(c);
 }
 
-// Wpłaty wliczane do rocznego limitu IKE/IKZE. Rotacja wewnątrz konta (sprzedaż → zakup) nie jest wpłatą:
-// gdy konto ma prawdziwe wpłaty w roku – liczą się tylko one; gdy są wyłącznie wpłaty techniczne –
-// pomniejszone o wpływy ze sprzedaży w tym roku (zakup za środki ze sprzedaży = 0 zł limitu).
+// Wpłaty wliczane do rocznego limitu IKE/IKZE w danym roku kalendarzowym – wyłącznie faktyczne wpłaty:
+// gdy konto ma wpłaty z pliku XTB (np. „IKE deposit” z arkusza Cash Operations) – liczą się tylko one;
+// bez importu – wpłaty wpisane ręcznie. Wpłaty techniczne (pokrycie zakupów, import otwartych pozycji)
+// i rotacja kapitału (sprzedaż → zakup) nigdy nie zużywają limitu.
 export function limitDeposits(state, accountId, year, { excludeId = null } = {}) {
   const y = String(year);
-  const list = state.cashflows.filter((c) => c.accountId === accountId && c.type === 'DEPOSIT' && c.date.startsWith(y) && c.id !== excludeId);
-  const real = list.filter((c) => !isSyntheticDeposit(c)).reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  if (real > 0) return Math.round(real * 100) / 100;
-  // Automatyczne uzupełnienia powstają tylko przy braku gotówki – po sprzedaży zakup za uzyskane środki
-  // nie tworzy uzupełnienia, więc rotacja już daje 0 zł. Wpłaty „na transzę” (import otwartych pozycji)
-  // pokrywają każdy zakup, dlatego od nich odejmowane są przychody ze sprzedaży w roku.
-  const autoFund = list.filter((c) => isAutoFunding(c) || c.source === 'AUTO_FUND').reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  const synthetic = list.filter((c) => !(isAutoFunding(c) || c.source === 'AUTO_FUND')).reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  if (synthetic <= 0) return Math.round(autoFund * 100) / 100;
-  const account = state.accounts.find((a) => a.id === accountId);
-  const instrumentsById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
-  const sales = state.trades
-    .filter((t) => t.accountId === accountId && t.side === 'SELL' && t.date.startsWith(y))
-    .reduce((s, t) => s + tradeAmounts(t, account, instrumentsById[t.instrumentId]).sellProceeds, 0);
-  return Math.round((autoFund + Math.max(0, synthetic - sales)) * 100) / 100;
+  const list = state.cashflows.filter((c) => c.accountId === accountId && c.type === 'DEPOSIT' && c.date.startsWith(y) && c.id !== excludeId && !isSyntheticDeposit(c));
+  const fromFile = list.filter((c) => c.source === 'XTB');
+  const sum = (fromFile.length ? fromFile : list).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  return Math.round(sum * 100) / 100;
+}
+
+// Źródło kwoty limitu (do podpowiedzi w interfejsie): 'FILE' – wpłaty z importu XTB, 'MANUAL' – ręczne,
+// 'NONE' – brak faktycznych wpłat (np. import samych otwartych pozycji z wpłatami technicznymi)
+export function limitDepositsSource(state, accountId, year) {
+  const y = String(year);
+  const list = state.cashflows.filter((c) => c.accountId === accountId && c.type === 'DEPOSIT' && c.date.startsWith(y) && !isSyntheticDeposit(c));
+  if (list.some((c) => c.source === 'XTB')) return 'FILE';
+  return list.length ? 'MANUAL' : 'NONE';
 }
 
 export function computeLimitUsage(state, year = new Date().getFullYear()) {
@@ -628,6 +636,7 @@ export function computeLimitUsage(state, year = new Date().getFullYear()) {
         year,
         limit,
         deposited,
+        source: limitDepositsSource(state, a.id, year),
         remaining: Math.max(0, limit - deposited),
         usage: limit > 0 ? deposited / limit : 0,
         exceeded: limit > 0 && deposited > limit,

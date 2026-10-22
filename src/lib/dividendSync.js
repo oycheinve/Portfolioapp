@@ -21,9 +21,9 @@ function daysApart(a, b) {
   return Math.abs((new Date(a) - new Date(b)) / DAY);
 }
 
-// Instrumenty, które posiadamy lub posiadaliśmy (z symbolem Yahoo)
+// Instrumenty obecnie w portfelu – spółek sprzedanych nie dodajemy do harmonogramu ani kalendarza
 export function dividendInstruments(state) {
-  const ids = new Set(computeHoldings(state, isoDay(new Date()), null).map((h) => h.instrumentId));
+  const ids = new Set(computeHoldings(state, isoDay(new Date()), null).filter((h) => h.quantity > 1e-9).map((h) => h.instrumentId));
   return state.instruments.filter((i) => ids.has(i.id));
 }
 
@@ -68,7 +68,7 @@ export function planDividendSync(state, histories, { autoBook = false, today = i
         if (!firstBuy || ev.exDate <= firstBuy || ev.exDate > today) continue;
         const held = Object.values(sharesAt(state, inst.id, addDays(ev.exDate, -1))).reduce((s, q) => s + q, 0);
         if (held <= 0) continue;
-        const paid = state.income.some((i) => i.type === 'DIVIDEND' && i.instrumentId === inst.id && i.date >= addDays(ev.exDate, -5) && i.date <= addDays(ev.exDate, 90));
+        const paid = state.income.some((i) => i.type === 'DIVIDEND' && i.instrumentId === inst.id && i.date >= ev.exDate && i.date <= addDays(ev.exDate, 60));
         if (paid || hasNearby([...schedule, ...newItems], inst.id, ev.exDate, 10)) continue;
         newItems.push({ id: id(inst, ev.exDate, 'y'), instrumentId: inst.id, dps: ev.amount, currency: h.currency || inst.currency, exDate: ev.exDate, payDate: addDays(ev.exDate, 14), payDateEstimated: true, withholdingPct: 0, source: 'YAHOO', note: 'Dane z Yahoo Finance' });
       }
