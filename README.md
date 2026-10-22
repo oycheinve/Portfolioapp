@@ -204,6 +204,10 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - W Alokacji klasy aktywów liczone są ze stanu faktycznego: akcje i ETF (oraz wolna gotówka) z kont w wybranym zakresie, a obligacje i konto oszczędnościowe zawsze z Poduszki finansowej – aktywne transze z rejestru obligacji i saldo konta oszczędnościowego (także przy zakresie „Portfel inwestycyjny”). Klasy: Akcje, ETF, Obligacje (Poduszka), Oszczędności i gotówka. Przy wyborze pojedynczego konta lub typu konta – tylko ten zakres. TER portfela liczony względem kont w zakresie.
 
+## Słownik logotypów (raport na X)
+
+- `LOGO_DICTIONARY` w `src/lib/logos.js`: ręczne przypisanie tickerów z portfela do grafik – ma pierwszeństwo przed domeną firmy i monogramem. Logotypy dostarczone jako pliki aplikacji w `public/logos/` (Digital Network – `dig.png`, cyber_Folks – `cbf.png` na żółtym tle, iShares – `ishares.png` dla CSPX/EIMI/IWDA/SXR8/EUNL) ładują się zawsze, bez sieci; pozostałe spółki z portfela (LPP, XTB, SNT, KTY, KRU, ACP, DIA i in.) – ikony stron pod stałymi adresami, pobierane przez `/api/logo?url=` lub publiczne proxy. Ticker spoza słownika → domena z edycji waloru / wbudowanej listy → monogram.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

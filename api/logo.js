@@ -1,6 +1,6 @@
 // Funkcja serwerowa (Vercel): logotyp spółki (ikona strony) z tej samej domeny co aplikacja – bez blokady CORS,
 // więc karta raportu może osadzić logo jako data URI i wyeksportować PNG. Wywołanie: /api/logo?domain=lpp.com
-// Dozwolona jest wyłącznie nazwa domeny – endpoint nie jest otwartym proxy.
+// Albo /api/logo?url=https://… – grafika ze słownika logotypów (tylko https, tylko obrazy do 512 KB).
 
 const DOMAIN = /^(?=.{3,100}$)([a-z0-9-]+\.)+[a-z]{2,}$/i;
 const SOURCES = [
@@ -26,9 +26,31 @@ export async function fetchLogo(domain) {
   return { status: 404, type: 'text/plain', body: Buffer.from('Brak logo') };
 }
 
+// Grafika pod wskazanym adresem (słownik logotypów) – tylko https i tylko odpowiedzi image/*
+export async function fetchLogoUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    parsed = null;
+  }
+  if (!parsed || parsed.protocol !== 'https:') return { status: 400, type: 'text/plain', body: Buffer.from('Niedozwolony adres') };
+  try {
+    const res = await fetch(parsed.href, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(6000) });
+    const type = res.headers.get('content-type') || '';
+    const body = Buffer.from(await res.arrayBuffer());
+    if (!res.ok || !/^image\//.test(type) || body.length > 512 * 1024 || body.length < 100) return { status: 404, type: 'text/plain', body: Buffer.from('Brak logo') };
+    return { status: 200, type, body };
+  } catch {
+    return { status: 502, type: 'text/plain', body: Buffer.from('Brak odpowiedzi') };
+  }
+}
+
 export default async function handler(req, res) {
-  const domain = typeof req.query?.domain === 'string' ? req.query.domain : new URL(req.url, 'http://localhost').searchParams.get('domain') || '';
-  const result = await fetchLogo(domain);
+  const params = new URL(req.url, 'http://localhost').searchParams;
+  const url = typeof req.query?.url === 'string' ? req.query.url : params.get('url');
+  const domain = typeof req.query?.domain === 'string' ? req.query.domain : params.get('domain') || '';
+  const result = url ? await fetchLogoUrl(url) : await fetchLogo(domain);
   res.setHeader('Content-Type', result.type);
   if (result.status === 200) res.setHeader('Cache-Control', 's-maxage=604800, stale-while-revalidate=2592000');
   res.statusCode = result.status;

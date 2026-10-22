@@ -1,10 +1,53 @@
-// Logotypy spółek na karcie raportu X: domena firmy (z instrumentu lub wbudowanej listy) → ikona strony
-// pobrana jako data URI (osadzona w SVG, więc eksport PNG działa). Trasy: /api/logo (serwer aplikacji),
-// potem publiczne proxy CORS. Wyniki w localStorage na 30 dni; brak logo → monogram tickera.
+// Logotypy spółek na karcie raportu X. Kolejność: 1) ręczny słownik LOGO_DICTIONARY (ticker → adres grafiki) –
+// obowiązkowy dla instrumentów z portfela; 2) domena firmy (z instrumentu lub wbudowanej listy) → ikona strony;
+// 3) monogram tickera. Grafika pobierana jako data URI (osadzona w SVG, więc eksport PNG działa): pliki aplikacji
+// z /logos/ bezpośrednio, adresy zewnętrzne przez /api/logo (serwer aplikacji) lub publiczne proxy CORS.
+// Wyniki z zewnętrznych adresów w localStorage na 30 dni.
 
 const CACHE_KEY = 'wealth-app-logos';
 const TTL_MS = 30 * 86400000;
 const MISS_TTL_MS = 2 * 86400000;
+
+const favicon = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+const ISHARES = { url: '/logos/ishares.png' };
+
+// Ręczny słownik logotypów instrumentów z portfela (ticker bez końcówki giełdy → grafika).
+// url – adres grafiki (pliki w public/logos lub zewnętrzny); fit – 'slice' (wypełnij koło) / 'meet' (cała grafika);
+// bg – tło koła dla grafik prostokątnych.
+export const LOGO_DICTIONARY = {
+  // GPW
+  DIG: { url: '/logos/dig.png', fit: 'slice' },
+  CBF: { url: '/logos/cbf.png', fit: 'meet', bg: '#FFD200' },
+  LPP: { url: favicon('lpp.com') },
+  XTB: { url: favicon('xtb.com') },
+  SNT: { url: favicon('synektik.com.pl') },
+  KTY: { url: favicon('grupakety.com') },
+  KRU: { url: favicon('kruk.eu') },
+  ACP: { url: favicon('asseco.com') },
+  DIA: { url: favicon('diag.pl') },
+  NEU: { url: favicon('neuca.pl') },
+  PZU: { url: favicon('pzu.pl') },
+  PKO: { url: favicon('pkobp.pl') },
+  PKN: { url: favicon('orlen.pl') },
+  CDR: { url: favicon('cdprojekt.com') },
+  DNP: { url: favicon('grupadino.pl') },
+  // ETF-y iShares
+  CSPX: { ...ISHARES, fit: 'slice' },
+  EIMI: { ...ISHARES, fit: 'slice' },
+  IWDA: { ...ISHARES, fit: 'slice' },
+  SXR8: { ...ISHARES, fit: 'slice' },
+  EUNL: { ...ISHARES, fit: 'slice' },
+  // Pozostałe
+  VWCE: { url: favicon('vanguard.com') },
+  VWRA: { url: favicon('vanguard.com') },
+  ETFBW20TR: { url: favicon('betaetf.pl') },
+  CTRE: { url: favicon('caretrustreit.com') },
+};
+
+export function dictionaryLogoFor(instrument) {
+  const ticker = String(instrument?.ticker || '').toUpperCase().replace(/\..*$/, '');
+  return LOGO_DICTIONARY[ticker] || null;
+}
 
 // Najpopularniejsze spółki GPW i zagraniczne (ticker bez końcówki giełdy → domena)
 const TICKER_DOMAINS = {
@@ -135,6 +178,22 @@ async function fetchImage(url) {
   }
 }
 
+// Grafika ze słownika: plik aplikacji – bezpośrednio; adres zewnętrzny – bezpośrednio (gdy serwer pozwala na CORS),
+// przez serwer aplikacji albo publiczne proxy
+async function fetchUrlDataUrl(url) {
+  const routes = url.startsWith('/')
+    ? [url]
+    : [url, `/api/logo?url=${encodeURIComponent(url)}`, `https://corsproxy.io/?url=${encodeURIComponent(url)}`, `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`];
+  for (const r of routes) {
+    try {
+      return await fetchImage(r);
+    } catch {
+      // następna trasa
+    }
+  }
+  return null;
+}
+
 async function fetchLogoDataUrl(domain) {
   const google = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
   const routes = [`/api/logo?domain=${encodeURIComponent(domain)}`, `https://corsproxy.io/?url=${encodeURIComponent(google)}`, `https://api.allorigins.win/raw?url=${encodeURIComponent(google)}`];
@@ -150,31 +209,44 @@ async function fetchLogoDataUrl(domain) {
 
 const inflight = {};
 
-// instrumenty → { [instrumentId]: dataUrl } (tylko znalezione logotypy)
+// Źródło logo instrumentu: słownik (obowiązkowo, gdy ticker w nim jest) albo domena
+function logoSource(inst) {
+  const dict = dictionaryLogoFor(inst);
+  if (dict) return { key: `url:${dict.url}`, load: () => fetchUrlDataUrl(dict.url), fit: dict.fit || 'meet', bg: dict.bg || '#ffffff', local: dict.url.startsWith('/') };
+  const domain = logoDomainFor(inst);
+  if (!domain) return null;
+  return { key: domain, load: () => fetchLogoDataUrl(domain), fit: 'meet', bg: '#ffffff', local: false };
+}
+
+// instrumenty → { [instrumentId]: { href (data URI), fit, bg } } (tylko znalezione logotypy)
 export async function loadLogos(instruments) {
   const cache = readCache();
   const now = Date.now();
   const out = {};
-  const todo = new Set();
+  const sources = new Map();
+  const todo = new Map();
   for (const inst of instruments) {
-    const domain = logoDomainFor(inst);
-    if (!domain) continue;
-    const hit = cache[domain];
+    const src = logoSource(inst);
+    if (!src) continue;
+    sources.set(inst.id, src);
+    const hit = !src.local && cache[src.key];
     if (hit && now - hit.at < (hit.data ? TTL_MS : MISS_TTL_MS)) {
-      if (hit.data) out[inst.id] = hit.data;
-    } else todo.add(domain);
+      if (hit.data) out[inst.id] = { href: hit.data, fit: src.fit, bg: src.bg };
+    } else todo.set(src.key, src);
   }
   if (todo.size) {
+    const fresh = {};
     await Promise.all(
-      [...todo].map(async (domain) => {
-        inflight[domain] ||= fetchLogoDataUrl(domain).finally(() => delete inflight[domain]);
-        cache[domain] = { data: await inflight[domain], at: Date.now() };
+      [...todo.values()].map(async (src) => {
+        inflight[src.key] ||= src.load().finally(() => delete inflight[src.key]);
+        fresh[src.key] = { data: await inflight[src.key], at: Date.now(), local: src.local };
       }),
     );
-    writeCache({ ...readCache(), ...cache });
-    for (const inst of instruments) {
-      const data = cache[logoDomainFor(inst)]?.data;
-      if (data) out[inst.id] = data;
+    // Pliki aplikacji nie trafiają do pamięci podręcznej (zawsze aktualne, ładują się natychmiast)
+    writeCache({ ...readCache(), ...Object.fromEntries(Object.entries(fresh).filter(([, v]) => !v.local).map(([k, v]) => [k, { data: v.data, at: v.at }])) });
+    for (const [id, src] of sources) {
+      const data = fresh[src.key]?.data;
+      if (data && !out[id]) out[id] = { href: data, fit: src.fit, bg: src.bg };
     }
   }
   return out;

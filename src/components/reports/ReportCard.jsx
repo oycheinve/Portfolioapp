@@ -48,8 +48,11 @@ function Monogram({ x, y, r, ticker, color }) {
   );
 }
 
-// Logo w białym kółku obok nazwy spółki (przycięte do koła)
-function Logo({ x, y, r, href, id }) {
+// Logo w kółku obok nazwy spółki: 'slice' – grafika wypełnia koło, 'meet' – cała grafika na tle (bg)
+function Logo({ x, y, r, logo, id }) {
+  const href = typeof logo === 'string' ? logo : logo.href;
+  const fit = typeof logo === 'string' ? 'meet' : logo.fit || 'meet';
+  const k = fit === 'slice' ? 1 : 0.78;
   return (
     <g>
       <defs>
@@ -57,8 +60,8 @@ function Logo({ x, y, r, href, id }) {
           <circle cx={x} cy={y} r={r} />
         </clipPath>
       </defs>
-      <circle cx={x} cy={y} r={r} fill="#ffffff" />
-      <image href={href} x={x - r * 0.78} y={y - r * 0.78} width={r * 1.56} height={r * 1.56} clipPath={`url(#${id})`} preserveAspectRatio="xMidYMid meet" />
+      <circle cx={x} cy={y} r={r} fill={(typeof logo === 'object' && logo.bg) || '#ffffff'} />
+      <image href={href} x={x - r * k} y={y - r * k} width={r * 2 * k} height={r * 2 * k} clipPath={`url(#${id})`} preserveAspectRatio={`xMidYMid ${fit}`} />
     </g>
   );
 }
@@ -195,7 +198,7 @@ const ReportCard = forwardRef(function ReportCard({ metrics, totals, series, col
           <g key={`${m.instrument.id}-${m.kind}`}>
             <rect x={rightX} y={y} width={rightW} height={rowH - 10} rx="12" fill={C.panel} />
             {logos[m.instrument.id] ? (
-              <Logo x={rightX + 26} y={y + (rowH - 10) / 2} r={16} href={logos[m.instrument.id]} id={`rc-logo-${i}`} />
+              <Logo x={rightX + 26} y={y + (rowH - 10) / 2} r={16} logo={logos[m.instrument.id]} id={`rc-logo-${i}`} />
             ) : (
               <Monogram x={rightX + 26} y={y + (rowH - 10) / 2} r={16} ticker={m.instrument.ticker} color={colors[m.instrument.id] || C.accent} />
             )}
