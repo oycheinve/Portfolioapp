@@ -181,12 +181,13 @@ export default function OperationFormModal({ form, setForm, onSave }) {
         },
       });
     } else if (mode === 'BALANCE') {
-      const note = f.note.trim() || `Aktualizacja salda do ${formatPLN(target)}`;
+      // Zmiana salda konta oszczędnościowego – transfer w obrębie oszczędności, nie wypłata z portfela
+      const note = f.note.trim() || `Zmiana salda do ${formatPLN(target)}`;
       if (diff > 0 && f.diffAs === 'INTEREST') {
         const gross = belka > 0 && belka < 1 ? diff / (1 - belka) : diff;
         writes.push({ collection: 'income', item: { accountId: f.accountId, date: f.date, type: 'INTEREST', gross: Math.round(gross * 100) / 100, foreignTax: 0, note } });
       } else {
-        writes.push({ collection: 'cashflows', item: { date: f.date, accountId: f.accountId, type: diff > 0 ? 'DEPOSIT' : 'WITHDRAWAL', amount: Math.abs(diff), note } });
+        writes.push({ collection: 'cashflows', item: { date: f.date, accountId: f.accountId, type: diff > 0 ? 'DEPOSIT' : 'WITHDRAWAL', amount: Math.abs(diff), note, source: 'BALANCE' } });
       }
     }
     onSave({ writes, instruments });
@@ -355,12 +356,12 @@ export default function OperationFormModal({ form, setForm, onSave }) {
                     onChange={(v) => set({ diffAs: v })}
                     ariaLabel="Zaksięguj różnicę jako"
                     options={[
-                      { value: 'FLOW', label: 'Wpłata (wkład własny)' },
+                      { value: 'FLOW', label: 'Zmiana salda (dopłata / transfer)' },
                       { value: 'INTEREST', label: 'Odsetki (zysk)' },
                     ]}
                   />
                 ) : (
-                  <div className="text-xs text-stone-500">Spadek salda zostanie zapisany jako wypłata.</div>
+                  <div className="text-xs text-stone-500">Spadek salda zostanie zapisany jako zmiana salda (transfer w obrębie oszczędności) – nie jest wypłatą.</div>
                 )}
                 {diff > 0 && f.diffAs === 'INTEREST' && belka > 0 && (
                   <div className="text-xs text-stone-500">Odsetki brutto {formatPLN(diff / (1 - belka))} – po podatku Belki saldo wzrośnie o {formatPLN(diff)}.</div>

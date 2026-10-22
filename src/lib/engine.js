@@ -33,6 +33,21 @@ export function safeInterestFilter(state) {
   return (i) => i.type === 'INTEREST' && safe.has(i.accountId);
 }
 
+// Konto oszczędnościowe: każda zmiana salda (dopłata, przelew wewnętrzny, spadek salda) to transfer w obrębie
+// oszczędności – nigdy wypłata. Do wpłat trafia saldo netto takich zmian, a wypłaty liczone są tylko z kont inwestycyjnych.
+export function depositsWithdrawals(state, cashflows) {
+  const savings = new Set(state.accounts.filter((a) => a.type === 'SAVINGS').map((a) => a.id));
+  let deposits = 0;
+  let withdrawals = 0;
+  for (const c of cashflows) {
+    const amt = Number(c.amount) || 0;
+    if (savings.has(c.accountId)) deposits += c.type === 'DEPOSIT' ? amt : -amt;
+    else if (c.type === 'DEPOSIT') deposits += amt;
+    else withdrawals += amt;
+  }
+  return { deposits, withdrawals };
+}
+
 export function resolveAccountIds(state, filter) {
   if (!filter || filter === 'ALL') return state.accounts.map((a) => a.id);
   if (filter === 'INVEST') return state.accounts.filter((a) => !isSafeAccount(a)).map((a) => a.id);
@@ -505,10 +520,10 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
 
   const flowsInPeriod = netFlows(state, accountIds, startDate, todayIso);
   const contributionsAll = netFlows(state, accountIds, null, todayIso);
-  const depositsInPeriod = state.cashflows
-    .filter((c) => accountIds.includes(c.accountId) && c.type === 'DEPOSIT' && (!startDate || c.date > startDate) && c.date <= todayIso)
-    .reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  const withdrawalsInPeriod = depositsInPeriod - flowsInPeriod;
+  const { deposits: depositsInPeriod, withdrawals: withdrawalsInPeriod } = depositsWithdrawals(
+    state,
+    state.cashflows.filter((c) => accountIds.includes(c.accountId) && (!startDate || c.date > startDate) && c.date <= todayIso),
+  );
 
   const totalReturn = endValue - startValue - flowsInPeriod;
 

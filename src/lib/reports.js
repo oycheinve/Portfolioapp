@@ -1,6 +1,6 @@
 // Etap 5: raporty okresowe – tydzień ISO, miesiąc i rok kalendarzowy (1.01–31.12).
 // Wynik okresu = wartość na koniec − wartość na początek − wpłaty netto; stopa metodą Modified Dietz.
-import { bondIncomeEvents, computeHoldings, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
+import { bondIncomeEvents, computeHoldings, depositsWithdrawals, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -169,7 +169,8 @@ export function periodMetrics(state, period, resolver, today = isoDay(new Date()
     .filter((c) => c.date > s.date && c.date <= e.date && inAcc(c.accountId))
     .map((c) => ({ date: c.date, amount: (c.type === 'DEPOSIT' ? 1 : -1) * (Number(c.amount) || 0) }));
   const flows = flowsList.reduce((acc, f) => acc + f.amount, 0);
-  const deposits = flowsList.filter((f) => f.amount > 0).reduce((acc, f) => acc + f.amount, 0);
+  // Zmiany salda konta oszczędnościowego to transfery (saldo netto w wpłatach), nie wypłaty
+  const { deposits } = depositsWithdrawals(state, state.cashflows.filter((c) => c.date > s.date && c.date <= e.date && inAcc(c.accountId)));
   const income = [...incomeEventsWithTax(state), ...bondIncomeEvents(state, period.end)].filter((i) => i.date > s.date && i.date <= e.date && inAcc(i.accountId));
   const dividends = income.filter((i) => i.type === 'DIVIDEND').reduce((acc, i) => acc + i.net, 0);
   const interest = income.filter(safeInterestFilter(state)).reduce((acc, i) => acc + i.net, 0);

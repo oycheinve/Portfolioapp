@@ -39,7 +39,7 @@ export function buildPortfolioRows(state) {
     const belka = belkaRateForAccount(a, state.settings);
     const dayChange = savings ? cash * ((Number(a.interestRate) || 0) / 100 / 365) * (1 - belka) : 0;
     const ops = sortOps([
-      ...state.cashflows.filter((c) => c.accountId === a.id).map((c) => ({ date: c.date, type: c.type === 'DEPOSIT' ? 'Wpłata' : 'Wypłata', amount: (c.type === 'DEPOSIT' ? 1 : -1) * Number(c.amount), note: c.note })),
+      ...state.cashflows.filter((c) => c.accountId === a.id).map((c) => ({ date: c.date, type: savings ? 'Zmiana salda' : c.type === 'DEPOSIT' ? 'Wpłata' : 'Wypłata', amount: (c.type === 'DEPOSIT' ? 1 : -1) * Number(c.amount), note: c.note })),
       ...(savings ? income.filter((i) => i.accountId === a.id && i.type === 'INTEREST').map((i) => ({ date: i.date, type: 'Odsetki netto', amount: i.net, note: i.note })) : []),
     ]);
     rows.push({

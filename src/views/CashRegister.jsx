@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, CASHFLOW_TYPES } from '../lib/constants.js';
-import { isoDay, limitDeposits, tradeAmounts } from '../lib/engine.js';
+import { depositsWithdrawals, isoDay, limitDeposits, tradeAmounts } from '../lib/engine.js';
 import { limitForAccount } from '../lib/tax.js';
 import { formatAxisPLN, formatDate, formatMoney, formatNumber, formatPLN } from '../lib/format.js';
 import { chartChrome, seriesColor } from '../lib/colors.js';
@@ -42,10 +42,10 @@ export default function CashRegister() {
   }, [state.cashflows, accountFilter, typeFilter, yearFilter, query, accountsById]);
 
   const totals = useMemo(() => {
-    const deposits = filtered.filter((c) => c.type === 'DEPOSIT').reduce((s, c) => s + Number(c.amount), 0);
-    const withdrawals = filtered.filter((c) => c.type === 'WITHDRAWAL').reduce((s, c) => s + Number(c.amount), 0);
+    // Zmiany salda konta oszczędnościowego – transfery (netto w wpłatach), nie wypłaty
+    const { deposits, withdrawals } = depositsWithdrawals(state, filtered);
     return { deposits, withdrawals, net: deposits - withdrawals, count: filtered.length };
-  }, [filtered]);
+  }, [filtered, state]);
 
   const chartYear = yearFilter === 'ALL' ? String(new Date().getFullYear()) : yearFilter;
   const monthly = useMemo(() => {
@@ -64,8 +64,7 @@ export default function CashRegister() {
     const today = isoDay(new Date());
     return state.accounts.map((a) => {
       const list = state.cashflows.filter((c) => c.accountId === a.id);
-      const dep = list.filter((c) => c.type === 'DEPOSIT').reduce((s, c) => s + Number(c.amount), 0);
-      const wd = list.filter((c) => c.type === 'WITHDRAWAL').reduce((s, c) => s + Number(c.amount), 0);
+      const { deposits: dep, withdrawals: wd } = depositsWithdrawals(state, list);
       // Do limitu IKE/IKZE: bez rotacji wewnątrz konta i bez wpłat technicznych
       const yearDep = limitDeposits(state, a.id, new Date().getFullYear());
       return { account: a, dep, wd, net: dep - wd, yearDep, lastDate: list.reduce((m, c) => (c.date > m ? c.date : m), ''), today };
@@ -208,7 +207,7 @@ export default function CashRegister() {
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <Badge tone={isDep ? 'green' : 'red'}>{CASHFLOW_TYPES[c.type].label}</Badge>
+                          <Badge tone={acc?.type === 'SAVINGS' ? 'blue' : isDep ? 'green' : 'red'}>{acc?.type === 'SAVINGS' ? 'Zmiana salda' : CASHFLOW_TYPES[c.type].label}</Badge>
                         </td>
                         <td className={`px-3 py-2 text-right font-medium tabular whitespace-nowrap ${isDep ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                           {isDep ? '+' : '−'}
