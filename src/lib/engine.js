@@ -50,34 +50,13 @@ export function depositsWithdrawals(state, cashflows) {
   return { deposits, withdrawals };
 }
 
-// Walory wykluczone z podsumowań okresowych i rocznych (zawyżona / zaburzająca wycena): Syn2Bio (S2B)
+// Walory pomijane w rankingach podsumowań (najlepsza / najsłabsza spółka okresu) – zawyżona stopa zwrotu: Syn2Bio (S2B).
+// Transakcje, wycena i zyski tych walorów liczą się normalnie; znikają wyłącznie z zestawień „lider / maruder”.
 export const SUMMARY_EXCLUDED_TICKERS = ['S2B'];
 
 export function isSummaryExcluded(instrument) {
   const ticker = String(instrument?.ticker || '').toUpperCase().replace(/\..*$/, '');
   return SUMMARY_EXCLUDED_TICKERS.includes(ticker) || /syn2bio/i.test(String(instrument?.name || ''));
-}
-
-const summaryStateCache = new WeakMap();
-
-// Stan do podsumowań okresowych: bez transakcji, dywidend i harmonogramu wykluczonych walorów (jakby ich nie było
-// w portfelu). Dzienne migawki zawierają ich wartość, więc są pomijane – wyceny liczone z cen historycznych.
-// Bez wykluczonych walorów w danych – stan bez zmian.
-export function summaryState(state) {
-  if (summaryStateCache.has(state)) return summaryStateCache.get(state);
-  const excluded = new Set(state.instruments.filter(isSummaryExcluded).map((i) => i.id));
-  const touched = excluded.size > 0 && state.trades.some((t) => excluded.has(t.instrumentId));
-  const out = touched
-    ? {
-        ...state,
-        trades: state.trades.filter((t) => !excluded.has(t.instrumentId)),
-        income: state.income.filter((i) => !excluded.has(i.instrumentId)),
-        dividendSchedule: state.dividendSchedule.filter((d) => !excluded.has(d.instrumentId)),
-        snapshots: [],
-      }
-    : state;
-  summaryStateCache.set(state, out);
-  return out;
 }
 
 export function resolveAccountIds(state, filter) {
@@ -565,9 +544,7 @@ export function computeTWR(state, accountIds, fromDate, toDate, endValue, priceA
 // Statystyki „Prawdziwy Zysk” dla okresu i filtra kont
 // priceAt(instrument, data) – ceny historyczne (createPriceResolver(state).instrumentPLN); bez nich wycena tylko z migawek
 // accountIdsOverride – dowolny zestaw kont (np. wybór w raporcie na X) zamiast filtra
-export function computePeriodStats(stateIn, { period = 'ALL', filter = 'ALL', today = new Date(), priceAt = null, accountIds: accountIdsOverride = null } = {}) {
-  // Statystyka roczna (od początku roku) – bez walorów wykluczonych z podsumowań (np. Syn2Bio)
-  const state = period === 'YTD' ? summaryState(stateIn) : stateIn;
+export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', today = new Date(), priceAt = null, accountIds: accountIdsOverride = null } = {}) {
   const accountIds = accountIdsOverride || resolveAccountIds(state, filter);
   const todayIso = isoDay(today);
   const priceLookup = livePriceLookup(state);

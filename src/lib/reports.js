@@ -1,6 +1,6 @@
 // Etap 5: raporty okresowe – tydzień ISO, miesiąc i rok kalendarzowy (1.01–31.12).
 // Wynik okresu = wartość na koniec − wartość na początek − wpłaty netto; stopa metodą Modified Dietz.
-import { bondIncomeEvents, computeHoldings, depositsWithdrawals, flowItems, summaryState, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
+import { bondIncomeEvents, computeHoldings, depositsWithdrawals, flowItems, isSummaryExcluded, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, safeInterestFilter, tradeCashDelta, valuePortfolio } from './engine.js';
 
 const DAY = 86400000;
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -161,9 +161,7 @@ function instrumentResults(state, start, end, resolver, income, accountIds = nul
 }
 
 // accountIds (opcjonalnie) – metryki tylko dla wybranych kont (np. portfel inwestycyjny bez poduszki)
-export function periodMetrics(stateIn, period, resolver, today = isoDay(new Date()), accountIds = null) {
-  // Podsumowania okresowe i roczne – bez walorów wykluczonych (np. Syn2Bio)
-  const state = summaryState(stateIn);
+export function periodMetrics(state, period, resolver, today = isoDay(new Date()), accountIds = null) {
   const inAcc = (id) => !accountIds || accountIds.includes(id);
   const s = valuationAt(state, period.start, resolver, today, accountIds);
   const e = valuationAt(state, period.end, resolver, today, accountIds);
@@ -180,7 +178,9 @@ export function periodMetrics(stateIn, period, resolver, today = isoDay(new Date
   const capital = s.value + deposits;
   const pct = capital > 0 ? profit / capital : 0;
   const mwr = modifiedDietz(s.value, e.value, flowsList, s.date, e.date);
-  const instruments = instrumentResults(state, period.start, period.end, resolver, income, accountIds);
+  // allInstruments – wyniki wszystkich walorów (do sum); instruments – ranking bez walorów wykluczonych (np. Syn2Bio)
+  const allInstruments = instrumentResults(state, period.start, period.end, resolver, income, accountIds);
+  const instruments = allInstruments.filter((r) => !isSummaryExcluded(r.instrument));
   return {
     period,
     startValue: s.value,
@@ -197,6 +197,7 @@ export function periodMetrics(stateIn, period, resolver, today = isoDay(new Date
     dividends,
     interest,
     instruments,
+    allInstruments,
     best: instruments[0] || null,
     worst: instruments.length > 1 ? instruments[instruments.length - 1] : null,
     contributionsTotal: netFlows(state, accountIds || state.accounts.map((a) => a.id), null, period.end),
@@ -248,22 +249,25 @@ export function scopedTotals(state, scope, { computePeriodStats, today = isoDay(
 export function scopedPeriodMetrics(state, period, resolver, scope, today = isoDay(new Date())) {
   const m = periodMetrics(state, period, resolver, today, scope.accountIds);
   if (!scope.assetsOnly) return m;
+  // Sumy z wszystkich walorów (także wykluczonych z rankingu), ranking – bez nich
+  const all = m.allInstruments.filter((r) => scope.pick(r.instrument));
   const instruments = m.instruments.filter((r) => scope.pick(r.instrument));
   // Dywidendy okresu z rejestru – także spółek już sprzedanych (bez pozycji na początku i końcu okresu)
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
-  const dividends = incomeEventsWithTax(summaryState(state))
+  const dividends = incomeEventsWithTax(state)
     .filter((i) => i.type === 'DIVIDEND' && i.date > m.startDate && i.date <= m.endDate && scope.accountIds.includes(i.accountId) && scope.pick(instById[i.instrumentId]))
     .reduce((s, i) => s + i.net, 0);
-  const profit = instruments.reduce((s, r) => s + r.result - r.dividends, 0) + dividends;
-  const capital = instruments.reduce((s, r) => s + r.valueStart + Math.max(0, r.netBuys), 0);
+  const profit = all.reduce((s, r) => s + r.result - r.dividends, 0) + dividends;
+  const capital = all.reduce((s, r) => s + r.valueStart + Math.max(0, r.netBuys), 0);
   return {
     ...m,
     instruments,
     profit,
     pct: capital > 0 ? profit / capital : 0,
     dividends,
-    startValue: instruments.reduce((s, r) => s + r.valueStart, 0),
-    endValue: instruments.reduce((s, r) => s + r.valueEnd, 0),
+    allInstruments: all,
+    startValue: all.reduce((s, r) => s + r.valueStart, 0),
+    endValue: all.reduce((s, r) => s + r.valueEnd, 0),
     best: instruments[0] || null,
     worst: instruments.length > 1 ? instruments[instruments.length - 1] : null,
   };
