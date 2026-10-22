@@ -33,16 +33,16 @@ export function safeInterestFilter(state) {
   return (i) => i.type === 'INTEREST' && safe.has(i.accountId);
 }
 
-// Konto oszczędnościowe: każda zmiana salda (dopłata, przelew wewnętrzny, spadek salda) to transfer w obrębie
-// oszczędności – nigdy wypłata. Do wpłat trafia saldo netto takich zmian, a wypłaty liczone są tylko z kont inwestycyjnych.
+// Konto oszczędnościowe: ręczne zmiany salda (dopłaty, przelewy wewnętrzne, spadek salda) nie są wpłatami ani wypłatami –
+// w statystykach i raportach saldo tego konta zmienia się wyłącznie o dopisane odsetki. Wpłaty i wypłaty – tylko pozostałe konta.
 export function depositsWithdrawals(state, cashflows) {
   const savings = new Set(state.accounts.filter((a) => a.type === 'SAVINGS').map((a) => a.id));
   let deposits = 0;
   let withdrawals = 0;
   for (const c of cashflows) {
     const amt = Number(c.amount) || 0;
-    if (savings.has(c.accountId)) deposits += c.type === 'DEPOSIT' ? amt : -amt;
-    else if (c.type === 'DEPOSIT') deposits += amt;
+    if (savings.has(c.accountId)) continue;
+    if (c.type === 'DEPOSIT') deposits += amt;
     else withdrawals += amt;
   }
   return { deposits, withdrawals };
@@ -200,7 +200,8 @@ export function computeCashBalances(state, asOf, accountIds, incomeEvents) {
   };
   for (const a of state.accounts) if (inFilter(accountIds, a.id)) balances[a.id] = 0;
   for (const c of state.cashflows) {
-    if (c.date > asOf) continue;
+    // Wykup obligacji: kwota wykupu wpływa i od razu wychodzi z rejestru – saldo gotówki bez zmian
+    if (c.date > asOf || isBondRedemption(c)) continue;
     const amt = Number(c.amount) || 0;
     add(c.accountId, c.type === 'DEPOSIT' ? amt : -amt);
   }
@@ -226,6 +227,35 @@ export function computeCashBalances(state, asOf, accountIds, incomeEvents) {
 export const AUTO_FUND_PREFIX = 'autofund_';
 const LEGACY_FUND_PREFIX = 'bondfund_';
 
+// Wykup obligacji w terminie: transza znika z portfela (obligacje istnieją tylko, gdy są aktywne), a kwota wykupu
+// (nominał + odsetki netto) wychodzi z rejestru jako automatyczna wypłata „do rozdysponowania” – nie staje się wolną
+// gotówką. Użytkownik sam przypisuje środki (np. wpłata na konto oszczędnościowe lub zakup nowych obligacji).
+export const BOND_REDEEM_PREFIX = 'bondredeem_';
+
+export function isBondRedemption(c) {
+  return String(c?.id || '').startsWith(BOND_REDEEM_PREFIX);
+}
+
+export function bondRedemptionCashflows(state, today = isoDay(new Date())) {
+  const cpi = getCpiTable(state.settings);
+  const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  const out = [];
+  for (const b of state.bonds) {
+    const v = valueBond(b, today, bondBelkaRate(b, accountsById[b.accountId]), cpi);
+    if (!v.matured || !v.maturityDate || !accountsById[b.accountId]) continue;
+    out.push({
+      id: `${BOND_REDEEM_PREFIX}${b.id}`,
+      accountId: b.accountId,
+      date: v.maturityDate,
+      type: 'WITHDRAWAL',
+      amount: Math.round(v.netValue * 100) / 100,
+      note: `Wykup obligacji ${b.series || b.type || ''} – środki do rozdysponowania`.replace('  ', ' '),
+      source: 'BOND_REDEEM',
+    });
+  }
+  return out;
+}
+
 export function isAutoFunding(c) {
   const id = String(c?.id || '');
   return id.startsWith(AUTO_FUND_PREFIX) || id.startsWith(LEGACY_FUND_PREFIX);
@@ -243,7 +273,7 @@ export function autoFundingCashflows(state, today = isoDay(new Date())) {
     (events[accountId] ||= []).push(ev);
   };
   for (const c of state.cashflows) {
-    if (isAutoFunding(c)) continue;
+    if (isAutoFunding(c) || isBondRedemption(c)) continue;
     const amt = Number(c.amount) || 0;
     push(c.accountId, { date: c.date, delta: c.type === 'DEPOSIT' ? amt : -amt, key: `cf_${c.id}`, label: c.note || 'wypłata' });
   }
@@ -309,13 +339,15 @@ export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
   });
 
   const cpi = getCpiTable(state.settings);
+  // Tylko aktywne transze – wykupione (dzień wykupu minął) nie są już częścią portfela
   const bonds = state.bonds
     .filter((b) => inFilter(accountIds, b.accountId) && b.purchaseDate <= day)
     .map((b) => {
       const acc = accountsById[b.accountId];
       const v = valueBond(b, day, bondBelkaRate(b, acc), cpi);
       return { ...b, account: acc, valuation: v, value: v.netValue };
-    });
+    })
+    .filter((b) => !b.valuation.matured);
 
   const byAccount = {};
   for (const a of state.accounts) {

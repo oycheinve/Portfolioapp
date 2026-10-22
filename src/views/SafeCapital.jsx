@@ -35,7 +35,7 @@ export default function SafeCapitalView() {
       .sort((a, b) => b.value - a.value)
       .map((b) => ({ key: b.id, label: `${b.series || b.type} · ${b.quantity} szt.`, value: b.value }));
     const bondCash = bondAccounts.reduce((sum, a) => sum + (v.byAccount[a.id]?.cash || 0), 0);
-    if (Math.abs(bondCash) >= 0.5) bondItems.push({ key: 'bondcash', label: 'Gotówka z wykupów i kuponów', value: bondCash });
+    if (Math.abs(bondCash) >= 0.5) bondItems.push({ key: 'bondcash', label: 'Gotówka z kuponów', value: bondCash });
     const savingsItems = savingsAccounts
       .map((a) => ({ key: a.id, label: a.name, value: v.byAccount[a.id]?.cash || 0 }))
       .sort((a, b) => b.value - a.value);

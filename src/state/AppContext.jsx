@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { reducer } from './reducer.js';
 import { COLLECTIONS, STATE_VERSION, STORAGE_KEY, migrateState, validateImported } from './schema.js';
 import { createDemoState } from './demoData.js';
-import { autoFundingCashflows, buildSnapshot, isAutoFunding, isoDay, livePriceLookup } from '../lib/engine.js';
+import { autoFundingCashflows, bondRedemptionCashflows, buildSnapshot, isAutoFunding, isBondRedemption, isoDay, livePriceLookup } from '../lib/engine.js';
 import { refreshAllPrices } from '../lib/prices.js';
 import { fetchAllHistory } from '../lib/history.js';
 import { pendingSavingsInterest } from '../lib/savings.js';
@@ -76,15 +76,16 @@ export function AppProvider({ children }) {
 
   // Gotówka na rachunkach ≥ 0: zakupy bez pokrycia uzupełniane automatyczną wpłatą (poza kontami debetowymi)
   useEffect(() => {
-    const desired = autoFundingCashflows(state);
-    const current = state.cashflows.filter(isAutoFunding);
+    // Razem z wpłatami uzupełniającymi: wypłaty z tytułu wykupu obligacji (transza wychodzi z portfela)
+    const desired = [...autoFundingCashflows(state), ...bondRedemptionCashflows(state)];
+    const current = state.cashflows.filter((c) => isAutoFunding(c) || isBondRedemption(c));
     const key = (list) =>
       list
         .map((c) => `${c.id}|${c.accountId}|${c.date}|${c.amount}`)
         .sort()
         .join(';');
     if (key(desired) !== key(current)) dispatch({ type: 'SYNC_AUTO_FUNDING', payload: desired });
-  }, [state.accounts, state.bonds, state.cashflows, state.trades, state.income, state.instruments]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.accounts, state.bonds, state.cashflows, state.trades, state.income, state.instruments, state.settings.cpiOverrides]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dywidendy bez ręcznego klikania: parowanie harmonogramu z rejestrem (np. import XTB) i autoksięgowanie po dniu wypłaty
   useEffect(() => {

@@ -56,7 +56,8 @@ function modesFor(account) {
     { value: 'DEPOSIT', label: 'Wpłata' },
     { value: 'WITHDRAWAL', label: 'Wypłata' },
   ];
-  if (account.type === 'SAVINGS') return [...base, { value: 'BALANCE', label: 'Ustal saldo' }];
+  // Konto oszczędnościowe: bez wpłat/wypłat – jedynie ustalenie salda (zmiana salda albo dopisanie odsetek)
+  if (account.type === 'SAVINGS') return [{ value: 'BALANCE', label: 'Ustal saldo' }];
   if (account.type === 'BONDS') return base;
   return [...base, { value: 'BUY', label: 'Kupno' }, { value: 'SELL', label: 'Sprzedaż' }];
 }
@@ -70,7 +71,7 @@ export default function OperationFormModal({ form, setForm, onSave }) {
   const set = (patch) => setForm({ ...f, ...patch });
   const account = state.accounts.find((a) => a.id === f.accountId);
   const modes = modesFor(account);
-  const mode = modes.some((m) => m.value === f.mode) ? f.mode : 'DEPOSIT';
+  const mode = modes.some((m) => m.value === f.mode) ? f.mode : modes[0]?.value || 'DEPOSIT';
   const isTrade = mode === 'BUY' || mode === 'SELL';
   const isBroker = account && account.type !== 'SAVINGS' && account.type !== 'BONDS';
   const year = Number((f.date || todayISO()).slice(0, 4));

@@ -82,7 +82,7 @@ export function reducer(state, action) {
     case 'SYNC_AUTO_FUNDING': {
       // Podmienia automatyczne wpłaty uzupełniające środki (także dawne „bondfund_”) na aktualnie wyliczone
       const items = action.payload || [];
-      const auto = (c) => String(c.id).startsWith('autofund_') || String(c.id).startsWith('bondfund_');
+      const auto = (c) => String(c.id).startsWith('autofund_') || String(c.id).startsWith('bondfund_') || String(c.id).startsWith('bondredeem_');
       return touch({ ...state, cashflows: [...state.cashflows.filter((c) => !auto(c)), ...items] });
     }
 

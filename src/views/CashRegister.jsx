@@ -31,18 +31,20 @@ export default function CashRegister() {
     return [...set].sort().reverse();
   }, [state.cashflows]);
 
+  // Konto oszczędnościowe nie ma operacji wpłat/wypłat – ręczne zmiany salda nie trafiają do rejestru
+  const savingsIds = useMemo(() => new Set(state.accounts.filter((a) => a.type === 'SAVINGS').map((a) => a.id)), [state.accounts]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return state.cashflows
+      .filter((c) => !savingsIds.has(c.accountId))
       .filter((c) => accountFilter === 'ALL' || c.accountId === accountFilter)
       .filter((c) => typeFilter === 'ALL' || c.type === typeFilter)
       .filter((c) => yearFilter === 'ALL' || c.date.startsWith(yearFilter))
       .filter((c) => !q || (c.note || '').toLowerCase().includes(q) || (accountsById[c.accountId]?.name || '').toLowerCase().includes(q))
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  }, [state.cashflows, accountFilter, typeFilter, yearFilter, query, accountsById]);
+  }, [state.cashflows, accountFilter, typeFilter, yearFilter, query, accountsById, savingsIds]);
 
   const totals = useMemo(() => {
-    // Zmiany salda konta oszczędnościowego – transfery (netto w wpłatach), nie wypłaty
     const { deposits, withdrawals } = depositsWithdrawals(state, filtered);
     return { deposits, withdrawals, net: deposits - withdrawals, count: filtered.length };
   }, [filtered, state]);
@@ -51,18 +53,18 @@ export default function CashRegister() {
   const monthly = useMemo(() => {
     const arr = MONTHS.map((m, i) => ({ month: m, idx: i, net: 0 }));
     state.cashflows
-      .filter((c) => c.date.startsWith(chartYear))
+      .filter((c) => c.date.startsWith(chartYear) && !savingsIds.has(c.accountId))
       .filter((c) => accountFilter === 'ALL' || c.accountId === accountFilter)
       .forEach((c) => {
         const m = Number(c.date.slice(5, 7)) - 1;
         arr[m].net += (c.type === 'DEPOSIT' ? 1 : -1) * Number(c.amount);
       });
     return arr;
-  }, [state.cashflows, chartYear, accountFilter]);
+  }, [state.cashflows, chartYear, accountFilter, savingsIds]);
 
   const perAccount = useMemo(() => {
     const today = isoDay(new Date());
-    return state.accounts.map((a) => {
+    return state.accounts.filter((a) => a.type !== 'SAVINGS').map((a) => {
       const list = state.cashflows.filter((c) => c.accountId === a.id);
       const { deposits: dep, withdrawals: wd } = depositsWithdrawals(state, list);
       // Do limitu IKE/IKZE: bez rotacji wewnątrz konta i bez wpłat technicznych
@@ -145,7 +147,7 @@ export default function CashRegister() {
         <div className="flex flex-wrap items-end gap-2 border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
           <Select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className="w-auto min-w-[10rem]" aria-label="Konto">
             <option value="ALL">Wszystkie konta</option>
-            {state.accounts.map((a) => (
+            {state.accounts.filter((a) => a.type !== 'SAVINGS').map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
@@ -207,7 +209,7 @@ export default function CashRegister() {
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <Badge tone={acc?.type === 'SAVINGS' ? 'blue' : isDep ? 'green' : 'red'}>{acc?.type === 'SAVINGS' ? 'Zmiana salda' : CASHFLOW_TYPES[c.type].label}</Badge>
+                          <Badge tone={isDep ? 'green' : 'red'}>{CASHFLOW_TYPES[c.type].label}</Badge>
                         </td>
                         <td className={`px-3 py-2 text-right font-medium tabular whitespace-nowrap ${isDep ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                           {isDep ? '+' : '−'}
@@ -217,7 +219,11 @@ export default function CashRegister() {
                           {c.instrumentId && instById[c.instrumentId] && <Badge tone="blue">{instById[c.instrumentId].ticker}</Badge>} {c.note}
                         </td>
                         <td className="px-5 py-1 text-right whitespace-nowrap">
-                          {(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND') ? (
+                          {c.source === 'BOND_REDEEM' ? (
+                            <span title="Wykup obligacji w terminie – transza opuściła portfel, środki przypisz ręcznie (np. wpłata na konto oszczędnościowe)">
+                              <Badge>auto · wykup obligacji</Badge>
+                            </span>
+                          ) : (c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND') ? (
                             <span title="Wpłata dodana automatycznie, gdy zakup przekroczył gotówkę na koncie – przelicza się sama, znika po ręcznej wpłacie">
                               <Badge>auto · uzupełnienie</Badge>
                             </span>
@@ -244,7 +250,7 @@ export default function CashRegister() {
                     <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isDep ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}>
                       {isDep ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
                     </span>
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => !(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND') && openEdit(c)}>
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => !(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND' || c.source === 'BOND_REDEEM') && openEdit(c)}>
                       <div className="truncate text-sm font-medium">{acc?.name || 'Usunięte konto'}</div>
                       <div className="truncate text-xs text-stone-500 dark:text-stone-400">
                         {formatDate(c.date)}
@@ -255,7 +261,7 @@ export default function CashRegister() {
                       {isDep ? '+' : '−'}
                       {formatPLN(Number(c.amount))}
                     </div>
-                    {(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND') ? <Badge>auto</Badge> : <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} />}
+                    {(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND' || c.source === 'BOND_REDEEM') ? <Badge>auto</Badge> : <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} />}
                   </li>
                 );
               })}
