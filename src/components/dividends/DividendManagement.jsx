@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BookCheck, CalendarClock, Megaphone, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { bookingEntries, dividendPositions, evaluateScheduleItem, projectDividends } from '../../lib/dividends.js';
+import { bookingEntries, canAutoBook, canBookNow, dividendPositions, evaluateScheduleItem, projectDividends } from '../../lib/dividends.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatDate, formatNumber, formatPLN, formatPercent, todayISO } from '../../lib/format.js';
 import { SUPPORTED_CURRENCIES } from '../../lib/constants.js';
@@ -28,7 +28,11 @@ export function ScheduleCard() {
   const autoBook = state.settings.dividendPrefs?.autoBook !== false;
 
   const book = (item) => {
-    const entries = bookingEntries(state, item);
+    if (!canBookNow(item, today)) {
+      actions.notify(`Dywidenda jeszcze nie wypłacona (dzień wypłaty ${formatDate(item.payDate)}) – zaksięgujesz ją po otrzymaniu środków`, 'warn');
+      return;
+    }
+    const entries = bookingEntries(state, item, today);
     if (entries.length === 0) {
       actions.notify('Brak akcji na koncie w Dniu Dywidendy – nic do zaksięgowania', 'warn');
       return;
@@ -95,9 +99,10 @@ export function ScheduleCard() {
               <div className="flex items-center gap-1">
                 {ev.paired && <Badge tone="green">sparowana z rejestrem</Badge>}
                 {item.autoBooked && !ev.paired && <Badge tone="green">zaksięgowana auto</Badge>}
-                {ev.status === 'PENDING' && autoBook && <Badge>księgowanie auto po {formatDate(item.payDate)}</Badge>}
-                {ev.status === 'PENDING' && !autoBook && (
-                  <Button size="sm" icon={BookCheck} onClick={() => book(item)} title="Dodaj wypłatę do rejestru przychodów">
+                {ev.status === 'PENDING' && autoBook && !item.payDateEstimated && !canAutoBook(item, today) && <Badge>księgowanie auto po {formatDate(item.payDate)}</Badge>}
+                {ev.status === 'PENDING' && !(autoBook && !item.payDateEstimated) && !canBookNow(item, today) && <Badge>wypłata {formatDate(item.payDate)}</Badge>}
+                {ev.status === 'PENDING' && !(autoBook && !item.payDateEstimated) && canBookNow(item, today) && (
+                  <Button size="sm" icon={BookCheck} onClick={() => book(item)} title={item.payDateEstimated ? 'Dzień wypłaty szacowany – zaksięguj po faktycznym otrzymaniu środków' : 'Dodaj wypłatę do rejestru przychodów'}>
                     Zaksięguj
                   </Button>
                 )}

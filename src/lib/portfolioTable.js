@@ -5,13 +5,15 @@ import { belkaRateForAccount, bondBelkaRate } from './tax.js';
 import { OTHER_ASSET_CATEGORIES } from './constants.js';
 
 export const PORTFOLIO_CATEGORIES = [
-  // Kolejność sekcji w Portfelu: Akcje → ETF → Obligacje → Konta gotówkowe/oszczędnościowe → Nieruchomości
+  // Kolejność sekcji w Portfelu: Akcje → ETF → Wolne środki kont inwestycyjnych → Obligacje → Konta oszczędnościowe → Nieruchomości
   { id: 'STOCK_PL', label: 'Akcje GPW', short: 'Akcje GPW' },
   { id: 'STOCK_FOREIGN', label: 'Akcje zagraniczne', short: 'Akcje zagr.' },
   { id: 'ETF_FOREIGN', label: 'ETF-y zagraniczne', short: 'ETF zagr.' },
   { id: 'ETF_PL', label: 'ETF/ETC/ETN GPW', short: 'ETF/ETC/ETN GPW' },
+  // Gotówka na IKE / IKZE / rachunku maklerskim – część wartości tego konta (portfel inwestycyjny), nie poduszka
+  { id: 'FREE_CASH', label: 'Wolne środki na kontach inwestycyjnych', short: 'Wolne środki' },
   { id: 'BONDS', label: 'Obligacje skarbowe', short: 'Obligacje' },
-  { id: 'CASH', label: 'Konta gotówkowe', short: 'Gotówka' },
+  { id: 'CASH', label: 'Konta oszczędnościowe', short: 'Oszczędności' },
   { id: 'OTHER', label: 'Nieruchomości i inne', short: 'Nieruchomości' },
 ];
 
@@ -30,7 +32,7 @@ export function buildPortfolioRows(state) {
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
   const firstDate = (ops) => ops.reduce((m, o) => (!m || o.date < m ? o.date : m), null);
 
-  // Konta gotówkowe: konta oszczędnościowe oraz wolna gotówka na rachunkach maklerskich
+  // Konta oszczędnościowe (poduszka) oraz wolne środki na kontach inwestycyjnych (część wartości konta IKE/IKZE/maklerskiego)
   for (const a of state.accounts) {
     const cash = v.byAccount[a.id]?.cash || 0;
     if (Math.abs(cash) < 0.5) continue;
@@ -46,9 +48,9 @@ export function buildPortfolioRows(state) {
       id: `cash_${a.id}`,
       ops,
       since: firstDate(ops),
-      category: 'CASH',
-      name: savings ? a.name : `Gotówka – ${a.name}`,
-      sub: savings ? `${Number(a.interestRate) || 0}% · kapitalizacja` : 'wolne środki',
+      category: savings ? 'CASH' : 'FREE_CASH',
+      name: savings ? a.name : `Wolne środki – ${a.name}`,
+      sub: savings ? `${Number(a.interestRate) || 0}% · kapitalizacja` : `gotówka konta ${a.name} (w wartości konta)`,
       accountId: a.id,
       account: a,
       value: cash,

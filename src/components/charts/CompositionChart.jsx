@@ -12,11 +12,12 @@ const KEY = 'wealth-app-composition-hidden';
 const GROUPS = [
   { id: 'STOCK', label: 'Spółki (akcje)' },
   { id: 'ETF', label: 'ETF-y' },
+  { id: 'FREE_CASH', label: 'Wolne środki (IKE, IKZE, maklerskie)' },
   { id: 'BONDS', label: 'Obligacje' },
-  { id: 'CASH', label: 'Konta i gotówka' },
+  { id: 'CASH', label: 'Konta oszczędnościowe' },
   { id: 'OTHER', label: 'Nieruchomości i inne' },
 ];
-const GROUP_OF = { STOCK_PL: 'STOCK', STOCK_FOREIGN: 'STOCK', ETF_PL: 'ETF', ETF_FOREIGN: 'ETF', BONDS: 'BONDS', CASH: 'CASH', OTHER: 'OTHER' };
+const GROUP_OF = { STOCK_PL: 'STOCK', STOCK_FOREIGN: 'STOCK', ETF_PL: 'ETF', ETF_FOREIGN: 'ETF', FREE_CASH: 'FREE_CASH', BONDS: 'BONDS', CASH: 'CASH', OTHER: 'OTHER' };
 
 function readHidden() {
   try {

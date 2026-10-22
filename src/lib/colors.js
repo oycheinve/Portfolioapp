@@ -11,7 +11,7 @@ export function seriesColor(index, isDark) {
 }
 
 // Kolory klas aktywów – przypisane na stałe do klasy (nie do kolejności w danych)
-export const ASSET_CLASS_SLOT = { STOCKS: 0, ETF: 1, BONDS: 2, CASH: 3, OTHER: 4 };
+export const ASSET_CLASS_SLOT = { STOCKS: 0, ETF: 1, BONDS: 2, CASH: 3, OTHER: 4, FREE_CASH: 5 };
 
 export function assetClassColor(cls, isDark) {
   return seriesColor(ASSET_CLASS_SLOT[cls] ?? 7, isDark);

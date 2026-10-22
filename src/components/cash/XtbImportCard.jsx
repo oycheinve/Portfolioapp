@@ -362,25 +362,23 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
   const ownTrade = (t) => String(t.id).startsWith(`xtbpos_${account.id}_`) || String(t.id).startsWith(`xtbcl_${account.id}_`);
   const hasOther = state.trades.some((t) => t.accountId === account.id && !ownTrade(t));
   const hasRealDeposits = !!analysis.cashOps?.ops.some((o) => o.kind === 'DEPOSIT');
-  // Wpłaty: prawdziwe z raportu (limit IKE bez rotacji) / na pokrycie każdej transzy / brak
-  const [cashMode, setCashMode] = useState(hasRealDeposits ? 'REAL' : analysis.closed ? 'NONE' : 'FUND');
-  const fundCash = cashMode === 'FUND';
+  // Wpłaty: prawdziwe z raportu (limit IKE bez rotacji) / tylko brakująca część zakupów (automatyczne uzupełnienie)
+  const [cashMode, setCashMode] = useState(hasRealDeposits ? 'REAL' : 'NONE');
   const realCashflows = useMemo(
     () => (cashMode === 'REAL' && analysis.cashOps ? buildXtbRealCashflows(analysis.cashOps, { state, account }) : null),
     [cashMode, analysis, state, account],
   );
   const [replaceAccount, setReplaceAccount] = useState(hasOther);
   const [withIncome, setWithIncome] = useState(!!analysis.cashOps);
-  // Zamknięte pozycje: przy wpłatach na pokrycie transz (FUND) sprzedaże zawyżałyby gotówkę – wtedy wyłączone
   const [withClosedPref, setWithClosed] = useState(true);
-  const withClosed = !!analysis.closed && withClosedPref && cashMode !== 'FUND';
+  const withClosed = !!analysis.closed && withClosedPref;
   const closedPlan = useMemo(
     () => (withClosed ? buildXtbClosedImport(analysis.closed, mapping, { state, account }) : null),
     [withClosed, analysis, mapping, state, account],
   );
   const plan = useMemo(
-    () => buildXtbOpenImport(analysis, mapping, { state, account, fundCash, replaceAccount, realCashflows }),
-    [analysis, mapping, state, account, fundCash, replaceAccount, realCashflows],
+    () => buildXtbOpenImport(analysis, mapping, { state, account, replaceAccount, realCashflows }),
+    [analysis, mapping, state, account, replaceAccount, realCashflows],
   );
   const incomePlan = useMemo(
     () => (analysis.cashOps && withIncome ? buildXtbIncomeImport(analysis.cashOps, mapping, { state, account, fxPct: accountFxPct(account) }) : null),
@@ -401,7 +399,7 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
       extra.forEach((i) => known.add(i.id));
       actions.removeMany('trades', [...closedPlan.removeTrades, ...closedPlan.trades.map((x) => x.id)]);
       actions.addMany('trades', closedPlan.trades);
-    } else if (!analysis.closed || cashMode === 'FUND' || !withClosedPref) {
+    } else if (!analysis.closed || !withClosedPref) {
       // Bez zamkniętych pozycji: usuń transze z wcześniejszego importu tego arkusza
       const stale = state.trades.filter((t) => t.accountId === account.id && String(t.id).startsWith(`xtbcl_${account.id}_`)).map((t) => t.id);
       if (stale.length) actions.removeMany('trades', stale);
@@ -520,15 +518,12 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
             </label>
           )}
           <label className="flex items-start gap-2">
-            <input type="radio" name="xtb-cash-mode" className="mt-1 accent-blue-600" checked={cashMode === 'FUND'} onChange={() => setCashMode('FUND')} />
-            <span>
-              Wpłaty pokrywające koszt zakupu każdej transzy <span className="text-stone-500">(gotówka konta = 0 zł, wkład = koszt pozycji; wpłaty techniczne – nie liczą się do limitu IKE/IKZE)</span>
-            </span>
-          </label>
-          <label className="flex items-start gap-2">
             <input type="radio" name="xtb-cash-mode" className="mt-1 accent-blue-600" checked={cashMode === 'NONE'} onChange={() => setCashMode('NONE')} />
             <span>
-              Bez wpłat <span className="text-stone-500">(braki gotówki uzupełni automatyczne „Uzupełnienie środków”)</span>
+              Wpłaty tylko na brakującą część zakupów{' '}
+              <span className="text-stone-500">
+                (zakupy opłacone z wolnych środków – dywidend, sprzedaży, wcześniejszych wpłat – tylko zmniejszają gotówkę; niedobór pokrywa automatyczne „Uzupełnienie środków”, nieliczone do limitu IKE/IKZE)
+              </span>
             </span>
           </label>
         </fieldset>
@@ -546,13 +541,13 @@ function OpenPositionsPreview({ analysis, mapping, setMap, account, onDone }) {
           </label>
         )}
         {analysis.closed && (
-          <label className={`flex items-start gap-2 ${cashMode === 'FUND' ? 'opacity-60' : ''}`}>
-            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={withClosed} disabled={cashMode === 'FUND'} onChange={(e) => setWithClosed(e.target.checked)} />
+          <label className="flex items-start gap-2">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-blue-600" checked={withClosed} onChange={(e) => setWithClosed(e.target.checked)} />
             <span>
               Dołącz zamknięte pozycje z arkusza „{analysis.closed.sheetName}”{' '}
               <span className="text-stone-500">
                 ({analysis.closed.totals.lots} transz, {analysis.closed.totals.tickers} spółek · zrealizowany wynik {formatPLN(analysis.closed.totals.profit, { sign: true })} – historia sprzedaży: dywidendy ze sprzedanych akcji, zrealizowany zysk i rotacja w limicie
-                {cashMode === 'FUND' ? '; niedostępne przy wpłatach pokrywających transze' : ''})
+)
               </span>
             </span>
           </label>

@@ -162,6 +162,9 @@ export function migrateState(raw) {
     ? raw.settings.customBenchmarks.filter((b) => b && b.id && b.name)
     : [];
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
+  // Dawne wpłaty „na zakup” z importu otwartych pozycji XTB (pełny koszt każdej transzy) zawyżały sumę wpłat, gdy zakup
+  // opłacono z wolnych środków – usuwane; rzeczywisty niedobór gotówki pokrywa automatyczne „Uzupełnienie środków”
+  out.cashflows = out.cashflows.filter((c) => !String(c?.id || '').startsWith('xtbposfund_'));
   out.accounts = migrateAccounts(out);
   migrateBonds(out);
   // Konto oszczędnościowe – uniwersalny instrument poduszki: nazwa bez banku („Konto oszczędnościowe”, przy kilku – z numerem)

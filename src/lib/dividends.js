@@ -165,8 +165,20 @@ export function evaluateScheduleItem(state, item, today = isoDay(new Date())) {
   };
 }
 
-// Wpisy przychodu do zaksięgowania wypłaty z harmonogramu
-export function bookingEntries(state, item) {
+// Wolne środki rosną o dywidendę dopiero w dniu faktycznej wypłaty: automatycznie księgowane są wyłącznie wypłaty
+// z potwierdzonym dniem wypłaty, który już minął. Przy szacowanym dniu wypłaty – tylko ręczne potwierdzenie otrzymania
+// (po Dniu Dywidendy), z datą księgowania = dzień potwierdzenia. Przyszłe / nadchodzące wypłaty nigdy nie trafiają do gotówki.
+export function canAutoBook(item, today = isoDay(new Date())) {
+  return !item.estimated && !item.payDateEstimated && !!item.payDate && item.payDate <= today;
+}
+export function canBookNow(item, today = isoDay(new Date())) {
+  if (item.estimated || !item.exDate || item.exDate > today) return false;
+  return item.payDateEstimated || !item.payDate ? true : item.payDate <= today;
+}
+
+// Wpisy przychodu do zaksięgowania wypłaty z harmonogramu (data = potwierdzony dzień wypłaty, nigdy w przyszłości)
+export function bookingEntries(state, item, today = isoDay(new Date())) {
+  const date = item.payDate && !item.payDateEstimated && item.payDate <= today ? item.payDate : today;
   const ev = evaluateScheduleItem(state, item);
   return ev.perAccount
     .filter((a) => a.gross > 0)
@@ -174,7 +186,7 @@ export function bookingEntries(state, item) {
       id: `divsch_${item.id}_${a.accountId}`,
       accountId: a.accountId,
       instrumentId: item.instrumentId,
-      date: item.payDate || isoDay(new Date()),
+      date,
       type: 'DIVIDEND',
       gross: Math.round(a.gross * 100) / 100,
       foreignTax: Math.round(a.foreignTax * 100) / 100,
@@ -380,9 +392,9 @@ export function reconcileDividends(state, { autoBook = true, today = isoDay(new 
       updates.push(rest);
       continue;
     }
-    if (!autoBook || item.bookedAt || item.estimated || !item.payDate || item.payDate > today || !(Number(item.dps) > 0)) continue;
+    if (!autoBook || item.bookedAt || !canAutoBook(item, today) || !(Number(item.dps) > 0)) continue;
     if (scheduleStatus(item, today) !== 'PENDING') continue;
-    const entries = bookingEntries(state, item);
+    const entries = bookingEntries(state, item, today);
     if (!entries.length) continue;
     addIncome.push(...entries);
     updates.push({ ...item, bookedAt: new Date().toISOString(), incomeIds: entries.map((e) => e.id), autoBooked: true });

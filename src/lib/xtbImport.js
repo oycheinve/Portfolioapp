@@ -472,9 +472,11 @@ export function analyzeXtbOpenPositions(sheets, { state }) {
 }
 
 // Otwarte pozycje → transakcje kupna (każda transza osobno, koszt w PLN = wartość − zysk netto z XTB),
-// opcjonalnie wpłaty pokrywające zakupy (gotówka konta = 0) i zastąpienie wcześniejszych transakcji konta.
-// realCashflows – prawdziwe wpłaty/wypłaty z arkusza „Cash Operations” (zamiast wpłat na pokrycie zakupów)
-export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash = true, replaceAccount = false, realCashflows = null }) {
+// opcjonalnie zastąpienie wcześniejszych transakcji konta. realCashflows – prawdziwe wpłaty/wypłaty z arkusza
+// „Cash Operations”. Bez nich import nie tworzy wpłat na pełny koszt transz: zakup opłacony z wolnych środków
+// (dywidendy, sprzedaż, wcześniejsze wpłaty) tylko je zmniejsza, a brakującą część pokrywa automatyczne
+// „Uzupełnienie środków” (silnik autoFundingCashflows) – bez fałszywych dopłat w sumie wpłat.
+export function buildXtbOpenImport(analysis, mapping, { state, account, replaceAccount = false, realCashflows = null }) {
   const accountId = account.id;
   const tradePrefix = `xtbpos_${accountId}_`;
   const fundPrefix = `xtbposfund_${accountId}_`;
@@ -523,9 +525,6 @@ export function buildXtbOpenImport(analysis, mapping, { state, account, fundCash
         trade.fxFeePct = 0;
       }
       trades.push(trade);
-      if (!realCashflows && fundCash && cost > 0) {
-        cashflows.push({ id: `${fundPrefix}${lot.positionId}`, accountId, date: lot.date, type: 'DEPOSIT', amount: cost, note: `Wpłata na zakup ${g.ticker} (import otwartych pozycji XTB)`, source: 'XTB_OPEN' });
-      }
     }
   }
   // Ceny bieżące z raportu XTB jako notowania – tylko gdy brak notowania na żywo (live z Yahoo ma pierwszeństwo)

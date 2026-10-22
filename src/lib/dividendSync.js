@@ -1,7 +1,7 @@
 // Automatyczne dane dywidend: historia z Yahoo Finance (dni dywidendy i kwoty na akcję) albo – bez dostępu
 // do Yahoo – prognoza na podstawie wypłat z rejestru. Tworzy wpisy harmonogramu i (opcjonalnie) księguje wypłaty.
 import { computeHoldings, isoDay } from './engine.js';
-import { bookingEntries, dividendHistory, scheduleStatus, sharesAt } from './dividends.js';
+import { bookingEntries, canAutoBook, dividendHistory, scheduleStatus, sharesAt } from './dividends.js';
 import { fetchYahooDividends } from './prices.js';
 import { mapLimited, yahooSymbolFor } from './yahooFetch.js';
 
@@ -95,8 +95,8 @@ export function planDividendSync(state, histories, { autoBook = false, today = i
   const bookings = [];
   if (autoBook) {
     for (const item of [...schedule, ...newItems]) {
-      if (item.estimated || item.bookedAt || !item.payDate || item.payDate > today || scheduleStatus(item, today) !== 'PENDING') continue;
-      const entries = bookingEntries(state, item);
+      if (item.bookedAt || !canAutoBook(item, today) || scheduleStatus(item, today) !== 'PENDING') continue;
+      const entries = bookingEntries(state, item, today);
       if (entries.length) bookings.push({ item, entries });
     }
   }

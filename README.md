@@ -226,6 +226,12 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
 
+## Wolne środki, dywidendy i źródła zakupów
+
+- **Wolne środki na IKE / IKZE / rachunku maklerskim** są częścią wartości tego konta (portfel inwestycyjny). W Portfelu mają osobną sekcję „Wolne środki na kontach inwestycyjnych” (filtr „Portfel inwestycyjny”), a nie trafiają do „Kont oszczędnościowych” ani do Poduszki finansowej. Na Pulpicie: „Wolne środki (IKE, IKZE, makl.)” osobno od „Oszczędności”.
+- **Dywidendy zasilają wolne środki dopiero w dniu faktycznej wypłaty.** Przychody z datą w przyszłości nie liczą się do gotówki; automatycznie księgowane są wyłącznie wypłaty z potwierdzonym dniem wypłaty, który już minął. Przy szacowanym dniu wypłaty – tylko ręczne „Zaksięguj” po otrzymaniu środków (data = dzień potwierdzenia).
+- **Zakup z wolnych środków nie jest wpłatą.** Kupno opłacone z gotówki konta (wcześniejsze wpłaty, dywidendy, sprzedaż) tylko zmniejsza wolne środki. Automatyczne „Uzupełnienie środków” powstaje wyłącznie na brakującą część zakupu. Import otwartych pozycji XTB nie tworzy już wpłat na pełny koszt każdej transzy (dawne wpłaty `xtbposfund_…` są usuwane przy wczytaniu danych i zastępowane faktycznym niedoborem).
+
 ## Konta użytkowników i synchronizacja w chmurze (Supabase)
 
 Logowanie i rejestracja e-mail + hasło (z resetem hasła), dane portfela zapisane w bazie przypisanej do konta.

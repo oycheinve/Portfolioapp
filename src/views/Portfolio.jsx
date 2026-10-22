@@ -35,7 +35,10 @@ const hPctDot = (v) => `${trim(((Number(v) || 0) * 100).toFixed(2))}%`;
 
 function readPrefs() {
   try {
-    return JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
+    const p = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
+    // Wolne środki kont inwestycyjnych były dawniej w kategorii „Konta gotówkowe” – zapisany filtr przenosi się na obie
+    if (Array.isArray(p?.categories) && p.categories.includes('CASH') && !p.categories.includes('FREE_CASH') && !p.freeCashV2) p.categories = [...p.categories, 'FREE_CASH'];
+    return p;
   } catch {
     return null;
   }
@@ -167,7 +170,7 @@ export default function PortfolioView({ onNavigate }) {
 
   const persist = (patch) => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ categories, hiddenAccounts, collapsed, ...patch }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ categories, hiddenAccounts, collapsed, freeCashV2: true, ...patch }));
     } catch {
       // brak localStorage – filtr nie zostanie zapamiętany
     }
@@ -206,6 +209,7 @@ export default function PortfolioView({ onNavigate }) {
               {[
                 { label: 'Wszystko', cats: allCats },
                 { label: 'Akcje i ETF', cats: ['STOCK_PL', 'STOCK_FOREIGN', 'ETF_PL', 'ETF_FOREIGN'] },
+                { label: 'Portfel inwestycyjny', cats: ['STOCK_PL', 'STOCK_FOREIGN', 'ETF_PL', 'ETF_FOREIGN', 'FREE_CASH'] },
                 { label: 'Poduszka finansowa', cats: ['BONDS', 'CASH'] },
               ].map((p) => (
                 <button

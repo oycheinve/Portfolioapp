@@ -25,7 +25,9 @@ export default function NetWorthPanel({ valuation, compact = false }) {
     { key: 'STOCKS', label: 'Akcje', value: t.stocks, risk: 'Rynkowe' },
     { key: 'ETF', label: 'ETF', value: t.etf, risk: 'Rynkowe' },
     { key: 'BONDS', label: 'Obligacje', value: t.bonds, risk: 'Bezpieczne' },
-    { key: 'CASH', label: 'Gotówka / oszczędności', value: t.cash, risk: 'Bezpieczne' },
+    // Wolne środki IKE/IKZE/maklerskie – część kont inwestycyjnych; oszczędności – poduszka
+    { key: 'FREE_CASH', label: 'Wolne środki (IKE, IKZE, makl.)', value: t.brokerCash, risk: 'Inwestycyjne' },
+    { key: 'CASH', label: 'Oszczędności', value: t.savingsCash, risk: 'Bezpieczne' },
     { key: 'OTHER', label: 'Nieruchomości / inne (netto)', value: other.includedValue, risk: 'Inne' },
   ].filter((s) => s.value > 0.005);
 
