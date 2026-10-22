@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronDown, Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, CASHFLOW_TYPES } from '../lib/constants.js';
 import { depositsWithdrawals, isoDay, limitDeposits, tradeAmounts } from '../lib/engine.js';
@@ -23,6 +23,8 @@ export default function CashRegister() {
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // Rejestr wpłat i wypłat domyślnie zwinięty – rozwijany jednym kliknięciem
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   const accountsById = useMemo(() => Object.fromEntries(state.accounts.map((a) => [a.id, a])), [state.accounts]);
   const years = useMemo(() => {
@@ -134,142 +136,165 @@ export default function CashRegister() {
         </Card>
       </div>
 
-      <Card
-        title="Rejestr wpłat i wypłat"
-        subtitle="Wpłaty i wypłaty własne – podstawa wyliczenia wkładu netto i Zysku Total · kupno/sprzedaż i saldo oszczędności w „Dodaj operację”"
-        icon={Receipt}
-        actions={
-          <Button variant="primary" icon={Plus} onClick={openNew} disabled={state.accounts.length === 0}>
-            Dodaj operację
-          </Button>
-        }
-        bodyClassName="p-0 sm:p-0"
-      >
-        <div className="flex flex-wrap items-end gap-2 border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
-          <Select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className="w-auto min-w-[10rem]" aria-label="Konto">
-            <option value="ALL">Wszystkie konta</option>
-            {state.accounts.filter((a) => a.type !== 'SAVINGS' && a.type !== 'BONDS').map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </Select>
-          <Select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="w-auto" aria-label="Rok">
-            <option value="ALL">Wszystkie lata</option>
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </Select>
-          <Segmented
-            options={[
-              { value: 'ALL', label: 'Wszystkie' },
-              { value: 'DEPOSIT', label: 'Wpłaty' },
-              { value: 'WITHDRAWAL', label: 'Wypłaty' },
-            ]}
-            value={typeFilter}
-            onChange={setTypeFilter}
-            size="sm"
-            ariaLabel="Typ operacji"
-          />
-          <div className="relative ml-auto w-full sm:w-56">
-            <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Szukaj w opisie…" className="pl-8" />
+      <section className="min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900">
+        <header className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 ${registerOpen ? 'border-b border-stone-100 dark:border-white/5' : ''}`}>
+          <button
+            type="button"
+            onClick={() => setRegisterOpen((o) => !o)}
+            aria-expanded={registerOpen}
+            aria-controls="cash-register-body"
+            className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-white/5 dark:text-stone-300">
+              <Receipt size={16} />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">Rejestr wpłat i wypłat</span>
+              <span className="block truncate text-xs text-stone-500 dark:text-stone-400">
+                {registerOpen
+                  ? 'Wpłaty i wypłaty własne – podstawa wyliczenia wkładu netto i Zysku Total · kupno/sprzedaż i saldo oszczędności w „Dodaj operację”'
+                  : `${totals.count} operacji · wkład netto ${formatPLN(totals.net)}${accountFilter !== 'ALL' || yearFilter !== 'ALL' || typeFilter !== 'ALL' || query.trim() ? ' (aktywne filtry)' : ''} – rozwiń, aby przeglądać, filtrować i edytować`}
+              </span>
+            </span>
+          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button icon={ChevronDown} onClick={() => setRegisterOpen((o) => !o)} aria-expanded={registerOpen} className={registerOpen ? '[&>svg]:rotate-180' : ''}>
+              {registerOpen ? 'Zwiń' : 'Pokaż wpłaty i wypłaty'}
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={openNew} disabled={state.accounts.length === 0}>
+              Dodaj operację
+            </Button>
           </div>
-        </div>
+        </header>
+        {registerOpen && (
+          <div id="cash-register-body">
+            <div className="flex flex-wrap items-end gap-2 border-b border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
+              <Select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className="w-auto min-w-[10rem]" aria-label="Konto">
+                <option value="ALL">Wszystkie konta</option>
+                {state.accounts.filter((a) => a.type !== 'SAVINGS' && a.type !== 'BONDS').map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </Select>
+              <Select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="w-auto" aria-label="Rok">
+                <option value="ALL">Wszystkie lata</option>
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </Select>
+              <Segmented
+                options={[
+                  { value: 'ALL', label: 'Wszystkie' },
+                  { value: 'DEPOSIT', label: 'Wpłaty' },
+                  { value: 'WITHDRAWAL', label: 'Wypłaty' },
+                ]}
+                value={typeFilter}
+                onChange={setTypeFilter}
+                size="sm"
+                ariaLabel="Typ operacji"
+              />
+              <div className="relative ml-auto w-full sm:w-56">
+                <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Szukaj w opisie…" className="pl-8" />
+              </div>
+            </div>
 
-        {filtered.length === 0 ? (
-          <EmptyState icon={Receipt} title="Brak operacji" description="Zmień filtry lub dodaj pierwszą wpłatę." />
-        ) : (
-          <>
-            {/* Tabela – desktop */}
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-stone-100 text-left text-xs text-stone-500 dark:border-white/5 dark:text-stone-400">
-                    <th className="px-5 py-2 font-medium">Data</th>
-                    <th className="px-3 py-2 font-medium">Konto</th>
-                    <th className="px-3 py-2 font-medium">Typ</th>
-                    <th className="px-3 py-2 text-right font-medium">Kwota</th>
-                    <th className="px-3 py-2 font-medium">Opis</th>
-                    <th className="px-5 py-2 text-right font-medium">Akcje</th>
-                  </tr>
-                </thead>
-                <tbody>
+            {filtered.length === 0 ? (
+              <EmptyState icon={Receipt} title="Brak operacji" description="Zmień filtry lub dodaj pierwszą wpłatę." />
+            ) : (
+              <>
+                {/* Tabela – desktop */}
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-stone-100 text-left text-xs text-stone-500 dark:border-white/5 dark:text-stone-400">
+                        <th className="px-5 py-2 font-medium">Data</th>
+                        <th className="px-3 py-2 font-medium">Konto</th>
+                        <th className="px-3 py-2 font-medium">Typ</th>
+                        <th className="px-3 py-2 text-right font-medium">Kwota</th>
+                        <th className="px-3 py-2 font-medium">Opis</th>
+                        <th className="px-5 py-2 text-right font-medium">Akcje</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((c) => {
+                        const acc = accountsById[c.accountId];
+                        const isDep = c.type === 'DEPOSIT';
+                        return (
+                          <tr key={c.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50 dark:border-white/5 dark:hover:bg-white/[0.02]">
+                            <td className="px-5 py-2 tabular whitespace-nowrap">{formatDate(c.date)}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full" style={{ background: ACCOUNT_TYPES[acc?.type]?.color }} />
+                                <span className="truncate">{acc?.name || 'Usunięte konto'}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <Badge tone={isDep ? 'green' : 'red'}>{CASHFLOW_TYPES[c.type].label}</Badge>
+                            </td>
+                            <td className={`px-3 py-2 text-right font-medium tabular whitespace-nowrap ${isDep ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {isDep ? '+' : '−'}
+                              {formatPLN(Number(c.amount))}
+                            </td>
+                            <td className="max-w-[16rem] truncate px-3 py-2 text-stone-500 dark:text-stone-400">
+                              {c.instrumentId && instById[c.instrumentId] && <Badge tone="blue">{instById[c.instrumentId].ticker}</Badge>} {c.note}
+                            </td>
+                            <td className="px-5 py-1 text-right whitespace-nowrap">
+                              {c.source === 'BOND_REDEEM' ? (
+                                <span title="Wykup obligacji w terminie – transza opuściła portfel, środki przypisz ręcznie (np. wpłata na konto oszczędnościowe)">
+                                  <Badge>auto · wykup obligacji</Badge>
+                                </span>
+                              ) : (c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND') ? (
+                                <span title="Wpłata dodana automatycznie, gdy zakup przekroczył gotówkę na koncie – przelicza się sama, znika po ręcznej wpłacie">
+                                  <Badge>auto · uzupełnienie</Badge>
+                                </span>
+                              ) : (
+                                <>
+                                  <IconButton icon={Pencil} label="Edytuj" onClick={() => openEdit(c)} />
+                                  <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} className="hover:text-red-600" />
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Lista – mobile */}
+                <ul className="divide-y divide-stone-100 md:hidden dark:divide-white/5">
                   {filtered.map((c) => {
                     const acc = accountsById[c.accountId];
                     const isDep = c.type === 'DEPOSIT';
                     return (
-                      <tr key={c.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50 dark:border-white/5 dark:hover:bg-white/[0.02]">
-                        <td className="px-5 py-2 tabular whitespace-nowrap">{formatDate(c.date)}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 rounded-full" style={{ background: ACCOUNT_TYPES[acc?.type]?.color }} />
-                            <span className="truncate">{acc?.name || 'Usunięte konto'}</span>
+                      <li key={c.id} className="flex items-center gap-3 px-4 py-3">
+                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isDep ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}>
+                          {isDep ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+                        </span>
+                        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => !(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND' || c.source === 'BOND_REDEEM') && openEdit(c)}>
+                          <div className="truncate text-sm font-medium">{acc?.name || 'Usunięte konto'}</div>
+                          <div className="truncate text-xs text-stone-500 dark:text-stone-400">
+                            {formatDate(c.date)}
+                            {c.note ? ` · ${c.note}` : ''}
                           </div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <Badge tone={isDep ? 'green' : 'red'}>{CASHFLOW_TYPES[c.type].label}</Badge>
-                        </td>
-                        <td className={`px-3 py-2 text-right font-medium tabular whitespace-nowrap ${isDep ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        </button>
+                        <div className={`text-sm font-semibold tabular ${isDep ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                           {isDep ? '+' : '−'}
                           {formatPLN(Number(c.amount))}
-                        </td>
-                        <td className="max-w-[16rem] truncate px-3 py-2 text-stone-500 dark:text-stone-400">
-                          {c.instrumentId && instById[c.instrumentId] && <Badge tone="blue">{instById[c.instrumentId].ticker}</Badge>} {c.note}
-                        </td>
-                        <td className="px-5 py-1 text-right whitespace-nowrap">
-                          {c.source === 'BOND_REDEEM' ? (
-                            <span title="Wykup obligacji w terminie – transza opuściła portfel, środki przypisz ręcznie (np. wpłata na konto oszczędnościowe)">
-                              <Badge>auto · wykup obligacji</Badge>
-                            </span>
-                          ) : (c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND') ? (
-                            <span title="Wpłata dodana automatycznie, gdy zakup przekroczył gotówkę na koncie – przelicza się sama, znika po ręcznej wpłacie">
-                              <Badge>auto · uzupełnienie</Badge>
-                            </span>
-                          ) : (
-                            <>
-                              <IconButton icon={Pencil} label="Edytuj" onClick={() => openEdit(c)} />
-                              <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} className="hover:text-red-600" />
-                            </>
-                          )}
-                        </td>
-                      </tr>
+                        </div>
+                        {(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND' || c.source === 'BOND_REDEEM') ? <Badge>auto</Badge> : <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} />}
+                      </li>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-            {/* Lista – mobile */}
-            <ul className="divide-y divide-stone-100 md:hidden dark:divide-white/5">
-              {filtered.map((c) => {
-                const acc = accountsById[c.accountId];
-                const isDep = c.type === 'DEPOSIT';
-                return (
-                  <li key={c.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isDep ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}>
-                      {isDep ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
-                    </span>
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => !(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND' || c.source === 'BOND_REDEEM') && openEdit(c)}>
-                      <div className="truncate text-sm font-medium">{acc?.name || 'Usunięte konto'}</div>
-                      <div className="truncate text-xs text-stone-500 dark:text-stone-400">
-                        {formatDate(c.date)}
-                        {c.note ? ` · ${c.note}` : ''}
-                      </div>
-                    </button>
-                    <div className={`text-sm font-semibold tabular ${isDep ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {isDep ? '+' : '−'}
-                      {formatPLN(Number(c.amount))}
-                    </div>
-                    {(c.source === 'AUTO_BOND' || c.source === 'AUTO_FUND' || c.source === 'BOND_REDEEM') ? <Badge>auto</Badge> : <IconButton icon={Trash2} label="Usuń" onClick={() => setConfirmDelete(c)} />}
-                  </li>
-                );
-              })}
-            </ul>
-          </>
+                </ul>
+              </>
+            )}
+          </div>
         )}
-      </Card>
+      </section>
 
       <TradesCard accountFilter={accountFilter} yearFilter={yearFilter} onEdit={(t) => setForm(operationFromTrade(t))} />
 
