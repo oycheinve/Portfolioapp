@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Copy, Eraser, Plus, ShoppingBag, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Copy, Eraser, Pencil, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 import { DAILY_KEY, budgetTotals, dailyAllowance, defaultFoodRow, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -16,18 +16,19 @@ const NF = (() => {
   }
 })();
 const zl = (v) => `${NF.format(Number(v) || 0).replace(/\u00a0|\u202f/g, ' ')} zł`;
-// Komórka do edycji w stylu arkusza: bez ramki, ramka dopiero przy edycji
-const cellInput =
-  'h-8 w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 outline-none focus:border-[#1f3864] focus:bg-white focus:ring-1 focus:ring-[#1f3864]/30 dark:focus:border-blue-400 dark:focus:bg-neutral-800';
+// Pole w trybie edycji: widoczna delikatna ramka, wyraźna przy fokusie
+const editInput =
+  'h-8 w-full min-w-0 rounded border border-stone-200 bg-white px-1.5 outline-none focus:border-[#1f3864] focus:ring-1 focus:ring-[#1f3864]/30 dark:border-white/10 dark:bg-neutral-800 dark:focus:border-blue-400';
 const leftTone = (v) => (v < -0.004 ? 'text-red-600 dark:text-red-400' : '');
 
 // Budżet miesięczny (Demo) – minimalistyczna tabela wzorowana na arkuszu: Kategoria, Planowany Budżet,
-// Kwota Wydana, Pozostało (plan − wydane) i wiersz RAZEM. Zmiana miesiąca, dodawanie i usuwanie kategorii.
+// Kwota Wydana, Pozostało (plan − wydane) i wiersz RAZEM. Podgląd (szybkie zakupy, limit dzienny) i tryb „Edytuj”
+// (nazwy, kwoty, dodawanie i usuwanie kategorii).
 export default function BudgetView() {
   const [data, setData] = useState(readBudget);
   const [month, setMonth] = useState(() => monthKey());
   const saved = data[month];
-  // Miesiąc bez zapisanego budżetu: przykładowe kategorie (zapisywane przy pierwszej edycji)
+  // Miesiąc bez zapisanego budżetu: przykładowe kategorie (zapisywane przy pierwszej zmianie)
   const template = useMemo(() => demoRows(), [month]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = saved || template;
   const isTemplate = !saved;
@@ -35,23 +36,37 @@ export default function BudgetView() {
     const keys = Object.keys(data).filter((k) => k < month && data[k]?.length).sort();
     return keys.at(-1) || null;
   }, [data, month]);
-  const totals = useMemo(() => budgetTotals(rows), [rows]);
+  // Tryb edycji: zmiany na kopii wierszy (draft) – „Zapisz” zapisuje miesiąc, „Anuluj” je odrzuca
+  const [draft, setDraft] = useState(null);
+  const editing = draft !== null;
+  const shown = editing ? draft : rows;
+  const totals = useMemo(() => budgetTotals(shown), [shown]);
 
   useEffect(() => {
     writeBudget(data);
   }, [data]);
 
   const setRows = (next) => setData((d) => ({ ...d, [month]: next }));
-  const update = (id, patch) => setRows(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const remove = (id) => setRows(rows.filter((r) => r.id !== id));
-  const [fresh, setFresh] = useState(null); // nowy wiersz – od razu edycja nazwy
+  const update = (id, patch) => setDraft((d) => d.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const remove = (id) => setDraft((d) => d.filter((r) => r.id !== id));
+  const [fresh, setFresh] = useState(null); // nowy wiersz – kursor od razu w nazwie
   const add = () => {
     const id = newRowId();
     setFresh(id);
-    setRows([...rows, { id, name: '', planned: '', spent: '', type: 'Inne' }]);
+    setDraft((d) => [...d, { id, name: '', planned: '', spent: '', type: 'Inne' }]);
   };
-  const copyPrev = () => setRows((data[prevKey] || []).map((r) => ({ ...r, id: newRowId(), spent: '' })));
-  const clear = () => setRows([]);
+  const copyPrev = () => setDraft((data[prevKey] || []).map((r) => ({ ...r, id: newRowId(), spent: '' })));
+  const clear = () => setDraft([]);
+  const startEdit = () => {
+    setFresh(null);
+    setDraft(rows.map((r) => ({ ...r })));
+  };
+  // Zapis: puste wiersze (bez nazwy i kwot) pomijane; szablon zapisywany tylko przy faktycznej zmianie
+  const save = () => {
+    const next = draft.filter((r) => String(r.name || '').trim() || toNum(r.planned) || toNum(r.spent));
+    if (!isTemplate || JSON.stringify(next) !== JSON.stringify(rows)) setRows(next);
+    setDraft(null);
+  };
   // Szybki zakup: kwota dopisywana do „Kwoty Wydanej” wybranej kategorii
   const addPurchase = (id, amount) => {
     const row = rows.find((r) => r.id === id);
@@ -61,30 +76,49 @@ export default function BudgetView() {
     return { name: row.name, left: toNum(row.planned) - spent };
   };
 
-  const navBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-white/5';
+  const navBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent dark:text-stone-400 dark:hover:bg-white/5';
   const linkBtn = 'inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5';
 
   return (
     <section className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-bold text-[#1f3864] sm:text-xl dark:text-blue-300">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <h2 className="min-w-0 text-lg font-bold text-[#1f3864] sm:text-xl dark:text-blue-300">
           Budżet na: {monthName(month)} <span className="ml-1 align-middle text-[10px] font-semibold tracking-wide text-amber-600 uppercase dark:text-amber-400">demo</span>
         </h2>
-        <div className="flex items-center gap-1">
-          <button type="button" className={navBtn} onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Poprzedni miesiąc" title="Poprzedni miesiąc">
-            <ChevronLeft size={18} />
-          </button>
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => e.target.value && setMonth(e.target.value)}
-            aria-label="Miesiąc budżetu"
-            className="h-8 rounded-md border border-stone-200 bg-white px-2 text-xs outline-none focus:border-[#1f3864] dark:border-white/10 dark:bg-neutral-800"
-          />
-          <button type="button" className={navBtn} onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc" title="Następny miesiąc">
-            <ChevronRight size={18} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          {editing && (
+            <button type="button" onClick={() => setDraft(null)} className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5">
+              <X size={14} /> Anuluj
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={editing ? save : startEdit}
+            aria-pressed={editing}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-sm transition-colors ${
+              editing ? 'bg-[#1f3864] text-white hover:bg-[#2a4a80] dark:bg-blue-500 dark:hover:bg-blue-400' : 'border border-stone-200 bg-white text-[#1f3864] hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-blue-200 dark:hover:bg-neutral-700'
+            }`}
+          >
+            {editing ? <Check size={14} /> : <Pencil size={14} />} {editing ? 'Zapisz' : 'Edytuj'}
           </button>
         </div>
+      </div>
+      <div className="mb-3 flex items-center gap-1">
+        <button type="button" className={navBtn} disabled={editing} onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Poprzedni miesiąc" title="Poprzedni miesiąc">
+          <ChevronLeft size={18} />
+        </button>
+        <input
+          type="month"
+          value={month}
+          disabled={editing}
+          onChange={(e) => e.target.value && setMonth(e.target.value)}
+          aria-label="Miesiąc budżetu"
+          className="h-8 rounded-md border border-stone-200 bg-white px-2 text-xs outline-none focus:border-[#1f3864] disabled:opacity-50 dark:border-white/10 dark:bg-neutral-800"
+        />
+        <button type="button" className={navBtn} disabled={editing} onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc" title="Następny miesiąc">
+          <ChevronRight size={18} />
+        </button>
+        {editing && <span className="ml-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">Tryb edycji</span>}
       </div>
 
       <div className="overflow-x-auto">
@@ -94,7 +128,7 @@ export default function BudgetView() {
             <col className="w-[23%] sm:w-[19%]" />
             <col className="w-[21%] sm:w-[17%]" />
             <col className="w-[23%] sm:w-[17%]" />
-            <col className="w-5 sm:w-8" />
+            {editing && <col className="w-7 sm:w-9" />}
           </colgroup>
           <thead>
             <tr className="bg-[#1f3864] text-white dark:bg-[#22355e]">
@@ -102,42 +136,54 @@ export default function BudgetView() {
               <th className="px-2 py-1.5 text-center font-semibold">Planowany Budżet</th>
               <th className="px-2 py-1.5 text-center font-semibold">Kwota Wydana</th>
               <th className="px-2 py-1.5 text-center font-semibold">Pozostało</th>
-              <th aria-label="Usuń" />
+              {editing && <th aria-label="Usuń" />}
             </tr>
           </thead>
           <tbody className="tabular">
-            {rows.map((r, i) => {
+            {shown.map((r, i) => {
               const left = rowLeft(r);
               return (
-                <tr key={r.id} className={`group border-b border-stone-200 dark:border-white/10 ${i % 2 ? 'bg-stone-50 dark:bg-white/[0.03]' : ''}`}>
-                  <td className="px-0.5 py-0.5">
-                    <EditableCell startEditing={r.id === fresh} value={r.name} display={r.name} placeholder="Nazwa kategorii" onChange={(v) => update(r.id, { name: v })} label={`Kategoria: ${r.name || 'nowa'}`} />
-                  </td>
-                  <td className="border-l border-stone-200 px-0.5 py-0.5 dark:border-white/10">
-                    <EditableCell numeric value={r.planned} display={zl(toNum(r.planned))} onChange={(v) => update(r.id, { planned: v })} label={`Planowany budżet: ${r.name}`} />
-                  </td>
-                  <td className="border-l border-stone-200 px-0.5 py-0.5 dark:border-white/10">
-                    <EditableCell numeric value={r.spent} display={zl(toNum(r.spent))} onChange={(v) => update(r.id, { spent: v })} label={`Kwota wydana: ${r.name}`} />
-                  </td>
+                <tr key={r.id} className={`border-b border-stone-200 dark:border-white/10 ${i % 2 ? 'bg-stone-50 dark:bg-white/[0.03]' : ''}`}>
+                  {editing ? (
+                    <>
+                      <td className="px-0.5 py-0.5">
+                        <input autoFocus={r.id === fresh} className={editInput} value={r.name} placeholder="Nazwa kategorii" onChange={(e) => update(r.id, { name: e.target.value })} aria-label={`Kategoria: ${r.name || 'nowa'}`} />
+                      </td>
+                      <td className="border-l border-stone-200 px-0.5 py-0.5 dark:border-white/10">
+                        <AmountInput value={r.planned} onChange={(v) => update(r.id, { planned: v })} label={`Planowany budżet: ${r.name}`} />
+                      </td>
+                      <td className="border-l border-stone-200 px-0.5 py-0.5 dark:border-white/10">
+                        <AmountInput value={r.spent} onChange={(v) => update(r.id, { spent: v })} label={`Kwota wydana: ${r.name}`} />
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-2 py-1.5 leading-snug break-words [hyphens:auto]">{r.name || <span className="text-stone-400">bez nazwy</span>}</td>
+                      <td className="border-l border-stone-200 px-2 py-1.5 text-right whitespace-nowrap dark:border-white/10">{zl(toNum(r.planned))}</td>
+                      <td className="border-l border-stone-200 px-2 py-1.5 text-right whitespace-nowrap dark:border-white/10">{zl(toNum(r.spent))}</td>
+                    </>
+                  )}
                   <td className={`border-l border-stone-200 px-2 py-0.5 text-right whitespace-nowrap dark:border-white/10 ${leftTone(left)}`}>{zl(left)}</td>
-                  <td className="py-0.5 text-center">
-                    <button
-                      type="button"
-                      onClick={() => remove(r.id)}
-                      aria-label={`Usuń kategorię ${r.name}`}
-                      title="Usuń"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10"
-                    >
-                      <X size={14} />
-                    </button>
-                  </td>
+                  {editing && (
+                    <td className="py-0.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => remove(r.id)}
+                        aria-label={`Usuń kategorię ${r.name}`}
+                        title="Usuń"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded text-stone-400 hover:bg-red-50 hover:text-red-600 dark:text-stone-500 dark:hover:bg-red-500/10"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
-            {rows.length === 0 && (
+            {shown.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-2 py-4 text-center text-stone-500">
-                  Brak kategorii.
+                <td colSpan={editing ? 5 : 4} className="px-2 py-4 text-center text-stone-500">
+                  {editing ? 'Brak kategorii – dodaj pierwszą poniżej.' : 'Brak kategorii – kliknij „Edytuj”, aby je dodać.'}
                 </td>
               </tr>
             )}
@@ -148,33 +194,38 @@ export default function BudgetView() {
               <td className="px-2 py-1.5 text-right whitespace-nowrap">{zl(totals.planned)}</td>
               <td className="px-2 py-1.5 text-right whitespace-nowrap">{zl(totals.spent)}</td>
               <td className={`px-2 py-1.5 text-right whitespace-nowrap ${totals.left < -0.004 ? 'text-red-600 dark:text-red-400' : ''}`}>{zl(totals.left)}</td>
-              <td />
+              {editing && <td />}
             </tr>
           </tfoot>
         </table>
       </div>
 
-      <PurchasePanel rows={rows} onAdd={addPurchase} />
-      <DailyTile rows={rows} month={month} />
-
-      <div className="mt-2 flex flex-wrap items-center gap-1">
-        <button type="button" className={linkBtn} onClick={add}>
-          <Plus size={14} /> Dodaj kategorię
-        </button>
-        {prevKey && (
-          <button type="button" className={linkBtn} onClick={copyPrev} title="Kategorie i plan z poprzedniego miesiąca (wydane wyzerowane)">
-            <Copy size={14} /> Kopiuj plan ({monthName(prevKey)})
+      {editing ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <button type="button" className={linkBtn} onClick={add}>
+            <Plus size={14} /> Dodaj kategorię
           </button>
-        )}
-        {!isTemplate && rows.length > 0 && (
-          <button type="button" className={linkBtn} onClick={clear}>
-            <Eraser size={14} /> Wyczyść
-          </button>
-        )}
-        <span className="ml-auto text-[11px] text-stone-400">
-          {isTemplate ? 'Przykładowe kategorie – pierwsza zmiana zapisze ten miesiąc' : 'Moduł demo · zapis w tej przeglądarce i kopii zapasowej'}
-        </span>
-      </div>
+          {prevKey && (
+            <button type="button" className={linkBtn} onClick={copyPrev} title="Kategorie i plan z poprzedniego miesiąca (wydane wyzerowane)">
+              <Copy size={14} /> Kopiuj plan ({monthName(prevKey)})
+            </button>
+          )}
+          {draft.length > 0 && (
+            <button type="button" className={linkBtn} onClick={clear}>
+              <Eraser size={14} /> Wyczyść
+            </button>
+          )}
+          <span className="ml-auto text-[11px] text-stone-400">„Zapisz” w prawym górnym rogu zapisuje zmiany</span>
+        </div>
+      ) : (
+        <>
+          <PurchasePanel rows={rows} onAdd={addPurchase} />
+          <DailyTile rows={rows} month={month} />
+          <p className="mt-2 text-right text-[11px] text-stone-400">
+            {isTemplate ? 'Przykładowe kategorie – zmień je w trybie „Edytuj”' : 'Moduł demo · zapis w tej przeglądarce i kopii zapasowej'}
+          </p>
+        </>
+      )}
     </section>
   );
 }
@@ -184,39 +235,22 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// Komórka jak w arkuszu: sformatowany tekst (kwota „55,00 zł”, nazwa zawijana), po kliknięciu pole edycji;
-// Enter / Esc / kliknięcie obok kończy edycję
-function EditableCell({ value, display, onChange, label, numeric = false, placeholder = '', startEditing = false }) {
-  const [editing, setEditing] = useState(startEditing);
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        className={`${cellInput} ${numeric ? 'text-right' : ''}`}
-        value={numeric ? String(value ?? '').replace('.', ',') : value}
-        inputMode={numeric ? 'decimal' : undefined}
-        placeholder={numeric ? '0,00' : placeholder}
-        onChange={(e) => onChange(numeric ? e.target.value.replace(/[^\d,.\-]/g, '') : e.target.value)}
-        onFocus={(e) => numeric && e.target.select()}
-        onBlur={() => setEditing(false)}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && e.currentTarget.blur()}
-        aria-label={label}
-      />
-    );
-  }
+// Pole kwoty w trybie edycji (przecinek dziesiętny, zaznaczenie całości po wejściu)
+function AmountInput({ value, onChange, label }) {
   return (
-    <button
-      type="button"
-      onClick={() => setEditing(true)}
-      aria-label={`${label} – edytuj`}
-      className={`block min-h-8 w-full rounded px-1.5 py-1 leading-snug break-words [hyphens:auto] hover:bg-[#1f3864]/5 dark:hover:bg-white/5 ${numeric ? 'text-right whitespace-nowrap' : 'text-left'}`}
-    >
-      {display || <span className="text-stone-400">{placeholder}</span>}
-    </button>
+    <input
+      className={`${editInput} text-right`}
+      value={String(value ?? '').replace('.', ',')}
+      inputMode="decimal"
+      placeholder="0,00"
+      onChange={(e) => onChange(e.target.value.replace(/[^\d,.\-]/g, ''))}
+      onFocus={(e) => e.target.select()}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      aria-label={label}
+    />
   );
 }
 
-// Panel „Dodaj zakup” pod tabelą: kategoria z tabeli + kwota → dopisanie do Kwoty Wydanej (Pozostało i RAZEM liczą się same)
 function PurchasePanel({ rows, onAdd }) {
   const options = rows.filter((r) => String(r.name || '').trim());
   const [categoryId, setCategoryId] = useState('');
