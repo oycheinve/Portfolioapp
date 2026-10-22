@@ -9,7 +9,7 @@ export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard, mobile: true },
   { id: 'portfolio', label: 'Portfel', longLabel: 'Portfel', icon: Table2, mobile: true },
   { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i notowania', icon: LineChart, mobile: true },
-  { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins, mobile: true },
+  { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins },
   { id: 'simulations', label: 'Symulacje', longLabel: 'Symulacje i kalkulator', icon: FlaskConical },
   { id: 'safe', label: 'Poduszka', longLabel: 'Poduszka finansowa', icon: Shield },
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
@@ -18,16 +18,16 @@ export const NAV_ITEMS = [
   { id: 'fire', label: 'FIRE', longLabel: 'FIRE', icon: Flame },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
-  { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList },
+  { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList, mobile: true },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
 
 // Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
-const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'dividends', 'goals'];
+const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'goals'];
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon); Ustawienia na końcu, pod nimi przełącznik motywu
-const MORE_ORDER = ['safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'budget', 'settings'];
+const MORE_ORDER = ['safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'settings'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)), ...NAV_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym

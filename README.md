@@ -76,7 +76,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Wykresy i notowania**: wybór wykresu z listy (wartość vs wkład, zysk, drawdown, dywidendy, mapa cieplna, notowania i waluty), obok wybór aktywów i benchmarków.
 - **Dywidendy**: automatyczna synchronizacja (historia dywidend z Yahoo Finance; offline – prognoza z historii wypłat), opcjonalne automatyczne księgowanie wypłat; usunięto sekcję raportów/WZA (`src/lib/dividendSync.js`).
 - **Symulacje i kalkulator** (nowa zakładka): Symulacja FIRE (opcje celu w zwijanym panelu, dochód pasywny), Stress test / Co jeśli, Kalkulator inwestycyjny (`src/lib/calculator.js`) – układ: dane wejściowe → wykres → wyniki.
-- Dolny pasek na telefonie: Pulpit, Portfel, Wykresy, Dywidendy, Cele, Więcej (pozostałe sekcje w arkuszu „Więcej”; kolejność w `MOBILE_ORDER` w `src/components/Layout.jsx`, menu boczne bez zmian). Stare adresy `#/fire`, `#/stress`, `#/quotes` przekierowują do nowych miejsc.
+- Dolny pasek na telefonie: Pulpit, Portfel, Wykresy, Budżet, Cele, Więcej (pozostałe sekcje w arkuszu „Więcej”; kolejność w `MOBILE_ORDER` w `src/components/Layout.jsx`, menu boczne bez zmian). Stare adresy `#/fire`, `#/stress`, `#/quotes` przekierowują do nowych miejsc.
 
 ## Usprawnienia: Portfel, akordeony, własne benchmarki, koszty FX
 
@@ -234,7 +234,7 @@ Zakładka „Budżet (Demo)” (`#/budget`, w „Więcej” i menu bocznym; `src
 - **FIRE {rok docelowy}** (`#/fire`, `src/views/FireGoal.jsx`) – osobna sekcja w „Więcej” i w menu bocznym (nazwa z rokiem z celów FIRE): pierścień „osiągnięte”, główny wskaźnik „Do celu FIRE brakuje X%” wg kryterium (oba cele / dochód / majątek), karty postępu majątku i miesięcznego dochodu pasywnego (z kwotą brakującą), szacowany termin osiągnięcia z symulacji FIRE, przyciski „Symulacja i projekcja FIRE” i „Zmień cele FIRE” (`#/settings/fire`). Dawny adres `#/fire` prowadzi teraz tutaj (symulacja: `#/simulations/fire`).
 - **Wykres prognozy FIRE** (`src/components/fire/FireProjectionChart.jsx`, w widoku FIRE i w symulacji FIRE): majątek i dochód pasywny na liniowej osi czasu kończącej się w miesiącu, w którym wybrany scenariusz osiąga cel FIRE (wg kryterium z ustawień) – wcześniej lub później niż rok docelowy; znacznik „FIRE” w punkcie osiągnięcia, pionowa linia roku docelowego (gdy wypada przed końcem), scenariusze skrajne ucięte w tym samym miejscu; bez osiągnięcia celu – prognoza do 2100 z komunikatem (`fireChartPoints` w `src/lib/fire.js`).
 - **Ustawienia** – wszystkie sekcje (Konta inwestycyjne, Podatki, Notowania, Limity IKE/IKZE, Cele FIRE, Nieruchomości, Chmura, Kopia zapasowa) jako jednoliniowe belki z nazwą i strzałką, domyślnie zwinięte; kliknięcie płynnie rozwija / zwija sekcję (opis i przyciski sekcji widoczne po rozwinięciu). Mechanizm: `Card` z `collapsible` albo `CardCollapseContext` (włączony w widoku Ustawień); `#/settings/fire` otwiera Cele FIRE.
-- **Kolejność w „Więcej”**: Poduszka finansowa, Symulacje i kalkulator, Alokacja i Dopłaty, FIRE, Raport na X, Rejestr Wpłat/Wypłat, Budżet (Demo), a na końcu Konta i ustawienia oraz przełącznik motywu (`MORE_ORDER` w `Layout.jsx`).
+- **Kolejność w „Więcej”**: Poduszka finansowa, Symulacje i kalkulator, Alokacja i Dopłaty, FIRE, Raport na X, Rejestr Wpłat/Wypłat, Dywidendy, a na końcu Konta i ustawienia oraz przełącznik motywu (`MORE_ORDER` w `Layout.jsx`).
 
 ## Odświeżony wygląd (UI)
 
