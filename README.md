@@ -226,6 +226,10 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
 
+## Budżet miesięczny (Demo)
+
+Zakładka „Budżet (Demo)” (`#/budget`, w „Więcej” i menu bocznym; `src/views/Budget.jsx`, `src/lib/budget.js`): tabela jak w arkuszu – Kategoria (własna nazwa), Planowany budżet, Kwota wydana, Pozostało (plan − wydane, na czerwono po przekroczeniu), Typ / Uwagi (Transport, Inwestycje, Stałe koszty, Zdrowie, Życie, Oszczędności, Inne), wiersz RAZEM; dodawanie, edycja i usuwanie kategorii, zmiana miesiąca, „Kopiuj plan” z poprzedniego zapisanego miesiąca, kafelki podsumowania i zestawienie według typu. Miesiąc bez danych pokazuje przykładowe kategorie (zapis przy pierwszej edycji). Dane w localStorage `wealth-app-budget-v1` – w kopii zapasowej JSON i ustawieniach synchronizowanych z chmurą; nie wpływają na portfel.
+
 ## FIRE {rok} i porządek w „Więcej”
 
 - **FIRE {rok docelowy}** (`#/fire`, `src/views/FireGoal.jsx`) – osobna sekcja w „Więcej” i w menu bocznym (nazwa z rokiem z celów FIRE): pierścień „osiągnięte”, główny wskaźnik „Do celu FIRE brakuje X%” wg kryterium (oba cele / dochód / majątek), karty postępu majątku i miesięcznego dochodu pasywnego (z kwotą brakującą), szacowany termin osiągnięcia z symulacji FIRE, przyciski „Symulacja i projekcja FIRE” i „Zmień cele FIRE” (`#/settings/fire`). Dawny adres `#/fire` prowadzi teraz tutaj (symulacja: `#/simulations/fire`).

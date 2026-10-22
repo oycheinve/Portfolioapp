@@ -16,6 +16,7 @@ import GoalsView from './views/Goals.jsx';
 import GoalsRolloverHost from './components/goals/GoalsRolloverHost.jsx';
 import SettingsView from './views/Settings.jsx';
 import FireGoalView from './views/FireGoal.jsx';
+import BudgetView from './views/Budget.jsx';
 
 const VIEWS = {
   dashboard: Dashboard,
@@ -31,6 +32,7 @@ const VIEWS = {
   cash: CashRegister,
   settings: SettingsView,
   fire: FireGoalView,
+  budget: BudgetView,
 };
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc
