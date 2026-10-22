@@ -226,6 +226,14 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Wybór waluty kalkulatora (PLN / USD / EUR) – waluta konta, kwot (kapitał, wpłata miesięczna) i wyników; przy zmianie kwoty przeliczane po aktualnym kursie (NBP z modułu kursów). Każdy ETF ma walutę notowań (PLN / USD / EUR / GBP); przewalutowanie liczone tylko, gdy waluta ETF-u różni się od waluty kalkulatora. Wyniki, koszty, wykres i podpowiedzi w wybranej walucie z równowartością w złotych.
 
+## Kalkulator PPK (Symulacje)
+
+`src/lib/ppkCalc.js`, `src/components/simulations/PpkCalculator.jsx` – symulacja miesiąc po miesiącu:
+- wpłaty od wynagrodzenia brutto (rosnącego o założony % rocznie): pracownik 0,5–4% (domyślnie 2%; poniżej 2% tylko przy wynagrodzeniu ≤ 1,2× płacy minimalnej), pracodawca 1,5–4% (1,5% + dodatkowa do 2,5%);
+- dopłaty państwa: powitalna 250 zł po 3 miesiącach (do wyłączenia) i roczna 240 zł, gdy wpłaty w roku ≥ 3,5% sześciokrotności płacy minimalnej (przy obniżonej składce – 25% progu);
+- stopa zwrotu funduszu pomniejszona o opłatę za zarządzanie; horyzont w latach albo do wieku docelowego;
+- wyniki: kapitał końcowy, trzy filary (pracownik / pracodawca / państwo + zyski), koszt z własnej kieszeni (wpłaty + PIT od wpłat pracodawcy), mnożnik „za 1 zł własną”, wypłata po 60. r.ż. (25% + 120 rat), wykres skumulowany i tabela rok po roku. Domyślne wynagrodzenie = przeciętne (limit IKE / 3); parametry zapamiętywane (także w kopii i chmurze).
+
 ## Bezpieczny ponowny import z XTB (bez duplikatów)
 
 Zaktualizowany plik z XTB można wgrywać wielokrotnie – dodawane są wyłącznie nowe operacje (`src/lib/importDedupe.js`):

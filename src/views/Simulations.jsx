@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Calculator, Droplets, Flame, FlaskConical, Landmark, PiggyBank, Scale, Zap } from 'lucide-react';
+import { Briefcase, Calculator, Droplets, Flame, FlaskConical, Landmark, PiggyBank, Scale, Zap } from 'lucide-react';
 import EtfCostCalculator from '../components/simulations/EtfCostCalculator.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { computeAllocation } from '../lib/allocation.js';
@@ -9,6 +9,7 @@ import StressTestView from './StressTest.jsx';
 import InvestmentCalculator from '../components/simulations/InvestmentCalculator.jsx';
 import BondCalculator from '../components/simulations/BondCalculator.jsx';
 import IkzeCalculator from '../components/simulations/IkzeCalculator.jsx';
+import PpkCalculator from '../components/simulations/PpkCalculator.jsx';
 
 export const SIMULATIONS = [
   { id: 'fire', label: 'Symulacja FIRE', description: 'Niezależność finansowa – ścieżka majątku i dochodu pasywnego', icon: Flame },
@@ -17,6 +18,7 @@ export const SIMULATIONS = [
   { id: 'etf', label: 'Kalkulator opłacalności ETF', description: 'TER, przewalutowanie XTB 0,05% i podatek – długoterminowy wpływ kosztów', icon: Scale },
   { id: 'calculator', label: 'Kalkulator inwestycyjny', description: 'Procent składany, TER i podatki wg konta', icon: Calculator },
   { id: 'ikze', label: 'Kalkulator IKZE', description: 'Zwrot podatku wg zarobków i formy opodatkowania oraz wzrost kapitału w czasie', icon: PiggyBank },
+  { id: 'ppk', label: 'Kalkulator PPK', description: 'Pracownicze Plany Kapitałowe – wpłaty Twoje i pracodawcy, dopłaty państwa (250 zł + 240 zł rocznie) i wzrost kapitału', icon: Briefcase },
   { id: 'bonds', label: 'Kalkulator obligacyjny', description: 'OTS / ROR / DOR / TOS / COI / EDO – przedterminowy wykup, horyzont w miesiącach, inflacja miesięczna', icon: Landmark },
 ];
 
@@ -56,7 +58,7 @@ export default function SimulationsView({ param, onNavigate }) {
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="h-10 min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 sm:max-w-xs dark:border-white/10 dark:bg-neutral-800"
+            className="h-10 min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 sm:max-w-xs sm:min-w-[16rem] dark:border-white/10 dark:bg-neutral-800"
             aria-label="Rodzaj symulacji"
           >
             {SIMULATIONS.map((s) => (
@@ -75,6 +77,7 @@ export default function SimulationsView({ param, onNavigate }) {
       {type === 'calculator' && <InvestmentCalculator />}
       {type === 'bonds' && <BondCalculator />}
       {type === 'ikze' && <IkzeCalculator />}
+      {type === 'ppk' && <PpkCalculator />}
     </div>
   );
 }
