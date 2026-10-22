@@ -4,7 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
 import { formatDateTime, formatPLN, todayISO } from '../lib/format.js';
-import { Badge, Button, Card, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
+import { Badge, Button, Card, CardCollapseContext, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
 import LimitsCard from '../components/settings/LimitsCard.jsx';
 import BackupCard from '../components/settings/BackupCard.jsx';
 import CloudCard from '../components/settings/CloudCard.jsx';
@@ -12,19 +12,20 @@ import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
 export default function SettingsView({ param }) {
+  // Wszystkie sekcje jako zwijane belki (domyślnie zwinięte); #/settings/fire otwiera Cele FIRE
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <AccountsSection />
-      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+    <CardCollapseContext.Provider value>
+      <div className="space-y-3">
+        <AccountsSection />
         <TaxSection />
         <PricesSection />
+        <LimitsCard />
+        <FireGoalsCard defaultOpen={param === 'fire'} />
+        <OtherAssetsSection />
+        <CloudCard />
+        <BackupCard />
       </div>
-      <LimitsCard />
-      <FireGoalsCard defaultOpen={param === 'fire'} />
-      <OtherAssetsSection />
-      <CloudCard />
-      <BackupCard />
-    </div>
+    </CardCollapseContext.Provider>
   );
 }
 

@@ -1,7 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 
-export function Card({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '' }) {
+// Karty zwijane: widok (np. Ustawienia) włącza tryb dla wszystkich swoich kart przez CardCollapseContext;
+// pojedyncza karta – propsem collapsible. Karty zagnieżdżone w treści nie dziedziczą trybu.
+export const CardCollapseContext = createContext(false);
+
+export function Card({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '', collapsible, defaultOpen = false }) {
+  const inherited = useContext(CardCollapseContext);
+  if ((collapsible ?? inherited) && title) {
+    return (
+      <CollapsibleCard title={title} subtitle={subtitle} icon={Icon} actions={actions} className={className} bodyClassName={bodyClassName} defaultOpen={defaultOpen}>
+        {children}
+      </CollapsibleCard>
+    );
+  }
   return (
     <section
       className={`min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900 ${className}`}
@@ -22,7 +34,60 @@ export function Card({ title, subtitle, icon: Icon, actions, children, className
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={`p-4 sm:p-5 ${bodyClassName}`}>{children}</div>
+      <div className={`p-4 sm:p-5 ${bodyClassName}`}>
+        <CardCollapseContext.Provider value={false}>{children}</CardCollapseContext.Provider>
+      </div>
+    </section>
+  );
+}
+
+// Zwinięta: jednoliniowa belka (ikona, nazwa, strzałka). Rozwinięta: opis i akcje sekcji, potem treść.
+// Płynne rozwijanie (animacja wysokości przez grid-template-rows); treść zwiniętej karty jest nieaktywna (inert).
+function CollapsibleCard({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '', defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [settled, setSettled] = useState(defaultOpen);
+  useEffect(() => {
+    if (defaultOpen) {
+      setOpen(true);
+      setSettled(true);
+    }
+  }, [defaultOpen]);
+  const toggle = () => {
+    setSettled(false);
+    setOpen((o) => !o);
+  };
+  return (
+    <section className={`min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900 ${className}`}>
+      <button type="button" onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-2.5 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-stone-50 sm:px-5 dark:hover:bg-white/[0.03]">
+        {Icon && (
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-white/5 dark:text-stone-300">
+            <Icon size={16} />
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+        <ChevronDown size={18} className={`shrink-0 text-stone-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <div
+        className="grid grid-cols-[minmax(0,1fr)] transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+        onTransitionEnd={(e) => {
+          if (e.target === e.currentTarget && open) setSettled(true);
+        }}
+      >
+        <div className={`min-h-0 ${open && settled ? '' : 'overflow-hidden'}`} inert={open ? undefined : ''} aria-hidden={open ? undefined : true}>
+          <div className="border-t border-stone-100 dark:border-white/5">
+            {(subtitle || actions) && (
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3 sm:px-5">
+                {subtitle && <p className="min-w-0 flex-1 text-xs text-stone-500 dark:text-stone-400">{subtitle}</p>}
+                {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+              </div>
+            )}
+            <div className={`p-4 sm:p-5 ${bodyClassName}`}>
+              <CardCollapseContext.Provider value={false}>{children}</CardCollapseContext.Provider>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
