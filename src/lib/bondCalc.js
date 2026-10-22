@@ -84,7 +84,9 @@ export function bondValueAt(type, offer, m, startY, startM, ctx) {
   const taxable = Math.max(0, interestBase - fee);
   const tax = taxable * belka;
   const value = (type.mode === 'CAPITALIZE' ? capital : NOMINAL) + accrued - fee - tax + couponsNet;
-  return { value, fee, tax: tax + couponsTax, early };
+  // Ta sama wartość bez opłaty (podatek od pełnych odsetek) – do pokazania, ile zysku zabiera opłata
+  const valueNoFee = (type.mode === 'CAPITALIZE' ? capital : NOMINAL) + accrued - Math.max(0, interestBase) * belka + couponsNet;
+  return { value, valueNoFee, fee, tax: tax + couponsTax, early };
 }
 
 // Symulacja typu na cały horyzont (z reinwestycją po wykupie w terminie): wartość netto co miesiąc dla kwoty `amount`
@@ -125,6 +127,7 @@ export function simulateBond(typeId, params, cpi) {
     taxes += units * last.tax;
   }
   const final = points[points.length - 1].value;
+  const finalNoFee = last ? final + units * (last.valueNoFee - last.value) : final;
   const years = H / 12;
   const annual = amount > 0 && final > 0 ? Math.pow(final / amount, 1 / years) - 1 : 0;
   // Inflacja w horyzoncie (miesięcznie, z odczytów i założenia) – wynik realny
@@ -135,7 +138,10 @@ export function simulateBond(typeId, params, cpi) {
     type,
     unavailable,
     final,
+    // Zysk na rękę – po opłacie za przedterminowy wykup i podatku; zysk przed opłatą – dla porównania
     profit: final - amount,
+    profitBeforeFee: finalNoFee - amount,
+    feeCost: finalNoFee - final, // ile zysku na rękę zabiera opłata (z uwzględnieniem niższego podatku)
     annual,
     real: final / infl - amount,
     realAnnual: amount > 0 && final > 0 ? Math.pow(final / infl / amount, 1 / years) - 1 : 0,

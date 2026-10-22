@@ -80,6 +80,19 @@ export function bondRateForPeriod(bond, periodIndex, ctx) {
   return bondRateDetails(bond, periodIndex, ctx).rate;
 }
 
+// Kwota „na rękę” przy przedterminowym wykupie transzy na dany dzień: nominał + odsetki naliczone − opłata za
+// wykup (zł za sztukę, nie wyższa niż naliczone odsetki) − podatek Belki od odsetek pomniejszonych o opłatę
+export function earlyRedemption(bond, asOf, belkaRate = 0, cpi = null) {
+  const type = BOND_TYPES[bond.type];
+  const v = valueBond(bond, asOf, belkaRate, cpi);
+  if (v.matured) return { fee: 0, tax: v.accruedGross - v.accruedNet, net: v.netValue, interestNet: v.accruedNet, matured: true };
+  const qty = Number(bond.quantity) || 0;
+  const interest = Math.max(0, v.accruedGross);
+  const fee = Math.min((type?.earlyFee || 0) * qty, interest);
+  const tax = (interest - fee) * belkaRate;
+  return { fee, tax, net: v.nominal + interest - fee - tax, interestNet: interest - fee - tax, matured: false };
+}
+
 // Harmonogram okresów odsetkowych transzy (do tabeli szczegółów)
 export function bondSchedule(bond, cpi) {
   const type = BOND_TYPES[bond.type];

@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Landmark, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { BOND_TYPES, BUILTIN_BONDS_ID, builtinBondsAccount } from '../../lib/constants.js';
-import { bondSchedule, getCpiTable, valueBond } from '../../lib/bonds.js';
+import { bondSchedule, earlyRedemption, getCpiTable, valueBond } from '../../lib/bonds.js';
 import { bondBelkaRate } from '../../lib/tax.js';
 import { formatDate, formatPLN, formatPercent, todayISO, uid } from '../../lib/format.js';
 import { Badge, Button, Card, EmptyState, IconButton, Modal, Toggle } from '../ui.jsx';
@@ -28,8 +28,9 @@ export default function BondsSection() {
           const acc = accountsById[b.accountId];
           const belka = bondBelkaRate(b, acc);
           const v = valueBond(b, today, belka, cpi);
+          const early = earlyRedemption(b, today, belka, cpi);
           const couponsGross = v.coupons.reduce((s, c) => s + c.gross, 0);
-          return { bond: b, account: acc, belka, v, couponsGross, couponsNet: couponsGross * (1 - belka) };
+          return { bond: b, account: acc, belka, v, early, couponsGross, couponsNet: couponsGross * (1 - belka) };
         })
         .sort((a, b) => (a.v.maturityDate < b.v.maturityDate ? -1 : 1)),
     [state.bonds, state.settings, cpi, today], // eslint-disable-line react-hooks/exhaustive-deps
@@ -103,7 +104,7 @@ export default function BondsSection() {
         <EmptyState icon={Landmark} title="Brak obligacji" description="Dodaj pierwszą transzę – wycena i odsetki policzą się automatycznie." />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
+          <table className="w-full min-w-[1020px] text-sm">
             <thead>
               <tr className="border-b border-stone-100 text-left text-xs text-stone-500 dark:border-white/5 dark:text-stone-400">
                 <th className="w-8 px-2 py-2" />
@@ -114,6 +115,7 @@ export default function BondsSection() {
                 <th className="px-3 py-2 text-right font-medium">Oprocent.</th>
                 <th className="px-3 py-2 text-right font-medium">Odsetki narosłe (brutto / netto)</th>
                 <th className="px-3 py-2 text-right font-medium">Wartość netto</th>
+                <th className="px-3 py-2 text-right font-medium" title="Przedterminowy wykup dziś: po opłacie za wykup i podatku">Na rękę przy wykupie dziś</th>
                 <th className="px-3 py-2 font-medium">Wykup</th>
                 <th className="px-4 py-2 text-right font-medium">Akcje</th>
               </tr>
@@ -149,6 +151,18 @@ export default function BondsSection() {
                         <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{formatPLN(r.v.accruedNet)}</div>
                       </td>
                       <td className="px-3 py-2 text-right font-semibold">{formatPLN(r.v.netValue)}</td>
+                      <td className="px-3 py-2 text-right">
+                        {r.v.matured ? (
+                          '—'
+                        ) : (
+                          <>
+                            <div className="font-medium">{formatPLN(r.early.net)}</div>
+                            <div className={`text-[11px] ${r.early.fee > 0 ? 'text-red-600 dark:text-red-400' : 'text-stone-500'}`}>
+                              opłata −{formatPLN(r.early.fee)} · zysk {formatPLN(r.early.interestNet)}
+                            </div>
+                          </>
+                        )}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div>{formatDate(r.v.maturityDate)}</div>
                         <div className="text-xs text-stone-500">{r.v.matured ? <Badge tone="blue">Wykupiona</Badge> : `za ${days} dni`}</div>
@@ -161,7 +175,7 @@ export default function BondsSection() {
                     {open && (
                       <tr className="border-b border-stone-100 bg-stone-50/70 dark:border-white/5 dark:bg-white/[0.02]">
                         <td />
-                        <td colSpan={9} className="px-2 py-3">
+                        <td colSpan={10} className="px-2 py-3">
                           <Schedule row={r} cpi={cpi} />
                         </td>
                       </tr>
@@ -174,7 +188,7 @@ export default function BondsSection() {
         </div>
       )}
       <p className="px-4 py-2.5 text-[11px] text-stone-500 sm:px-5 dark:text-stone-500">
-        Wartość netto = nominał + narosłe odsetki po podatku (bez opłaty za przedterminowy wykup). Inflacja dla COI/EDO z tabeli CPI (miesiąc o 2 wcześniejszy niż początek okresu) lub z ręcznego odczytu transzy.
+        Wartość netto = nominał + narosłe odsetki po podatku (wycena portfela). „Na rękę przy wykupie dziś” = po opłacie za przedterminowy wykup (ROR 0,50 zł, TOS i COI 0,70 zł, EDO 2,00 zł za sztukę, nie więcej niż naliczone odsetki) i podatku od odsetek pomniejszonych o opłatę. Inflacja dla COI/EDO z tabeli CPI (miesiąc o 2 wcześniejszy niż początek okresu) lub z ręcznego odczytu transzy.
         Szacowany roczny dochód netto z aktywnych obligacji: <strong className="tabular">{formatPLN(totals.yearlyIncome)}</strong>.
       </p>
 

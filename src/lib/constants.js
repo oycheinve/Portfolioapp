@@ -108,6 +108,7 @@ export const BOND_TYPES = {
     interestMode: 'PAYOUT',
     periodMonths: 1,
     indexed: 'NBP', // oprocentowanie zmienne (stopa referencyjna NBP + marża)
+    earlyFee: 0.5, // opłata za przedterminowy wykup (zł / szt.)
   },
   TOS: {
     id: 'TOS',
@@ -116,6 +117,7 @@ export const BOND_TYPES = {
     interestMode: 'CAPITALIZE',
     periodMonths: 12,
     indexed: 'FIXED',
+    earlyFee: 0.7,
   },
   COI: {
     id: 'COI',
@@ -124,6 +126,7 @@ export const BOND_TYPES = {
     interestMode: 'PAYOUT',
     periodMonths: 12,
     indexed: 'CPI',
+    earlyFee: 0.7,
   },
   EDO: {
     id: 'EDO',
@@ -132,6 +135,7 @@ export const BOND_TYPES = {
     interestMode: 'CAPITALIZE',
     periodMonths: 12,
     indexed: 'CPI',
+    earlyFee: 2.0,
   },
 };
 

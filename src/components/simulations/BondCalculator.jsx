@@ -158,8 +158,9 @@ export default function BondCalculator() {
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm dark:border-emerald-500/30 dark:bg-emerald-500/10">
           <Trophy size={18} className="text-emerald-700 dark:text-emerald-400" />
           <span>
-            Przy horyzoncie <strong>{horizonLabel(p.horizon)}</strong> najbardziej opłaca się <strong>{best.type.label}</strong>: {formatPLN(best.final)} netto (
-            <span className="text-emerald-700 dark:text-emerald-400">{formatPLN(best.profit, { sign: true })}</span>, {formatPercent(best.annual, { sign: true })} rocznie).
+            Przy horyzoncie <strong>{horizonLabel(p.horizon)}</strong> najbardziej opłaca się <strong>{best.type.label}</strong>: {formatPLN(best.final)} na rękę (
+            <span className="text-emerald-700 dark:text-emerald-400">{formatPLN(best.profit, { sign: true })}</span>, {formatPercent(best.annual, { sign: true })} rocznie
+            {best.fees > 0 ? `, po opłacie za wcześniejszy wykup ${formatPLN(best.fees)}` : ''}).
           </span>
         </div>
       )}
@@ -185,15 +186,16 @@ export default function BondCalculator() {
 
       <Card title={`Wynik po ${horizonLabel(p.horizon)}`} subtitle={`Kwota ${formatPLN(p.amount)} · od ${p.start}`} bodyClassName="p-0 sm:p-0">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-stone-100 text-left text-xs text-stone-500 dark:border-white/5">
                 <th className="px-4 py-2 font-medium">Obligacja</th>
                 <th className="px-3 py-2 text-right font-medium">Wartość netto</th>
-                <th className="px-3 py-2 text-right font-medium">Zysk netto</th>
-                <th className="px-3 py-2 text-right font-medium">Rocznie</th>
-                <th className="px-3 py-2 text-right font-medium">Realnie (po inflacji)</th>
+                <th className="px-3 py-2 text-right font-medium">Zysk przed opłatą</th>
                 <th className="px-3 py-2 text-right font-medium">Opłata za wykup</th>
+                <th className="px-3 py-2 text-right font-medium">Zysk na rękę</th>
+                <th className="px-3 py-2 text-right font-medium">Rocznie (na rękę)</th>
+                <th className="px-3 py-2 text-right font-medium">Realnie (po inflacji)</th>
                 <th className="px-4 py-2 font-medium">Wykup</th>
               </tr>
             </thead>
@@ -208,19 +210,20 @@ export default function BondCalculator() {
                     </div>
                   </td>
                   {r.unavailable ? (
-                    <td colSpan={6} className="px-3 py-2 text-xs text-stone-500">
+                    <td colSpan={8} className="px-3 py-2 text-xs text-stone-500">
                       Bez przedterminowego wykupu – wybierz horyzont będący wielokrotnością {r.type.months} mies.
                     </td>
                   ) : (
                     <>
                       <td className="px-3 py-2 text-right font-semibold">{formatPLN(r.final)}</td>
-                      <td className={`px-3 py-2 text-right ${r.profit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatPLN(r.profit, { sign: true })}</td>
+                      <td className="px-3 py-2 text-right text-stone-500">{formatPLN(r.profitBeforeFee, { sign: true })}</td>
+                      <td className={`px-3 py-2 text-right ${r.fees > 0 ? 'text-red-600 dark:text-red-400' : 'text-stone-400'}`}>{r.fees > 0 ? `−${formatPLN(r.fees)}` : '—'}</td>
+                      <td className={`px-3 py-2 text-right font-semibold ${r.profit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatPLN(r.profit, { sign: true })}</td>
                       <td className="px-3 py-2 text-right">{formatPercent(r.annual, { sign: true })}</td>
                       <td className={`px-3 py-2 text-right ${r.real >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                         {formatPLN(r.real, { sign: true })}
                         <div className="text-[11px] text-stone-500">{formatPercent(r.realAnnual, { sign: true })} / rok</div>
                       </td>
-                      <td className="px-3 py-2 text-right">{r.fees > 0 ? formatPLN(r.fees) : '—'}</td>
                       <td className="px-4 py-2 text-xs text-stone-500">
                         {(() => {
                           const rolled = r.early ? r.cycles : r.cycles - 1;
@@ -236,7 +239,7 @@ export default function BondCalculator() {
           </table>
         </div>
         <p className="px-4 py-2.5 text-[11px] text-stone-500 sm:px-5">
-          Inflacja: miesięczne odczyty CPI z tabeli poniżej (GUS lub wpisane ręcznie), dla przyszłych miesięcy – założenie. Kupony COI/ROR/DOR wypłacane i niereinwestowane (wliczone do wartości netto).
+          Wartość, zysk i stopy „na rękę” – po opłacie za przedterminowy wykup (odejmowanej od wypracowanych odsetek; zgodnie z listem emisyjnym nie wyższej niż naliczone odsetki, więc nie zmniejsza wpłaconego kapitału) i po podatku Belki od zysku pomniejszonego o opłatę. Ranking wg kwoty na rękę. Inflacja: miesięczne odczyty CPI z tabeli poniżej (GUS lub wpisane ręcznie), dla przyszłych miesięcy – założenie. Kupony COI/ROR/DOR wypłacane i niereinwestowane (wliczone do wartości).
         </p>
       </Card>
 

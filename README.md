@@ -217,6 +217,11 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 
 - Walory z listy `SUMMARY_EXCLUDED_TICKERS` (src/lib/engine.js; obecnie Syn2Bio – S2B) są pomijane wyłącznie w rankingach podsumowań: najlepsza / najsłabsza spółka roku i miesiąca, lata kalendarzowe, ruchy w tekście posta na X oraz lider i maruder na grafice X. Transakcje, historia operacji, wycena konta, zyski, stopy zwrotu i sumy okresów liczą się z tym walorem normalnie.
 
+## Opłata za przedterminowy wykup obligacji
+
+- Kalkulator obligacyjny: dla każdej obligacji „zysk przed opłatą” (po podatku, gdyby opłaty nie było), „opłata za wykup” i „zysk na rękę” – po odjęciu opłaty od wypracowanych odsetek i podatku Belki od odsetek pomniejszonych o opłatę. Stopa roczna, wynik realny, wykres i wybór najlepszej obligacji liczone z kwoty na rękę. Opłata zgodnie z listem emisyjnym nie wyższa niż naliczone odsetki (nie zmniejsza wpłaconego kapitału).
+- Rejestr obligacji (Poduszka): kolumna „Na rękę przy wykupie dziś” – nominał + naliczone odsetki − opłata za wykup (ROR 0,50 zł, TOS i COI 0,70 zł, EDO 2,00 zł za sztukę) − podatek; wycena portfela bez zmian.
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |
