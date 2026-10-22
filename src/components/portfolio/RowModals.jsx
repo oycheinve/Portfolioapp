@@ -16,7 +16,7 @@ export function DividendsModal({ row, onClose }) {
     () =>
       row
         ? incomeEventsWithTax(state)
-            .filter((i) => i.type === 'DIVIDEND' && i.instrumentId === row.instrumentId && i.accountId === row.accountId)
+            .filter((i) => i.type === 'DIVIDEND' && i.instrumentId === row.instrumentId && i.accountId === row.accountId && i.date <= today)
             .sort((a, b) => (a.date < b.date ? 1 : -1))
         : [],
     [state, row],

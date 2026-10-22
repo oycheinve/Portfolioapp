@@ -256,7 +256,7 @@ export function dividendEvents(state, selection, { net = true } = {}) {
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
   const v = valuePortfolio(state, { asOf: isoDay(new Date()), accountIds, priceLookup: () => null });
   return v.income
-    .filter((i) => i.type === 'DIVIDEND' && accountIds.includes(i.accountId))
+    .filter((i) => i.type === 'DIVIDEND' && accountIds.includes(i.accountId) && i.date <= isoDay(new Date()))
     .filter((i) => {
       const inst = instById[i.instrumentId];
       if (!inst) return selection.instruments.length === 0 && (selection.kinds.STOCK || selection.kinds.ETF);

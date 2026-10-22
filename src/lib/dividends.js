@@ -32,8 +32,9 @@ export function dividendHistory(state, instrumentId) {
   const fx = state.prices?.fx;
   const byDate = new Map();
   const sharesCache = new Map();
+  const today = isoDay(new Date());
   for (const i of state.income) {
-    if (i.type !== 'DIVIDEND' || i.instrumentId !== instrumentId) continue;
+    if (i.type !== 'DIVIDEND' || i.instrumentId !== instrumentId || i.date > today) continue;
     const gross = Number(i.gross);
     if (!Number.isFinite(gross)) continue;
     const day = addDays(i.date, -1);
@@ -100,17 +101,18 @@ export function dividendPositions(state, today = isoDay(new Date())) {
 // Wypłaty z rejestru pasujące do pozycji harmonogramu – po konkretnej dacie, nie po miesiącu: ta sama spółka,
 // wypłata nie wcześniej niż dzień dywidendy (Ex-Date) i najpóźniej kilka dni po dniu wypłaty (przy dacie
 // szacowanej – do 45 dni po Ex-Date). Wcześniejsza rata tej samej spółki (np. LPP) nie oznacza kolejnej jako wypłaconej.
-export function matchingIncome(state, item) {
+// Tylko wypłaty już otrzymane (data ≤ dziś) – przychód z datą w przyszłości nie oznacza wypłaconej dywidendy.
+export function matchingIncome(state, item, today = isoDay(new Date())) {
   if (!item?.instrumentId || !item.exDate) return [];
   const from = item.exDate;
   const to = item.payDate && !item.payDateEstimated ? addDays(item.payDate, 7) : addDays(item.exDate, 45);
-  return state.income.filter((i) => i.type === 'DIVIDEND' && i.instrumentId === item.instrumentId && i.date >= from && i.date <= to);
+  return state.income.filter((i) => i.type === 'DIVIDEND' && i.instrumentId === item.instrumentId && i.date >= from && i.date <= to && i.date <= today);
 }
 
 // Status pozycji harmonogramu (state – opcjonalnie: wypłata już w rejestrze = wypłacona)
 export function scheduleStatus(item, today = isoDay(new Date()), state = null) {
   if (item.bookedAt) return 'PAID';
-  if (state && matchingIncome(state, item).length) return 'PAID';
+  if (state && matchingIncome(state, item, today).length) return 'PAID';
   if (item.estimated) return 'FORECAST';
   if (item.exDate && item.exDate <= today) return 'PENDING';
   return 'ANNOUNCED';
@@ -199,7 +201,8 @@ export function bookingEntries(state, item, today = isoDay(new Date())) {
 export function buildCalendar(state, year, today = isoDay(new Date())) {
   const months = Array.from({ length: 12 }, (_, i) => ({ month: i, items: [], totalNet: 0 }));
   const instById = Object.fromEntries(state.instruments.map((i) => [i.id, i]));
-  const income = incomeEventsWithTax(state).filter((i) => i.type === 'DIVIDEND');
+  // Wypłacone = przychody z datą ≤ dziś; wpis z przyszłą datą to dywidenda oczekiwana (z harmonogramu)
+  const income = incomeEventsWithTax(state).filter((i) => i.type === 'DIVIDEND' && i.date <= today);
   const covered = new Set(); // instrument|miesiąc z wpisem rzeczywistym lub ogłoszonym
 
   // 1) wypłacone (rejestr przychodów) – zgrupowane per instrument i miesiąc
@@ -374,8 +377,9 @@ export function reconcileDividends(state, { autoBook = true, today = isoDay(new 
   const addIncome = [];
   const updates = [];
   const auto = (id) => String(id).startsWith('divsch_');
+  const incomeById = new Map(state.income.map((i) => [i.id, i]));
   for (const item of state.dividendSchedule) {
-    const real = matchingIncome(state, item).filter((i) => !auto(i.id));
+    const real = matchingIncome(state, item, today).filter((i) => !auto(i.id));
     if (real.length) {
       const ids = real.map((i) => i.id).sort();
       const current = [...(item.incomeIds || [])].sort();
@@ -388,11 +392,29 @@ export function reconcileDividends(state, { autoBook = true, today = isoDay(new 
     }
     // Wcześniejsze parowanie z wypłatą spoza dokładnego okna dat (dawna reguła miesięczna) – cofnięte
     if (item.bookedAt && item.pairedWith === 'rejestr') {
-      const { bookedAt, incomeIds, pairedWith, ...rest } = item; // eslint-disable-line no-unused-vars
-      updates.push(rest);
+      updates.push({ ...item, bookedAt: null, incomeIds: [], pairedWith: null });
       continue;
     }
-    if (!autoBook || item.bookedAt || !canAutoBook(item, today) || !(Number(item.dps) > 0)) continue;
+    // Zaksięgowana z harmonogramu, a dzień wypłaty zmieniony (np. ręcznie na przyszły): księgowanie cofnięte –
+    // kwota znika z wolnych środków i sumy wypłat, dywidenda wraca do oczekiwanych; zmiana na inny miniony dzień
+    // wypłaty – wpis przeksięgowany na nową datę
+    if (item.bookedAt) {
+      const own = (item.incomeIds || []).filter(auto).map((id) => incomeById.get(id)).filter(Boolean);
+      if (own.length) {
+        if (item.estimated || !canBookNow(item, today)) {
+          removeIncome.push(...own.map((i) => i.id));
+          // UPSERT scala pola – znaczniki księgowania zerowane jawnie
+          updates.push({ ...item, bookedAt: null, incomeIds: [], autoBooked: false, pairedWith: null });
+        } else if (!item.payDateEstimated && item.payDate && own.some((i) => i.date !== item.payDate)) {
+          const entries = bookingEntries(state, item, today);
+          removeIncome.push(...own.map((i) => i.id));
+          addIncome.push(...entries);
+          updates.push({ ...item, incomeIds: entries.map((e) => e.id) });
+        }
+      }
+      continue;
+    }
+    if (!autoBook || !canAutoBook(item, today) || !(Number(item.dps) > 0)) continue;
     if (scheduleStatus(item, today) !== 'PENDING') continue;
     const entries = bookingEntries(state, item, today);
     if (!entries.length) continue;
