@@ -31,7 +31,7 @@ const ACCOUNTS = [
   { id: 'acc_ikze', name: 'IKZE – XTB', type: 'IKZE', institution: 'XTB', currency: 'PLN', openedAt: '2024-01-02' },
   { id: 'acc_brok', name: 'Konto maklerskie – mBank', type: 'BROKERAGE', institution: 'mBank eMakler', currency: 'PLN', openedAt: '2024-02-01' },
   { id: 'acc_bonds', name: 'Obligacje skarbowe – PKO BP', type: 'BONDS', institution: 'PKO BP', currency: 'PLN', openedAt: '2024-03-01' },
-  { id: 'acc_sav', name: 'Konto oszczędnościowe – ING', type: 'SAVINGS', institution: 'ING', currency: 'PLN', openedAt: '2024-01-02', interestRate: 4.0, capitalization: 'MONTHLY' },
+  { id: 'acc_sav', name: 'Konto oszczędnościowe', type: 'SAVINGS', institution: '', currency: 'PLN', openedAt: '2024-01-02', interestRate: 4.0, capitalization: 'MONTHLY' },
 ];
 
 function progress(date, start, end) {

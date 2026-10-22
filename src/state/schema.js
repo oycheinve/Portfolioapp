@@ -164,6 +164,14 @@ export function migrateState(raw) {
   for (const c of COLLECTIONS) out[c] = Array.isArray(raw[c]) ? raw[c] : [];
   out.accounts = migrateAccounts(out);
   migrateBonds(out);
+  // Konto oszczędnościowe – uniwersalny instrument poduszki: nazwa bez banku („Konto oszczędnościowe”, przy kilku – z numerem)
+  let savingsNo = 0;
+  out.accounts = out.accounts.map((a) => {
+    if (a?.type !== 'SAVINGS') return a;
+    savingsNo += 1;
+    const name = savingsNo === 1 ? 'Konto oszczędnościowe' : `Konto oszczędnościowe ${savingsNo}`;
+    return a.name === name ? a : { ...a, name, bankName: a.bankName || a.institution || a.name };
+  });
   // Nieruchomości/ruchomości: dawny przełącznik „wliczaj do majątku” = widoczność w Portfelu (do majątku zawsze)
   out.otherAssets = out.otherAssets.map((a) => (a && a.showInPortfolio === undefined ? { ...a, showInPortfolio: a.includeInNetWorth !== false } : a));
   out.priceHistory = {

@@ -161,6 +161,11 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Limit IKE/IKZE**: prawdziwe wpłaty z „Cash Operations” (domyślny tryb importu). Bez nich: automatyczne uzupełnienia (rotacja już daje 0 zł) + wpłaty „na transzę” pomniejszone o sprzedaże. Uzupełnienia zaokrąglane w górę do grosza – gotówka nie spada do −0,02 zł.
 - **Logotypy na karcie raportu X**: obok nazw spółek na liście największych ruchów. Domena z edycji waloru („Strona firmy”) albo z wbudowanej listy (GPW, USA, emitenci ETF); ikona pobierana przez `/api/logo` (funkcja Vercel / middleware Vite) lub publiczne proxy i osadzana jako data URI – eksport PNG zawiera logo. Bez logo – monogram.
 
+## Konto oszczędnościowe bez banku, podatek odroczony w ustawieniach
+
+- **Konto oszczędnościowe** – jeden uniwersalny instrument poduszki o nazwie „Konto oszczędnościowe” (przy kilku kontach z numerem). Bez wyboru banku: w formularzu tylko data otwarcia, Belka, oprocentowanie i kapitalizacja. Starsze nazwy z bankiem („Konto oszczędnościowe – ING”) zmieniane automatycznie.
+- **Podatek Belki odroczony (np. Revolut)** – przełącznik dla każdego konta maklerskiego i konta oszczędnościowego na dole sekcji kont w zakładce Ustawienia (dochody brutto, 19% rozliczane w PIT-38).
+
 ## Architektura danych (`src/state/schema.js`)
 
 | Kolekcja | Zawartość |

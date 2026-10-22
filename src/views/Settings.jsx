@@ -74,6 +74,7 @@ function AccountsSection() {
           );
         })}
       </ul>
+      <DeferredBelkaPanel />
       <p className="flex items-start gap-2 border-t border-stone-100 px-4 py-3 text-xs text-stone-500 sm:px-5 dark:border-white/5 dark:text-stone-400">
         <Landmark size={14} className="mt-0.5 shrink-0" />
         Obligacje skarbowe i konta oszczędnościowe to wbudowane instrumenty poduszki finansowej (osobna kategoria, nigdy w IKE/IKZE) – dodajesz je w zakładce „Poduszka finansowa”.
@@ -85,6 +86,33 @@ function AccountsSection() {
   );
 }
 
+
+// Podatek Belki odroczony – instytucja nie pobiera podatku (np. Revolut), 19% rozliczasz sam w PIT-38.
+// Dotyczy kont opodatkowanych: maklerskich i konta oszczędnościowego (IKE/IKZE – Belka 0%).
+function DeferredBelkaPanel() {
+  const { state, actions } = useApp();
+  const eligible = state.accounts.filter((a) => a.type === 'BROKERAGE' || a.type === 'SAVINGS');
+  if (eligible.length === 0) return null;
+  return (
+    <div className="border-t border-stone-100 px-4 py-3 sm:px-5 dark:border-white/5">
+      <div className="text-sm font-medium">Podatek Belki odroczony (np. Revolut)</div>
+      <p className="mb-2 text-xs text-stone-500 dark:text-stone-400">
+        Włącz dla konta, na którym instytucja nie pobiera podatku – dochody liczone brutto, a 19% rozliczasz samodzielnie w PIT-38.
+      </p>
+      <div className="space-y-2">
+        {eligible.map((a) => (
+          <Toggle
+            key={a.id}
+            checked={!!a.belkaDeferred}
+            onChange={(v) => actions.upsert('accounts', { ...a, belkaDeferred: v })}
+            label={a.name}
+            description={`${ACCOUNT_TYPES[a.type]?.label}${a.belkaDeferred ? ' · podatek rozliczany w PIT' : ' · podatek pobierany automatycznie'}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // Szybkie ustawienie: zakupy na IKE w XTB rozliczane w PLN z prowizją 0,05% za przewalutowanie
 function XtbIkeToggle() {

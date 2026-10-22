@@ -8,10 +8,10 @@ import { passiveIncomeByMonth, savingsProjection } from '../../lib/savings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatDate, formatPLN, formatPercent, todayISO } from '../../lib/format.js';
 import { Badge, Button, Card, ChartTooltip, EmptyState, Field, IconButton, Input, Select, Toggle } from '../ui.jsx';
-import { AccountFormModal, DeleteAccountModal } from '../settings/AccountForm.jsx';
+import { AccountFormModal, DeleteAccountModal, SAVINGS_NAME } from '../settings/AccountForm.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
 
-const emptySavings = () => ({ name: '', type: 'SAVINGS', institution: '', currency: 'PLN', openedAt: todayISO(), interestRate: 0, capitalization: 'MONTHLY' });
+const emptySavings = () => ({ name: SAVINGS_NAME, type: 'SAVINGS', institution: '', currency: 'PLN', openedAt: todayISO(), interestRate: 0, capitalization: 'MONTHLY' });
 
 // Konta oszczędnościowe – wbudowany instrument poduszki finansowej (dodawanie, edycja i usuwanie w tej zakładce)
 export function SavingsCards() {
@@ -60,7 +60,7 @@ function SavingsCard({ account, onEdit, onDelete, onAdd }) {
   return (
     <Card
       title={account.name}
-      subtitle={`Konto oszczędnościowe · ${account.institution || ''}`}
+      subtitle={`Poduszka finansowa · ${String(account.interestRate || 0).replace('.', ',')}% w skali roku`}
       icon={PiggyBank}
       actions={
         <div className="flex items-center gap-1">
