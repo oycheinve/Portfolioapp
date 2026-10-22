@@ -33,8 +33,9 @@ export function defaultIkzeCalc(settings = {}, limit = 11304) {
     incomeGrowth: 3,
     lumpRate: 12,
     selfEmployed: !!settings.selfEmployed,
-    contributionMode: 'LIMIT',
-    amount: limit,
+    // Domyślnie wpłata własna poniżej limitu – zwrot podatku ma miejsce na reinwestycję w IKZE
+    contributionMode: 'CUSTOM',
+    amount: Math.round((limit * 0.8) / 100) * 100,
     years: 25,
     returnPct: 7,
     limitGrowth: Number(settings.limitsPolicy?.growthPct ?? 6) || 6,
@@ -42,51 +43,63 @@ export function defaultIkzeCalc(settings = {}, limit = 11304) {
   };
 }
 
-// limit0 – limit IKZE w bieżącym roku (zwykły lub JDG); zwraca wiersze roczne i podsumowanie
+// limit0 – limit IKZE w bieżącym roku (zwykły lub JDG); zwraca wiersze roczne i podsumowanie.
+// Reinwestycja zwrotu podatku: zwrot za rok N wpływa po rozliczeniu PIT, więc trafia do IKZE dopiero w roku N+1
+// (w pierwszym roku nie ma czego reinwestować). Mieści się w limicie roku N+1 (razem z wpłatą własną) – idzie na IKZE
+// (i sam daje kolejny zwrot); nadwyżka ponad limit trafia na nieoprocentowane konto gotówkowe. Bez reinwestycji
+// cały zwrot zostaje na koncie gotówkowym.
 export function simulateIkze(p, limit0) {
   const years = Math.max(1, Math.round(Number(p.years) || 1));
   const r = (Number(p.returnPct) || 0) / 100;
   const g = (Number(p.limitGrowth) || 0) / 100;
   const ig = (Number(p.incomeGrowth) || 0) / 100;
   let ikze = 0;
-  let broker = 0; // te same wpłaty na zwykłym koncie
-  let side = 0; // zwroty podatku reinwestowane na koncie maklerskim
-  let sideContrib = 0;
+  let broker = 0; // te same wpłaty własne na zwykłym koncie (Belka 19% od zysku)
+  let cash = 0; // nieoprocentowane konto gotówkowe (nadwyżki zwrotów)
+  let pendingRefund = 0; // zwrot za poprzedni rok – do wykorzystania w tym roku
   let contributions = 0;
+  let ownTotal = 0;
   let refunds = 0;
+  let reinvestedTotal = 0;
   const rows = [];
   for (let y = 1; y <= years; y += 1) {
     const limit = limit0 * Math.pow(1 + g, y - 1);
-    const amount = p.contributionMode === 'LIMIT' ? limit : Math.min(Math.max(0, Number(p.amount) || 0), limit);
+    const own = p.contributionMode === 'LIMIT' ? limit : Math.min(Math.max(0, Number(p.amount) || 0), limit);
+    const room = Math.max(0, limit - own);
+    const reinvested = p.reinvestRefund ? Math.min(pendingRefund, room) : 0;
+    const toCash = pendingRefund - reinvested;
+    cash += toCash;
+    const amount = own + reinvested;
     const income = (Number(p.income) || 0) * Math.pow(1 + ig, y - 1);
     const { refund, rate } = ikzeYearRefund({ form: p.form, amount, income, lumpRate: p.lumpRate });
-    // Wpłata na początku roku, wzrost w ciągu roku; zwrot z PIT otrzymany po rozliczeniu (koniec roku)
+    // Wpłaty na początku roku, wzrost w ciągu roku; zwrot za ten rok – w kolejnym roku
     ikze = (ikze + amount) * (1 + r);
-    broker = (broker + amount) * (1 + r);
-    side *= 1 + r;
-    if (p.reinvestRefund) {
-      side += refund;
-      sideContrib += refund;
-    }
+    broker = (broker + own) * (1 + r);
     contributions += amount;
+    ownTotal += own;
     refunds += refund;
+    reinvestedTotal += reinvested;
+    pendingRefund = refund;
     const ikzeNet = ikze * (1 - IKZE_PAYOUT_TAX);
-    const sideNet = side - Math.max(0, side - sideContrib) * BELKA;
-    const brokerNet = broker - Math.max(0, broker - contributions) * BELKA;
+    const brokerNet = broker - Math.max(0, broker - ownTotal) * BELKA;
     rows.push({
       year: y,
       limit,
+      own,
+      reinvested,
+      toCash,
       amount,
       refund,
       rate,
       contributions,
+      ownTotal,
       refunds,
       ikze,
       gain: ikze - contributions,
+      cash,
       ikzeNet,
-      sideNet,
-      // IKZE + zwroty (reinwestowane lub zachowane) po podatkach
-      totalNet: ikzeNet + (p.reinvestRefund ? sideNet : refunds),
+      // IKZE netto + konto gotówkowe + zwrot za ten rok (wpłynie po rozliczeniu)
+      totalNet: ikzeNet + cash + refund,
       brokerNet,
     });
   }
@@ -94,7 +107,10 @@ export function simulateIkze(p, limit0) {
   return {
     rows,
     contributions: last.contributions,
+    ownTotal: last.ownTotal,
     refunds: last.refunds,
+    reinvested: reinvestedTotal,
+    cash: last.cash + last.refund,
     ikze: last.ikze,
     payoutTax: last.ikze * IKZE_PAYOUT_TAX,
     ikzeNet: last.ikzeNet,

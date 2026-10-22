@@ -24,6 +24,18 @@ function loadInitialState() {
   return createDemoState();
 }
 
+// Przywrócenie ustawień widoków i kalkulatorów z kopii zapasowej (klucze „wealth-app-…” poza stanem danych)
+function restoreUiPrefs(uiPrefs) {
+  if (!uiPrefs || typeof uiPrefs !== 'object') return;
+  try {
+    for (const [k, v] of Object.entries(uiPrefs)) {
+      if (k.startsWith('wealth-app-') && k !== STORAGE_KEY && typeof v === 'string') localStorage.setItem(k, v);
+    }
+  } catch {
+    // brak localStorage – ustawienia widoków pozostaną domyślne
+  }
+}
+
 function useSystemDark() {
   const [dark, setDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
   useEffect(() => {
@@ -223,8 +235,19 @@ export function AppProvider({ children }) {
         const now = new Date();
         const stamp = `${isoDay(now)}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
         const counts = Object.fromEntries(COLLECTIONS.map((c) => [c, (s[c] || []).length]));
+        // Ustawienia widoków i kalculatorów (localStorage) – przywracane razem z danymi na innym urządzeniu
+        const uiPrefs = {};
+        try {
+          for (let i = 0; i < localStorage.length; i += 1) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('wealth-app-') && k !== STORAGE_KEY && k !== 'wealth-app-logos') uiPrefs[k] = localStorage.getItem(k);
+          }
+        } catch {
+          // brak localStorage – kopia bez ustawień widoków
+        }
         const payload = {
           ...s,
+          uiPrefs,
           meta: { ...s.meta, exportedAt: now.toISOString(), app: 'portfolioapp', schemaVersion: STATE_VERSION, counts },
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -241,8 +264,10 @@ export function AppProvider({ children }) {
       },
       // Etap 6: import z już sprawdzonego obiektu (podgląd i walidacja w Ustawieniach)
       importRaw: (raw) => {
-        dispatch({ type: 'IMPORT_STATE', payload: raw });
-        notify('Zaimportowano dane z pliku', 'success');
+        const { uiPrefs, ...data } = raw || {};
+        dispatch({ type: 'IMPORT_STATE', payload: data });
+        restoreUiPrefs(uiPrefs);
+        notify('Przywrócono dane z kopii zapasowej', 'success');
       },
       importState: async (file) => {
         try {
@@ -253,8 +278,10 @@ export function AppProvider({ children }) {
             notify(`Import odrzucony: ${errors.join(' ')}`, 'error');
             return false;
           }
-          dispatch({ type: 'IMPORT_STATE', payload: raw });
-          notify('Zaimportowano dane z pliku', 'success');
+          const { uiPrefs, ...data } = raw;
+          dispatch({ type: 'IMPORT_STATE', payload: data });
+          restoreUiPrefs(uiPrefs);
+          notify('Przywrócono dane z kopii zapasowej', 'success');
           return true;
         } catch (e) {
           notify(`Nie udało się odczytać pliku: ${e.message}`, 'error');

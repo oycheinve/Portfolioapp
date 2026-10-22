@@ -41,7 +41,7 @@ export default function BackupCard() {
   const r = preview?.report;
 
   return (
-    <Card title="Kopia zapasowa danych" subtitle="Cały stan aplikacji w jednym pliku JSON – chroni historię przed wyczyszczeniem pamięci przeglądarki" icon={Database}>
+    <Card title="Kopia zapasowa danych" subtitle="Cały portfel, transakcje i ustawienia w jednym pliku JSON – przywrócisz je po odświeżeniu, wyczyszczeniu przeglądarki lub na innym urządzeniu" icon={Database}>
       <div
         className={`mb-4 flex items-start gap-3 rounded-xl px-4 py-3 text-sm ${
           stale ? 'bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200' : 'bg-emerald-50 text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200'
@@ -64,7 +64,7 @@ export default function BackupCard() {
         >
           <Download size={24} className="shrink-0" />
           <span>
-            <span className="block font-semibold">Eksportuj pełny stan do JSON</span>
+            <span className="block font-semibold">Pobierz kopię zapasową (JSON)</span>
             <span className="block text-xs opacity-90">majatek-backup-RRRR-MM-DD_GG-MM.json</span>
           </span>
         </button>
@@ -75,8 +75,8 @@ export default function BackupCard() {
         >
           <FileUp size={24} className="shrink-0" />
           <span>
-            <span className="block font-semibold">Importuj stan z pliku JSON</span>
-            <span className="block text-xs text-stone-500 dark:text-stone-400">z podglądem i walidacją przed zastąpieniem danych</span>
+            <span className="block font-semibold">Wczytaj kopię zapasową</span>
+            <span className="block text-xs text-stone-500 dark:text-stone-400">wybierz plik .json – podgląd i sprawdzenie przed przywróceniem</span>
           </span>
         </button>
         <input
@@ -116,12 +116,12 @@ export default function BackupCard() {
       <Modal
         open={!!preview}
         onClose={() => setPreview(null)}
-        title={`Import: ${preview?.name || ''}`}
+        title={`Wczytaj kopię zapasową: ${preview?.name || ''}`}
         footer={
           <>
             <Button onClick={() => setPreview(null)}>Anuluj</Button>
             <Button variant="primary" icon={FileUp} disabled={!r?.ok} onClick={doImport}>
-              Zastąp obecne dane
+              Przywróć dane z kopii
             </Button>
           </>
         }

@@ -183,7 +183,12 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 ## Kalkulator IKZE
 
 - Symulacje → „Kalkulator IKZE”: forma opodatkowania (skala 12%/32% z progiem 120 tys. zł liczonym z dochodu i jego wzrostu, liniowy 19%, ryczałt – odliczenie od przychodu wg stawki), działalność gospodarcza (limit JDG), wpłata pełnego limitu lub własnej kwoty, wzrost limitu r/r, stopa zwrotu, horyzont.
-- Wynik: zwrot podatku w bieżącym roku i suma zwrotów, suma wpłat, wartość IKZE i zysk, IKZE netto po 10% podatku przy wypłacie, przewaga nad zwykłym kontem (Belka 19%), opcjonalna reinwestycja zwrotów; wykres kapitału w czasie i tabela rok po roku.
+- Reinwestycja zwrotu podatku: zwrot za rok N wpływa po rozliczeniu PIT i trafia do IKZE dopiero w roku N+1 (pierwszy rok bez reinwestycji). Jeśli razem z wpłatą własną mieści się w limicie roku – cały idzie na IKZE (i daje kolejny zwrot); nadwyżka ponad limit trafia na nieoprocentowane konto gotówkowe. Bez reinwestycji cały zwrot zostaje na koncie gotówkowym.
+- Wynik: zwrot podatku w bieżącym roku, wpłaty własne, zwroty (w IKZE / na gotówce), wartość IKZE i zysk, IKZE netto po 10% podatku przy wypłacie, przewaga nad zwykłym kontem (te same wpłaty własne, Belka 19%); wykres kapitału, gotówki i porównania w czasie oraz tabela rok po roku (limit, wpłata własna, zwrot reinwestowany, nadwyżka na gotówkę, zwrot za rok, wartość IKZE, gotówka).
+
+## Kopia zapasowa (Ustawienia)
+
+- Na górze zakładki Ustawienia: „Pobierz kopię zapasową (JSON)” – cały stan (konta, transakcje, wpłaty, dywidendy, obligacje, cele, ustawienia) oraz ustawienia widoków i kalkulatorów w jednym pliku; „Wczytaj kopię zapasową” – podgląd i walidacja pliku, potem przywrócenie danych (np. po wyczyszczeniu przeglądarki lub na innym urządzeniu).
 
 ## Architektura danych (`src/state/schema.js`)
 
