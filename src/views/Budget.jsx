@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Copy, Eraser, Pencil, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
-import { DAILY_KEY, budgetTotals, dailyAllowance, defaultFoodRow, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Eraser, History, Pencil, Plus, RotateCcw, ShoppingBag, Trash2, X } from 'lucide-react';
+import { DAILY_KEY, LOG_LIMIT, budgetTotals, readBudgetLog, writeBudgetLog, dailyAllowance, defaultFoodRow, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 const monthName = (key) => {
@@ -46,6 +46,16 @@ export default function BudgetView() {
     writeBudget(data);
   }, [data]);
 
+  // Dziennik zakupów miesiąca (najnowsze na początku)
+  const [log, setLog] = useState(readBudgetLog);
+  const entries = log[month] || [];
+  useEffect(() => {
+    writeBudgetLog(log);
+  }, [log]);
+  const setEntries = (fn) => setLog((l) => ({ ...l, [month]: fn(l[month] || []) }));
+  // Skopiowany plan / wyzerowane wydane – po zapisie dziennik miesiąca nie odpowiada już tabeli
+  const [resetLog, setResetLog] = useState(false);
+
   const setRows = (next) => setData((d) => ({ ...d, [month]: next }));
   const update = (id, patch) => setDraft((d) => d.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const remove = (id) => setDraft((d) => d.filter((r) => r.id !== id));
@@ -55,25 +65,57 @@ export default function BudgetView() {
     setFresh(id);
     setDraft((d) => [...d, { id, name: '', planned: '', spent: '', type: 'Inne' }]);
   };
-  const copyPrev = () => setDraft((data[prevKey] || []).map((r) => ({ ...r, id: newRowId(), spent: '' })));
+  // Plan z poprzedniego miesiąca: kategorie i kwoty planowane, wydane = 0
+  const prevPlan = () => (data[prevKey] || []).map((r) => ({ ...r, id: newRowId(), spent: 0 }));
+  const copyPrev = () => {
+    setDraft(prevPlan());
+    setResetLog(true);
+  };
+  const zeroSpent = () => {
+    setDraft((d) => d.map((r) => ({ ...r, spent: 0 })));
+    setResetLog(true);
+  };
+  // Nowy (pusty) miesiąc – skopiowanie planu bez wchodzenia w edycję
+  const applyPrevPlan = () => {
+    setRows(prevPlan());
+    setEntries(() => []);
+  };
   const clear = () => setDraft([]);
   const startEdit = () => {
     setFresh(null);
+    setResetLog(false);
     setDraft(rows.map((r) => ({ ...r })));
+  };
+  const cancelEdit = () => {
+    setResetLog(false);
+    setDraft(null);
   };
   // Zapis: puste wiersze (bez nazwy i kwot) pomijane; szablon zapisywany tylko przy faktycznej zmianie
   const save = () => {
     const next = draft.filter((r) => String(r.name || '').trim() || toNum(r.planned) || toNum(r.spent));
     if (!isTemplate || JSON.stringify(next) !== JSON.stringify(rows)) setRows(next);
+    if (resetLog) setEntries(() => []);
+    setResetLog(false);
     setDraft(null);
   };
   // Szybki zakup: kwota dopisywana do „Kwoty Wydanej” wybranej kategorii
-  const addPurchase = (id, amount) => {
+  const addPurchase = (id, amount, note = '') => {
     const row = rows.find((r) => r.id === id);
     if (!row) return null;
     const spent = Math.round((toNum(row.spent) + amount) * 100) / 100;
     setRows(rows.map((r) => (r.id === id ? { ...r, spent } : r)));
+    const entry = { id: newRowId(), rowId: id, name: row.name, amount: Math.round(amount * 100) / 100, note: String(note || '').trim().slice(0, 80), at: new Date().toISOString() };
+    setEntries((list) => [entry, ...list].slice(0, LOG_LIMIT));
     return { name: row.name, left: toNum(row.planned) - spent };
+  };
+  // Cofnięcie wpisu: kwota odjęta z „Kwoty Wydanej” kategorii (nie poniżej zera), wpis usunięty z dziennika
+  const undoPurchase = (entryId) => {
+    const entry = entries.find((e) => e.id === entryId);
+    if (!entry) return;
+    if (rows.some((r) => r.id === entry.rowId)) {
+      setRows(rows.map((r) => (r.id === entry.rowId ? { ...r, spent: Math.max(0, Math.round((toNum(r.spent) - entry.amount) * 100) / 100) } : r)));
+    }
+    setEntries((list) => list.filter((e) => e.id !== entryId));
   };
 
   const navBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent dark:text-stone-400 dark:hover:bg-white/5';
@@ -87,7 +129,7 @@ export default function BudgetView() {
         </h2>
         <div className="flex shrink-0 items-center gap-1.5">
           {editing && (
-            <button type="button" onClick={() => setDraft(null)} className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5">
+            <button type="button" onClick={cancelEdit} className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5">
               <X size={14} /> Anuluj
             </button>
           )}
@@ -206,8 +248,13 @@ export default function BudgetView() {
             <Plus size={14} /> Dodaj kategorię
           </button>
           {prevKey && (
-            <button type="button" className={linkBtn} onClick={copyPrev} title="Kategorie i plan z poprzedniego miesiąca (wydane wyzerowane)">
-              <Copy size={14} /> Kopiuj plan ({monthName(prevKey)})
+            <button type="button" className={linkBtn} onClick={copyPrev} title={`Kategorie i kwoty planowane z: ${monthName(prevKey)} (wydane = 0,00 zł)`}>
+              <Copy size={14} /> Kopiuj plan z poprzedniego miesiąca
+            </button>
+          )}
+          {draft.some((r) => toNum(r.spent) !== 0) && (
+            <button type="button" className={linkBtn} onClick={zeroSpent} title="Kwota wydana = 0,00 zł we wszystkich kategoriach">
+              <RotateCcw size={14} /> Wyzeruj wydane
             </button>
           )}
           {draft.length > 0 && (
@@ -219,7 +266,16 @@ export default function BudgetView() {
         </div>
       ) : (
         <>
+          {isTemplate && prevKey && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2 text-xs text-[#1f3864] dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+              <span className="min-w-0 flex-1">Nowy miesiąc bez planu – przenieść kategorie i kwoty planowane z: {monthName(prevKey)}?</span>
+              <button type="button" onClick={applyPrevPlan} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#1f3864] px-3 font-semibold text-white hover:bg-[#2a4a80] dark:bg-blue-500 dark:text-neutral-950 dark:hover:bg-blue-400">
+                <Copy size={14} /> Kopiuj plan z poprzedniego miesiąca
+              </button>
+            </div>
+          )}
           <PurchasePanel rows={rows} onAdd={addPurchase} />
+          <RecentEntries entries={entries} rows={rows} onUndo={undoPurchase} />
           <DailyTile rows={rows} month={month} />
           <p className="mt-2 text-right text-[11px] text-stone-400">
             {isTemplate ? 'Przykładowe kategorie – zmień je w trybie „Edytuj”' : 'Moduł demo · zapis w tej przeglądarce i kopii zapasowej'}
@@ -255,6 +311,7 @@ function PurchasePanel({ rows, onAdd }) {
   const options = rows.filter((r) => String(r.name || '').trim());
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
   const [msg, setMsg] = useState(null);
   const selected = options.some((r) => r.id === categoryId) ? categoryId : options[0]?.id || '';
   const value = toNum(amount);
@@ -272,9 +329,10 @@ function PurchasePanel({ rows, onAdd }) {
       setMsg({ error: true, text: !selected ? 'Najpierw dodaj kategorię w tabeli.' : 'Wpisz kwotę zakupu większą od zera.' });
       return;
     }
-    const res = onAdd(selected, value);
+    const res = onAdd(selected, value, note);
     if (!res) return;
     setAmount('');
+    setNote('');
     setMsg({ error: false, text: `Dodano ${zl(value)} do „${res.name}” · pozostało ${zl(res.left)}` });
   };
 
@@ -313,10 +371,18 @@ function PurchasePanel({ rows, onAdd }) {
         <button
           type="submit"
           disabled={options.length === 0}
-          className="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#1f3864] px-4 text-sm font-semibold text-white hover:bg-[#2a4a80] disabled:opacity-50 sm:col-span-1 dark:bg-blue-500 dark:text-neutral-950 dark:hover:bg-blue-400"
+          className="order-2 col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-[#1f3864] px-4 text-sm font-semibold text-white hover:bg-[#2a4a80] disabled:opacity-50 sm:order-1 sm:col-span-1 dark:bg-blue-500 dark:text-neutral-950 dark:hover:bg-blue-400"
         >
           <Plus size={16} /> Dodaj do wydanych
         </button>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={80}
+          placeholder="Notatka (opcjonalnie), np. Biedronka"
+          aria-label="Notatka do zakupu"
+          className="order-1 col-span-2 h-9 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-sm outline-none focus:border-[#1f3864] focus:ring-1 focus:ring-[#1f3864]/30 sm:order-2 sm:col-span-3 dark:border-white/10 dark:bg-neutral-800"
+        />
       </div>
       {msg && (
         <p role="status" className={`mt-2 flex items-center gap-1.5 text-xs ${msg.error ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
@@ -324,6 +390,71 @@ function PurchasePanel({ rows, onAdd }) {
         </p>
       )}
     </form>
+  );
+}
+
+const RECENT_KEY = 'wealth-app-budget-recent-open';
+const atLabel = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+// Ostatnie wpisy z „Dodaj zakup” (10 najnowszych w miesiącu), domyślnie zwinięte; × cofa wpis
+function RecentEntries({ entries, rows, onUndo }) {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(RECENT_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setOpen((o) => {
+      try {
+        localStorage.setItem(RECENT_KEY, o ? '0' : '1');
+      } catch {
+        // brak localStorage
+      }
+      return !o;
+    });
+  };
+  const names = Object.fromEntries(rows.map((r) => [r.id, r.name]));
+  const shown = entries.slice(0, 10);
+  return (
+    <div className="mt-2 rounded-lg border border-stone-200 dark:border-white/10">
+      <button type="button" onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-semibold tracking-wide text-[#1f3864] uppercase dark:text-blue-300">
+        <History size={14} /> Ostatnie wpisy
+        <span className="font-normal normal-case text-stone-500 dark:text-stone-400">({entries.length})</span>
+        <ChevronDown size={16} className={`ml-auto text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ul className="border-t border-stone-200 dark:border-white/10">
+          {shown.length === 0 && <li className="px-3 py-2 text-xs text-stone-500">Brak wpisów w tym miesiącu – dodane zakupy pojawią się tutaj.</li>}
+          {shown.map((e) => (
+            <li key={e.id} className="flex items-center gap-2 border-b border-stone-100 px-3 py-1.5 text-xs last:border-0 dark:border-white/5">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-stone-700 dark:text-stone-200">
+                  {names[e.rowId] || e.name}
+                  {e.note && <span className="font-normal text-stone-500 dark:text-stone-400"> · {e.note}</span>}
+                </span>
+                <span className="block text-[11px] text-stone-400">{atLabel(e.at)}</span>
+              </span>
+              <span className="shrink-0 font-semibold tabular">{zl(e.amount)}</span>
+              <button
+                type="button"
+                onClick={() => onUndo(e.id)}
+                aria-label={`Cofnij wpis ${zl(e.amount)} – ${names[e.rowId] || e.name}`}
+                title="Cofnij wpis (odejmij od wydanych)"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+              >
+                <X size={14} />
+              </button>
+            </li>
+          ))}
+          {entries.length > shown.length && <li className="px-3 py-1.5 text-[11px] text-stone-400">+ {entries.length - shown.length} starszych wpisów</li>}
+        </ul>
+      )}
+    </div>
   );
 }
 

@@ -58,6 +58,30 @@ export function writeBudget(data) {
   }
 }
 
+// Dziennik szybkich zakupów (`wealth-app-budget-log-v1`: { 'RRRR-MM': [{ id, rowId, name, amount, note, at }] }) –
+// osobny klucz, by nie zmieniać kształtu danych budżetu; prefiks „wealth-app-” → kopia zapasowa i chmura
+export const BUDGET_LOG_KEY = 'wealth-app-budget-log-v1';
+export const LOG_LIMIT = 200;
+export function readBudgetLog() {
+  try {
+    const v = JSON.parse(localStorage.getItem(BUDGET_LOG_KEY) || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+export function writeBudgetLog(log) {
+  try {
+    const json = JSON.stringify(log);
+    if ((localStorage.getItem(BUDGET_LOG_KEY) || '{}') === json) return true;
+    localStorage.setItem(BUDGET_LOG_KEY, json);
+    window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: BUDGET_LOG_KEY } }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const demoRows = () => DEMO_ROWS.map((r) => ({ id: newRowId(), ...r }));
 
 const num = (v) => {
