@@ -33,26 +33,28 @@ function parseYahooChart(json) {
   const meta = result.meta || {};
   const rawCloses = result.indicators?.quote?.[0]?.close || [];
   const ts = result.timestamp || [];
+  // Pary (data, zamknięcie) bez pustych świec (close === null)
+  const candles = ts.length === rawCloses.length ? ts.map((t, i) => [t, rawCloses[i]]).filter(([, c]) => Number.isFinite(c)) : [];
   const closes = rawCloses.filter((c) => Number.isFinite(c));
-  const price = Number.isFinite(meta.regularMarketPrice) ? meta.regularMarketPrice : closes[closes.length - 1];
-  // Zamknięcie poprzedniej sesji = ostatnia świeca dzienna z dnia wcześniejszego niż dzień ostatniej transakcji
-  // (czas giełdy). Rano przed pierwszą transakcją i w trakcie sesji (świeca dnia jeszcze nieuaktualniona) daje to
-  // poprawną zmianę dzienną; wcześniejsze porównywanie ceny ze świecą bywało mylone o jedną sesję.
+  const num = (v) => (Number.isFinite(v) ? v : null);
+  // Cena bieżąca: regularMarketPrice (albo fulldayPrice), w ostateczności ostatnie niepuste zamknięcie
+  const price = num(meta.regularMarketPrice) ?? num(meta.fulldayPrice) ?? closes[closes.length - 1];
+  // Zamknięcie poprzedniej sesji – kolejno:
+  // 1) gotowa zmiana z meta (regularMarketChange / fulldayChange, albo procent) → prevClose = cena − zmiana;
+  // 2) świece: ostatnia niepusta świeca z dnia wcześniejszego niż dzień ostatniej transakcji (czas giełdy);
+  // 3) meta.previousClose. Nigdy meta.chartPreviousClose – przy range=5d to kurs sprzed całego zakresu, nie z wczoraj.
   let prevClose = null;
-  const gmt = Number(meta.gmtoffset) || 0;
-  if (ts.length === rawCloses.length && ts.length) {
-    const marketDay = dayOf(Number.isFinite(meta.regularMarketTime) ? meta.regularMarketTime : ts[ts.length - 1], gmt);
-    for (let i = ts.length - 1; i >= 0; i -= 1) {
-      if (Number.isFinite(rawCloses[i]) && dayOf(ts[i], gmt) < marketDay) {
-        prevClose = rawCloses[i];
-        break;
-      }
-    }
-  } else if (closes.length >= 2) {
-    const last = closes[closes.length - 1];
-    prevClose = Math.abs(last - price) / price < 1e-6 ? closes[closes.length - 2] : last;
+  const change = num(meta.regularMarketChange) ?? num(meta.fulldayChange);
+  const changePct = num(meta.regularMarketChangePercent) ?? num(meta.fulldayChangePercent);
+  if (Number.isFinite(price) && change !== null) prevClose = price - change;
+  else if (Number.isFinite(price) && changePct !== null && changePct > -100) prevClose = price / (1 + changePct / 100);
+  if (!(prevClose > 0) && candles.length) {
+    const gmt = Number(meta.gmtoffset) || 0;
+    const marketDay = dayOf(num(meta.regularMarketTime) ?? candles[candles.length - 1][0], gmt);
+    const prev = candles.filter(([t]) => dayOf(t, gmt) < marketDay).pop();
+    if (prev) prevClose = prev[1];
   }
-  if (!Number.isFinite(prevClose)) prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
+  if (!(prevClose > 0)) prevClose = num(meta.previousClose) ?? price;
   if (!Number.isFinite(price)) throw new Error('Nieprawidłowa cena');
   let currency = meta.currency || null;
   let p = price;
@@ -226,12 +228,17 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
   return { quotes, fx, status, lastRefresh: now, log: log.slice(0, 30), routes: [...routesUsed], live: liveCount, fallback: fallbackCount, failures: failures.slice(0, 5) };
 }
 
-// Etap 3: historia notowań (domyślnie tygodniowa, 5 lat) – kurs skorygowany o dywidendy, jeśli dostępny
-function parseYahooHistory(json) {
+// Etap 3: historia notowań (tygodniowa 5 lat + dzienna 2 lata). adjusted – kurs skorygowany o dywidendy (benchmarki);
+// instrumenty portfela – zwykłe zamknięcie (dywidendy są w wycenie jako gotówka, korekta liczyłaby je podwójnie).
+// Daty w czasie giełdy; puste świece (null) pomijane. Świeca tygodniowa datowana na ostatni dzień tygodnia
+// (Yahoo podaje poniedziałek z zamknięciem piątku – bez tego wycena na środek tygodnia brała kurs z przyszłości).
+function parseYahooHistory(json, { adjusted = true, interval = '1wk' } = {}) {
   const result = json?.chart?.result?.[0];
   if (!result) throw new Error('Brak danych historycznych');
   const ts = result.timestamp || [];
-  const adj = result.indicators?.adjclose?.[0]?.adjclose;
+  const adj = adjusted ? result.indicators?.adjclose?.[0]?.adjclose : null;
+  const gmt = Number(result.meta?.gmtoffset) || 0;
+  const todayIso = new Date().toISOString().slice(0, 10);
   const close = result.indicators?.quote?.[0]?.close || [];
   let currency = result.meta?.currency || null;
   const divisor = currency === 'GBp' || currency === 'GBX' ? 100 : 1;
@@ -240,8 +247,9 @@ function parseYahooHistory(json) {
   for (let i = 0; i < ts.length; i += 1) {
     const v = Number.isFinite(adj?.[i]) ? adj[i] : close[i];
     if (!Number.isFinite(v)) continue;
-    const d = new Date(ts[i] * 1000);
-    const iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    const d = new Date((ts[i] + gmt + (interval === '1wk' ? 4 * 86400 : 0)) * 1000);
+    let iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    if (iso > todayIso) iso = todayIso;
     if (points.length && points[points.length - 1][0] === iso) points[points.length - 1][1] = v / divisor;
     else points.push([iso, v / divisor]);
   }
@@ -249,10 +257,11 @@ function parseYahooHistory(json) {
   return { points, currency };
 }
 
-export async function fetchYahooHistory(symbol, corsProxy, { range = '5y', interval = '1wk' } = {}) {
+export async function fetchYahooHistory(symbol, corsProxy, { range = '5y', interval = '1wk', adjusted = true } = {}) {
   const path = `/v8/finance/chart/${encodeURIComponent(normalizeYahooSymbol(symbol))}?range=${range}&interval=${interval}&events=div`;
-  const { json, via } = await fetchYahooData(path, { corsProxy, validate: parseYahooHistory });
-  return { ...parseYahooHistory(json), source: `Yahoo (${via})` };
+  const opts = { adjusted, interval };
+  const { json, via } = await fetchYahooData(path, { corsProxy, validate: (j) => parseYahooHistory(j, opts) });
+  return { ...parseYahooHistory(json, opts), source: `Yahoo (${via})` };
 }
 
 // Historia dywidend z Yahoo Finance (dzień dywidendy = data zdarzenia, kwota na akcję w walucie notowań)

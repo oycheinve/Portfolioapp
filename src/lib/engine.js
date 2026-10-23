@@ -553,11 +553,13 @@ function modifiedDietz(startValue, endValue, flows, startDate, endDate) {
 
 // TWR łańcuchowy na podstawie migawek (segmenty liczone metodą Modified Dietz)
 // Wartość kont na dzień: świeża migawka (≤ 3 dni), a bez niej wycena pozycji cenami historycznymi (priceAt)
-function makeValueAt(state, accountIds, priceAt) {
+// preferHistory – wycena z kursów zamknięcia danego dnia (historia Yahoo) przed zapisaną migawką, która mogła
+// powstać w trakcie sesji lub z nieaktualnych kursów
+function makeValueAt(state, accountIds, priceAt, preferHistory = false) {
   const cache = new Map();
   return (date) => {
     if (cache.has(date)) return cache.get(date);
-    const snap = snapshotValueAt(state, accountIds, date, 3);
+    const snap = preferHistory && priceAt ? null : snapshotValueAt(state, accountIds, date, 3);
     let value = null;
     if (snap) value = snap.value;
     else if (priceAt) value = valuePortfolio(state, { asOf: date, accountIds, priceLookup: (inst) => priceAt(inst, date) }).totals.total;
@@ -579,8 +581,8 @@ function monthEnds(from, to) {
 
 // TWR: łańcuch miesięcznych stóp (Modified Dietz w obrębie miesiąca) na wycenach z migawek lub z cen historycznych.
 // Okresy bez kapitału (wartość ≈ 0) są pomijane, a pojedyncze skrajne stopy przy znikomym kapitale nie zawyżają wyniku.
-export function computeTWR(state, accountIds, fromDate, toDate, endValue, priceAt) {
-  const valueAt = makeValueAt(state, accountIds, priceAt);
+export function computeTWR(state, accountIds, fromDate, toDate, endValue, priceAt, preferHistory = false) {
+  const valueAt = makeValueAt(state, accountIds, priceAt, preferHistory);
   let start;
   if (fromDate) start = fromDate;
   else {
@@ -589,7 +591,20 @@ export function computeTWR(state, accountIds, fromDate, toDate, endValue, priceA
     start = isoDay(new Date(new Date(firstFlow).getTime() - DAY));
   }
   const series = [{ date: start, value: fromDate ? valueAt(start) ?? 0 : 0 }];
-  for (const d of monthEnds(start, toDate)) {
+  // preferHistory: dodatkowe punkty w dniu przed i w dniu każdej wpłaty/wypłaty – prawdziwy TWR (wpłata nie zniekształca
+  // stopy okresu), gdy wycena na dowolny dzień jest dostępna z historii kursów
+  const breaks = new Set(monthEnds(start, toDate));
+  if (preferHistory && priceAt) {
+    const fl = flowsList(state, accountIds, start, toDate);
+    if (fl.length <= 120) {
+      for (const f of fl) {
+        const prev = isoDay(new Date(new Date(f.date).getTime() - DAY));
+        if (prev > start && prev < toDate) breaks.add(prev);
+        if (f.date > start && f.date < toDate) breaks.add(f.date);
+      }
+    }
+  }
+  for (const d of [...breaks].sort()) {
     const v = valueAt(d);
     if (v !== null) series.push({ date: d, value: v });
   }
@@ -612,7 +627,7 @@ export function computeTWR(state, accountIds, fromDate, toDate, endValue, priceA
 // Statystyki „Prawdziwy Zysk” dla okresu i filtra kont
 // priceAt(instrument, data) – ceny historyczne (createPriceResolver(state).instrumentPLN); bez nich wycena tylko z migawek
 // accountIdsOverride – dowolny zestaw kont (np. wybór w raporcie na X) zamiast filtra
-export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', today = new Date(), priceAt = null, accountIds: accountIdsOverride = null } = {}) {
+export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', today = new Date(), priceAt = null, accountIds: accountIdsOverride = null, preferHistory = false } = {}) {
   const accountIds = accountIdsOverride || resolveAccountIds(state, filter);
   const todayIso = isoDay(today);
   const priceLookup = livePriceLookup(state);
@@ -623,7 +638,7 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   let startValue = 0;
   let startValueSource = 'none';
   if (startDate) {
-    const snap = snapshotValueAt(state, accountIds, startDate, 3);
+    const snap = preferHistory && priceAt ? null : snapshotValueAt(state, accountIds, startDate, 3);
     if (snap) {
       startValue = snap.value;
       startValueSource = 'snapshot';
@@ -672,8 +687,8 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   // Dywidendy i odsetki są już w wartości (gotówka na koncie), więc nie są doliczane drugi raz.
   const capitalEngaged = startValue + depositsInPeriod;
   const simpleReturn = capitalEngaged > 0 ? totalReturn / capitalEngaged : 0;
-  const twr = computeTWR(state, accountIds, startDate, todayIso, endValue, priceAt);
-  const full = startDate ? computeTWR(state, accountIds, null, todayIso, endValue, priceAt) : twr;
+  const twr = computeTWR(state, accountIds, startDate, todayIso, endValue, priceAt, preferHistory);
+  const full = startDate ? computeTWR(state, accountIds, null, todayIso, endValue, priceAt, preferHistory) : twr;
   const years = full.days / 365.25;
   const cagr = years >= 1 ? Math.pow(1 + full.twr, 1 / years) - 1 : full.twr;
 

@@ -53,7 +53,9 @@ export default function QuickStatsPanel() {
   const [scope, setScope] = useState(() => readPref(SCOPE_KEY, 'INVEST', SCOPES));
   const resolver = useMemo(() => createPriceResolver(state), [state]);
   const data = useMemo(() => {
-    const opts = { filter: scope, priceAt: resolver.instrumentPLN };
+    // 1W / 1M / YTD: wycena na start okresu z kursów zamknięcia (7 dni temu, miesiąc temu, ostatnia sesja roku), wpłaty
+    // i wypłaty w okresie nie są zyskiem (zysk = wartość − start − przepływy; stopa TWR)
+    const opts = { filter: scope, priceAt: resolver.instrumentPLN, preferHistory: true };
     const all = computePeriodStats(state, { ...opts, period: 'ALL' });
     const week = computePeriodStats(state, { ...opts, period: '1W' });
     const month = computePeriodStats(state, { ...opts, period: '1M' });
@@ -61,19 +63,21 @@ export default function QuickStatsPanel() {
     const ids = new Set(all.accountIds);
     // Zmiana dzienna z notowań (kurs bieżący vs zamknięcie poprzedniej sesji) dla akcji i ETF w zakresie
     let dayChange = 0;
+    let prevPositions = 0; // wczorajsza wartość tych samych pozycji (mianownik zmiany dziennej)
     let up = 0;
     let down = 0;
     let unrealized = 0;
     for (const p of all.valuation.positions) {
       if (!ids.has(p.accountId)) continue;
-      dayChange += positionDayChange(state, p);
+      const pd = positionDayChange(state, p);
+      dayChange += pd;
+      prevPositions += p.value - pd;
       const gain = p.value - p.costPLN;
       unrealized += gain;
       if (gain > 0.005) up += 1;
       else if (gain < -0.005) down += 1;
     }
-    const prevValue = all.endValue - dayChange;
-    return { all, week, month, ytd, dayChange, dayPct: prevValue > 0 ? dayChange / prevValue : 0, unrealized, up, down };
+    return { all, week, month, ytd, dayChange, dayPct: prevPositions > 0 ? dayChange / prevPositions : 0, unrealized, up, down };
   }, [state, scope, resolver]);
 
   const { all, week, month, ytd } = data;

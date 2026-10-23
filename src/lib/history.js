@@ -58,11 +58,22 @@ export async function fetchAllHistory(state) {
   const series = {};
   const log = [];
   const now = new Date().toISOString();
-  // Najwyżej 3 zapytania naraz – publiczne proxy CORS ograniczają liczbę równoległych połączeń
+  const instrumentSymbols = new Set(state.instruments.map((i) => i.yahooSymbol).filter(Boolean));
+  // Najwyżej 3 zapytania naraz – publiczne proxy CORS ograniczają liczbę równoległych połączeń.
+  // Tygodniowa 5 lat + dzienna 2 lata (dokładne zamknięcia dla 1W / 1M / YTD); dzienna zastępuje tygodniową w swoim zakresie.
   await mapLimited(symbols, 3, async (sym) => {
+    const adjusted = !instrumentSymbols.has(sym);
     try {
-      const h = await fetchYahooHistory(sym, state.settings.corsProxy);
-      series[sym] = { ...h, updatedAt: now };
+      const h = await fetchYahooHistory(sym, state.settings.corsProxy, { adjusted });
+      let points = h.points;
+      try {
+        const daily = await fetchYahooHistory(sym, state.settings.corsProxy, { range: '2y', interval: '1d', adjusted });
+        const from = daily.points[0][0];
+        points = [...h.points.filter(([d]) => d < from), ...daily.points];
+      } catch {
+        // bez historii dziennej – zostaje tygodniowa
+      }
+      series[sym] = { ...h, points, updatedAt: now };
     } catch (e) {
       log.push({ level: 'warn', message: `${sym}: ${e.message}` });
     }
