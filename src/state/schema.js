@@ -188,6 +188,9 @@ export function migrateState(raw) {
     fx: { ...base.prices.fx, ...(raw.prices?.fx || {}), rates: { ...base.prices.fx.rates, ...(raw.prices?.fx?.rates || {}) } },
     quotes: { ...(raw.prices?.quotes || {}) },
   };
+  // Stan „loading” zapisany przy zamknięciu aplikacji w trakcie pobierania (lub z chmury) blokowałby kolejne odświeżenia
+  if (out.prices.status === 'loading') out.prices.status = 'offline';
+  if (out.priceHistory.status === 'loading') out.priceHistory.status = 'offline';
   return out;
 }
 

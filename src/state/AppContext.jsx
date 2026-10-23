@@ -11,7 +11,7 @@ import { computeLimitsForYear } from '../lib/tax.js';
 import { uid } from '../lib/format.js';
 import { reconcileDividends } from '../lib/dividends.js';
 import { runDividendSync } from '../lib/dividendSync.js';
-import { isWarsawMarketOpen, mayAutoFetch } from '../lib/marketHours.js';
+import { MARKET_OPEN_MIN, isWarsawMarketOpen, mayAutoFetch, warsawClock } from '../lib/marketHours.js';
 import { useCloudSync } from './useCloudSync.js';
 
 const AppContext = createContext(null);
@@ -142,11 +142,15 @@ export function AppProvider({ children, cloud = null }) {
   const notify = useCallback((message, type = 'info') => setToast({ message, type, id: Date.now() }), []);
 
   // silent – odświeżenie automatyczne (przy wejściu do aplikacji); komunikat o źródle kursów pokazywany zawsze
+  // Trwające pobieranie trzymane w pamięci (nie w zapisywanym stanie) – zamknięcie aplikacji w trakcie nie blokuje
+  // kolejnych odświeżeń; ponowne kliknięcie w trakcie pobierania nie uruchamia drugiego
+  const pricesInflight = useRef(false);
   const refreshPrices = useCallback(
     async (modeOverride, { silent = false } = {}) => {
+      if (pricesInflight.current) return;
+      pricesInflight.current = true;
       const s = stateRef.current;
       setRefreshing(true);
-      dispatch({ type: 'SET_PRICES', payload: { status: 'loading' } });
       try {
         const result = await refreshAllPrices({
           instruments: s.instruments,
@@ -164,7 +168,9 @@ export function AppProvider({ children, cloud = null }) {
         else if (!silent) notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');
       } catch {
         dispatch({ type: 'SET_PRICES', payload: { status: 'offline' } });
+        if (!silent) notify('Nie udało się odświeżyć notowań – spróbuj ponownie za chwilę', 'warn');
       } finally {
+        pricesInflight.current = false;
         setRefreshing(false);
       }
     },
@@ -206,15 +212,20 @@ export function AppProvider({ children, cloud = null }) {
       if (s.settings.priceMode === 'mock' || s.settings.refreshOnEnter === false || !s.instruments.length) return;
       if (!isWarsawMarketOpen()) return;
       const last = s.prices.lastRefresh ? new Date(s.prices.lastRefresh).getTime() : 0;
-      if (Date.now() - last < MIN_GAP_MS || s.prices.status === 'loading') return;
+      if (Date.now() - last < MIN_GAP_MS || pricesInflight.current) return;
       refreshPrices(undefined, { silent: true });
     };
     const onVisibility = () => document.visibilityState === 'visible' && onEnter();
     const start = setTimeout(onEnter, 1500);
+    // Aplikacja otwarta przed 9:00 – jedno odświeżenie tuż po otwarciu sesji (tylko gdy karta jest widoczna)
+    const { weekday, minutes } = warsawClock();
+    const openAt = MARKET_OPEN_MIN + 1;
+    const atOpen = weekday !== 'Sat' && weekday !== 'Sun' && minutes < openAt ? setTimeout(onEnter, (openAt - minutes) * 60000) : null;
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('focus', onEnter);
     return () => {
       clearTimeout(start);
+      clearTimeout(atOpen);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', onEnter);
     };

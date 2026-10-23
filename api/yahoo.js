@@ -14,7 +14,8 @@ export async function proxyYahoo(path) {
   let last = { status: 502, body: JSON.stringify({ error: 'Brak odpowiedzi Yahoo' }) };
   for (const host of HOSTS) {
     try {
-      const res = await fetch(`${host}${path}`, { headers: HEADERS, signal: AbortSignal.timeout(8000) });
+      // Krótki limit na domenę – obie domeny mieszczą się w limicie czasu przeglądarki dla tej trasy
+      const res = await fetch(`${host}${path}`, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(5000) });
       const body = await res.text();
       if (res.ok) return { status: 200, body };
       last = { status: res.status, body };
@@ -29,7 +30,8 @@ export default async function handler(req, res) {
   const path = typeof req.query?.path === 'string' ? req.query.path : new URL(req.url, 'http://localhost').searchParams.get('path') || '';
   const result = await proxyYahoo(path);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  if (result.status === 200) res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=600');
+  // Notowania muszą być świeże – bez długiego serwowania starej odpowiedzi z pamięci CDN
+  res.setHeader('Cache-Control', result.status === 200 ? 's-maxage=15, stale-while-revalidate=15' : 'no-store');
   res.statusCode = result.status;
   res.end(result.body);
 }

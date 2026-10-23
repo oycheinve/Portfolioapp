@@ -5,6 +5,8 @@
 // a gdy zawiodą wszystkie – próbowane są ponownie (także druga domena Yahoo: query2). Wynik diagnostyki w konsoli.
 
 const TIMEOUT_MS = 8000;
+// Serwer aplikacji sam próbuje dwóch domen Yahoo (po 5 s) – dłuższy limit, by nie odrzucać go przy zimnym starcie
+const APP_TIMEOUT_MS = 12000;
 const COOLDOWN_MS = 90 * 1000;
 const PREFERRED_KEY = 'wealth-app-yahoo-route';
 const YAHOO_HOSTS = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
@@ -20,6 +22,11 @@ export const PUBLIC_PROXIES = [
 ];
 
 const failedAt = {};
+
+// Ręczne / nowe odświeżenie notowań: trasy, które niedawno zawiodły, dostają kolejną szansę od razu
+export function resetYahooCooldowns() {
+  for (const k of Object.keys(failedAt)) delete failedAt[k];
+}
 
 function readPreferred() {
   try {
@@ -62,11 +69,12 @@ function routes(corsProxy, ignoreCooldown = false) {
     .sort((a, b) => (a.id === preferred ? -1 : b.id === preferred ? 1 : 0));
 }
 
-async function fetchJsonWithTimeout(url) {
+async function fetchJsonWithTimeout(url, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    // no-store: bez odpowiedzi z pamięci podręcznej przeglądarki (stare notowania)
+    const res = await fetch(url, { signal: controller.signal, cache: 'no-store', headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     // Hosting SPA może zwrócić index.html zamiast JSON – traktujemy to jako błąd trasy
@@ -105,7 +113,7 @@ export async function fetchYahooData(path, { corsProxy, validate } = {}) {
   for (const route of list) {
     for (const host of route.singleHost ? [YAHOO_HOSTS[0]] : YAHOO_HOSTS) {
       try {
-        const raw = await fetchJsonWithTimeout(route.wrap(`${host}${path}`, path));
+        const raw = await fetchJsonWithTimeout(route.wrap(`${host}${path}`, path), route.id === 'app' ? APP_TIMEOUT_MS : TIMEOUT_MS);
         const json = route.unwrap ? route.unwrap(raw) : raw;
         if (validate) validate(json);
         savePreferred(route.id);

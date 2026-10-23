@@ -1,7 +1,7 @@
 // Moduł notowań: Yahoo Finance (GPW .WA, ETF-y z giełd zagranicznych) + kursy walut NBP.
 // Trasy do Yahoo (serwer aplikacji → proxy z ustawień → publiczne proxy CORS) w yahooFetch.js.
 // Gdy Yahoo jest niedostępne: ostatnie znane notowanie albo cena z transakcji (bez losowych danych); źródło kursów w toaście i konsoli.
-import { fetchYahooData, mapLimited, normalizeYahooSymbol, yahooSymbolFor } from './yahooFetch.js';
+import { fetchYahooData, mapLimited, normalizeYahooSymbol, resetYahooCooldowns, yahooSymbolFor } from './yahooFetch.js';
 
 const TIMEOUT_MS = 7000;
 const FX_CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF'];
@@ -19,18 +19,36 @@ async function fetchJson(url) {
   }
 }
 
+// Parametr `_` (znacznik czasu) omija pamięć podręczną przeglądarki, CDN i publicznych proxy – zawsze świeże notowanie
 function yahooChartPath(symbol) {
-  return `/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
+  return `/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d&_=${Date.now()}`;
 }
+
+const warsawDay = (d) => new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+const dayOf = (sec, gmtoffset) => Math.floor((sec + gmtoffset) / 86400);
 
 function parseYahooChart(json) {
   const result = json?.chart?.result?.[0];
   if (!result) throw new Error('Brak danych w odpowiedzi Yahoo');
   const meta = result.meta || {};
-  const closes = (result.indicators?.quote?.[0]?.close || []).filter((c) => Number.isFinite(c));
+  const rawCloses = result.indicators?.quote?.[0]?.close || [];
+  const ts = result.timestamp || [];
+  const closes = rawCloses.filter((c) => Number.isFinite(c));
   const price = Number.isFinite(meta.regularMarketPrice) ? meta.regularMarketPrice : closes[closes.length - 1];
+  // Zamknięcie poprzedniej sesji = ostatnia świeca dzienna z dnia wcześniejszego niż dzień ostatniej transakcji
+  // (czas giełdy). Rano przed pierwszą transakcją i w trakcie sesji (świeca dnia jeszcze nieuaktualniona) daje to
+  // poprawną zmianę dzienną; wcześniejsze porównywanie ceny ze świecą bywało mylone o jedną sesję.
   let prevClose = null;
-  if (closes.length >= 2) {
+  const gmt = Number(meta.gmtoffset) || 0;
+  if (ts.length === rawCloses.length && ts.length) {
+    const marketDay = dayOf(Number.isFinite(meta.regularMarketTime) ? meta.regularMarketTime : ts[ts.length - 1], gmt);
+    for (let i = ts.length - 1; i >= 0; i -= 1) {
+      if (Number.isFinite(rawCloses[i]) && dayOf(ts[i], gmt) < marketDay) {
+        prevClose = rawCloses[i];
+        break;
+      }
+    }
+  } else if (closes.length >= 2) {
     const last = closes[closes.length - 1];
     prevClose = Math.abs(last - price) / price < 1e-6 ? closes[closes.length - 2] : last;
   }
@@ -123,6 +141,7 @@ function reconstructedPrice(instrument, trades) {
 export async function refreshAllPrices({ instruments, previous, corsProxy, mode = 'auto', trades = [] }) {
   const log = [];
   const now = new Date().toISOString();
+  if (mode !== 'mock') resetYahooCooldowns();
   const quotes = {};
   let liveCount = 0;
   let fallbackCount = 0;
@@ -171,8 +190,9 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
     }
     fallbackCount += 1;
     if (isRealQuote(prev)) {
-      // Ostatnie znane notowanie – bez zmiany dziennej, z zachowaniem daty pobrania
-      quotes[inst.id] = { ...prev, prevClose: prev.price, stale: true, source: `${prev.source.replace(/ \(ostatnie znane\)$/, '')} (ostatnie znane)` };
+      // Ostatnie znane notowanie z zachowaniem daty pobrania; zmiana dzienna tylko, gdy pobrano je dziś
+      const sameDay = !!prev.updatedAt && warsawDay(prev.updatedAt) === warsawDay(Date.now());
+      quotes[inst.id] = { ...prev, prevClose: sameDay && prev.prevClose > 0 ? prev.prevClose : prev.price, stale: true, source: `${prev.source.replace(/ \(ostatnie znane\)$/, '')} (ostatnie znane)` };
       return;
     }
     const price = reconstructedPrice(inst, trades);

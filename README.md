@@ -316,3 +316,10 @@ Silnik obliczeń: `src/lib/engine.js`, podatki: `src/lib/tax.js`, obligacje: `sr
 ## Notowania
 
 Kolejność źródeł: proxy Vite `/api/yahoo` → konfigurowalne proxy CORS → dane symulowane. Kursy walut: API NBP (tabela A) → Yahoo FX → symulacja.
+
+## Odświeżanie notowań – niezawodność
+
+- **Zmiana dzienna**: poprzednie zamknięcie to ostatnia świeca dzienna z dnia wcześniejszego niż ostatnia transakcja (czas giełdy, `gmtoffset` z Yahoo) – poprawnie rano przed pierwszą transakcją, w trakcie sesji (gdy świeca dnia jest jeszcze nieaktualna albo pusta) i po sesji.
+- **Bez starego cache'u**: każde zapytanie o notowanie ma znacznik czasu (`&_=`) i `cache: 'no-store'`; funkcja `/api/yahoo` krótko trzyma odpowiedź w CDN (15 s) i próbuje obu domen Yahoo po 5 s (limit trasy w przeglądarce 12 s, więc zimny start serwera nie odrzuca trasy).
+- **Bez martwego punktu**: każde odświeżenie zeruje „odpoczynek” tras, które wcześniej zawiodły; trwające pobieranie trzymane jest w pamięci (nie w zapisanym stanie), a zapisany status `loading` (zamknięcie aplikacji w trakcie, wersja z chmury) jest przy wczytaniu zamieniany – wcześniej blokował automatyczne odświeżanie na stałe. Ponowne kliknięcie w trakcie pobierania nie uruchamia drugiego.
+- **Po 9:00**: aplikacja otwarta przed sesją odświeża notowania raz tuż po jej otwarciu (gdy karta jest widoczna); poza tym jak dotąd – przy wejściu / powrocie do aplikacji w godzinach sesji. Notowanie awaryjne („ostatnie znane”) zachowuje zmianę dzienną, jeśli zostało pobrane tego samego dnia.
