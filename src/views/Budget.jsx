@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Eraser, History, Pencil, Plus, RotateCcw, ShoppingBag, Trash2, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Eraser, History, Pencil, Plus, RotateCcw, ShoppingBag, Split, Trash2, X } from 'lucide-react';
 import { DAILY_KEY, LOG_LIMIT, budgetTotals, readBudgetLog, writeBudgetLog, dailyAllowance, defaultFoodRow, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
@@ -99,14 +99,23 @@ export default function BudgetView() {
     setDraft(null);
   };
   // Szybki zakup: kwota dopisywana do „Kwoty Wydanej” wybranej kategorii
-  const addPurchase = (id, amount, note = '') => {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return null;
-    const spent = Math.round((toNum(row.spent) + amount) * 100) / 100;
-    setRows(rows.map((r) => (r.id === id ? { ...r, spent } : r)));
-    const entry = { id: newRowId(), rowId: id, name: row.name, amount: Math.round(amount * 100) / 100, note: String(note || '').trim().slice(0, 80), at: new Date().toISOString() };
-    setEntries((list) => [entry, ...list].slice(0, LOG_LIMIT));
-    return { name: row.name, left: toNum(row.planned) - spent };
+  // parts: [{ id, amount }] – jeden zakup lub paragon podzielony na kilka kategorii; każda część osobnym wpisem
+  // w dzienniku (osobno do cofnięcia). Zgodność: addPurchase(id, kwota, notatka).
+  const addPurchase = (idOrParts, amountArg, note = '') => {
+    const parts = (Array.isArray(idOrParts) ? idOrParts : [{ id: idOrParts, amount: amountArg }])
+      .map((p) => ({ ...p, amount: Math.round(Number(p.amount) * 100) / 100 }))
+      .filter((p) => p.amount > 0 && rows.some((r) => r.id === p.id));
+    if (!parts.length) return null;
+    const add = {};
+    for (const p of parts) add[p.id] = (add[p.id] || 0) + p.amount;
+    const next = rows.map((r) => (add[r.id] ? { ...r, spent: Math.round((toNum(r.spent) + add[r.id]) * 100) / 100 } : r));
+    setRows(next);
+    const at = new Date().toISOString();
+    const text = String(note || '').trim().slice(0, 80);
+    const fresh = parts.map((p) => ({ id: newRowId(), rowId: p.id, name: rows.find((r) => r.id === p.id).name, amount: p.amount, note: text, at }));
+    setEntries((list) => [...fresh.reverse(), ...list].slice(0, LOG_LIMIT));
+    const main = next.find((r) => r.id === parts[0].id);
+    return { name: main.name, left: toNum(main.planned) - toNum(main.spent), parts: parts.map((p) => ({ name: next.find((r) => r.id === p.id).name, amount: p.amount })) };
   };
   // Cofnięcie wpisu: kwota odjęta z „Kwoty Wydanej” kategorii (nie poniżej zera), wpis usunięty z dziennika
   const undoPurchase = (entryId) => {
@@ -307,33 +316,69 @@ function AmountInput({ value, onChange, label }) {
   );
 }
 
+const FOOD_DEFAULT = /jedzeni/i;
+const fieldCls = 'h-10 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-sm outline-none focus:border-[#1f3864] focus:ring-1 focus:ring-[#1f3864]/30 disabled:opacity-60 dark:border-white/10 dark:bg-neutral-800';
+const cleanAmount = (v) => v.replace(/[^\d,.]/g, '');
+
+function AmountField({ value, onChange, label, className = '' }) {
+  return (
+    <label className={`flex h-10 items-center rounded-md border border-stone-200 bg-white pr-2 focus-within:border-[#1f3864] focus-within:ring-1 focus-within:ring-[#1f3864]/30 dark:border-white/10 dark:bg-neutral-800 ${className}`}>
+      <span className="sr-only">{label}</span>
+      <input value={value} onChange={(e) => onChange(cleanAmount(e.target.value))} inputMode="decimal" placeholder="0,00" aria-label={label} className="h-full min-w-0 flex-1 bg-transparent px-2 text-right text-sm tabular outline-none" />
+      <span className="text-sm text-stone-500">zł</span>
+    </label>
+  );
+}
+
+// Szybki zakup: kategoria (domyślnie „Jedzenie…”), kwota paragonu, notatka; „Podziel zakup” – części paragonu do innych
+// kategorii, odejmowane od kwoty głównej (podsumowanie na żywo, suma części ≤ kwota paragonu)
 function PurchasePanel({ rows, onAdd }) {
   const options = rows.filter((r) => String(r.name || '').trim());
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState(null);
-  const selected = options.some((r) => r.id === categoryId) ? categoryId : options[0]?.id || '';
-  const value = toNum(amount);
-  const valid = !!selected && value > 0;
+  const [split, setSplit] = useState(null); // null – bez podziału; [{ key, id, amount }]
+  const fallback = (options.find((r) => FOOD_DEFAULT.test(r.name)) || options[0])?.id || '';
+  const selected = options.some((r) => r.id === categoryId) ? categoryId : fallback;
+  const mainName = options.find((r) => r.id === selected)?.name || '';
+  const total = toNum(amount);
+  const extra = (split || []).filter((p) => toNum(p.amount) > 0 && options.some((r) => r.id === p.id));
+  const extraSum = Math.round(extra.reduce((s, p) => s + toNum(p.amount), 0) * 100) / 100;
+  const remainder = Math.round((total - extraSum) * 100) / 100;
+  const over = extraSum > total + 0.004;
 
   useEffect(() => {
     if (!msg) return undefined;
-    const t = setTimeout(() => setMsg(null), 3500);
+    const t = setTimeout(() => setMsg(null), 4500);
     return () => clearTimeout(t);
   }, [msg]);
 
+  const otherId = (taken) => (options.find((r) => r.id !== selected && !taken.includes(r.id)) || options.find((r) => r.id !== selected) || options[0])?.id || '';
+  const addSplitRow = () => setSplit((list) => [...(list || []), { key: newRowId(), id: otherId((list || []).map((p) => p.id)), amount: '' }]);
+  const toggleSplit = () => (split ? setSplit(null) : setSplit([{ key: newRowId(), id: otherId([]), amount: '' }]));
+  const updateSplit = (key, patch) => setSplit((list) => list.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+  const removeSplit = (key) => setSplit((list) => {
+    const next = list.filter((p) => p.key !== key);
+    return next.length ? next : null;
+  });
+
   const submit = (e) => {
     e.preventDefault();
-    if (!valid) {
-      setMsg({ error: true, text: !selected ? 'Najpierw dodaj kategorię w tabeli.' : 'Wpisz kwotę zakupu większą od zera.' });
-      return;
-    }
-    const res = onAdd(selected, value, note);
-    if (!res) return;
+    if (!selected) return setMsg({ error: true, text: 'Najpierw dodaj kategorię w tabeli.' });
+    if (!(total > 0)) return setMsg({ error: true, text: 'Wpisz kwotę zakupu większą od zera.' });
+    if (over) return setMsg({ error: true, text: `Suma podziału (${zl(extraSum)}) przekracza kwotę paragonu (${zl(total)}).` });
+    const parts = [{ id: selected, amount: remainder }, ...extra.map((p) => ({ id: p.id, amount: toNum(p.amount) }))];
+    const res = onAdd(parts, null, note);
+    if (!res) return undefined;
     setAmount('');
     setNote('');
-    setMsg({ error: false, text: `Dodano ${zl(value)} do „${res.name}” · pozostało ${zl(res.left)}` });
+    setSplit(null);
+    setMsg({
+      error: false,
+      text: res.parts.length > 1 ? `Dodano ${zl(total)}: ${res.parts.map((p) => `${p.name} ${zl(p.amount)}`).join(' · ')}` : `Dodano ${zl(total)} do „${res.name}” · pozostało ${zl(res.left)}`,
+    });
+    return undefined;
   };
 
   return (
@@ -342,13 +387,7 @@ function PurchasePanel({ rows, onAdd }) {
         <ShoppingBag size={14} /> Dodaj zakup
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]">
-        <select
-          value={selected}
-          onChange={(e) => setCategoryId(e.target.value)}
-          disabled={options.length === 0}
-          aria-label="Kategoria zakupu"
-          className="h-10 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-sm outline-none focus:border-[#1f3864] focus:ring-1 focus:ring-[#1f3864]/30 disabled:opacity-60 dark:border-white/10 dark:bg-neutral-800"
-        >
+        <select value={selected} onChange={(e) => setCategoryId(e.target.value)} disabled={options.length === 0} aria-label="Kategoria zakupu" className={fieldCls}>
           {options.length === 0 && <option value="">Brak kategorii</option>}
           {options.map((r) => (
             <option key={r.id} value={r.id}>
@@ -356,18 +395,7 @@ function PurchasePanel({ rows, onAdd }) {
             </option>
           ))}
         </select>
-        <label className="flex h-10 items-center rounded-md border border-stone-200 bg-white pr-2 focus-within:border-[#1f3864] focus-within:ring-1 focus-within:ring-[#1f3864]/30 dark:border-white/10 dark:bg-neutral-800">
-          <span className="sr-only">Kwota zakupu</span>
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d,.]/g, ''))}
-            inputMode="decimal"
-            placeholder="0,00"
-            aria-label="Kwota zakupu"
-            className="h-full min-w-0 flex-1 bg-transparent px-2 text-right text-sm tabular outline-none"
-          />
-          <span className="text-sm text-stone-500">zł</span>
-        </label>
+        <AmountField value={amount} onChange={setAmount} label="Kwota zakupu" />
         <button
           type="submit"
           disabled={options.length === 0}
@@ -375,14 +403,52 @@ function PurchasePanel({ rows, onAdd }) {
         >
           <Plus size={16} /> Dodaj do wydanych
         </button>
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={80}
-          placeholder="Notatka (opcjonalnie), np. Biedronka"
-          aria-label="Notatka do zakupu"
-          className="order-1 col-span-2 h-9 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-sm outline-none focus:border-[#1f3864] focus:ring-1 focus:ring-[#1f3864]/30 sm:order-2 sm:col-span-3 dark:border-white/10 dark:bg-neutral-800"
-        />
+        <div className="order-1 col-span-2 space-y-2 sm:order-2 sm:col-span-3">
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={80}
+            placeholder="Notatka (opcjonalnie), np. Biedronka"
+            aria-label="Notatka do zakupu"
+            className="h-9 w-full min-w-0 rounded-md border border-stone-200 bg-white px-2 text-sm outline-none focus:border-[#1f3864] focus:ring-1 focus:ring-[#1f3864]/30 dark:border-white/10 dark:bg-neutral-800"
+          />
+          <button
+            type="button"
+            onClick={toggleSplit}
+            disabled={options.length < 2}
+            aria-expanded={!!split}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-stone-300 px-3 text-xs font-semibold text-[#1f3864] hover:bg-white disabled:opacity-50 dark:border-white/20 dark:text-blue-300 dark:hover:bg-white/5"
+          >
+            <Split size={14} /> {split ? 'Anuluj podział' : 'Podziel zakup'}
+          </button>
+          {split && (
+            <div className="space-y-2 rounded-md border border-stone-200 bg-white p-2 dark:border-white/10 dark:bg-neutral-900" aria-label="Podział zakupu">
+              {split.map((p, i) => (
+                <div key={p.key} className="grid grid-cols-[minmax(0,1fr)_6.5rem_auto] gap-2">
+                  <select value={p.id} onChange={(e) => updateSplit(p.key, { id: e.target.value })} aria-label={`Kategoria części ${i + 1}`} className={fieldCls}>
+                    {options.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <AmountField value={p.amount} onChange={(v) => updateSplit(p.key, { amount: v })} label={`Kwota części ${i + 1}`} />
+                  <button type="button" onClick={() => removeSplit(p.key)} aria-label={`Usuń część ${i + 1}`} className="inline-flex h-10 w-8 items-center justify-center rounded-md text-stone-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={addSplitRow} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5">
+                <Plus size={14} /> Dodaj kolejną kategorię
+              </button>
+              <p role="status" className={`text-xs tabular ${over ? 'font-semibold text-red-600 dark:text-red-400' : 'text-stone-600 dark:text-stone-300'}`}>
+                {over
+                  ? `Suma części ${zl(extraSum)} przekracza kwotę paragonu ${zl(total)} o ${zl(extraSum - total)}.`
+                  : `W kategorii głównej (${mainName}) zostanie: ${zl(remainder)} (${zl(total)} − ${zl(extraSum)})`}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
       {msg && (
         <p role="status" className={`mt-2 flex items-center gap-1.5 text-xs ${msg.error ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
