@@ -58,7 +58,8 @@ function customRoute(corsProxy) {
 
 function routes(corsProxy, ignoreCooldown = false) {
   // Serwer aplikacji sam próbuje query1 i query2 – jedna trasa
-  const list = [{ id: 'app', label: 'serwer aplikacji', wrap: (_url, path) => `/api/yahoo?path=${encodeURIComponent(path)}`, singleHost: true }];
+  // `t` – znacznik czasu poza ścieżką Yahoo: omija pamięć podręczną przeglądarki i CDN, serwer go nie przekazuje dalej
+  const list = [{ id: 'app', label: 'serwer aplikacji', wrap: (_url, path) => `/api/yahoo?path=${encodeURIComponent(path)}&t=${Date.now()}`, singleHost: true }];
   const custom = customRoute(corsProxy);
   if (custom) list.push(custom);
   list.push(...PUBLIC_PROXIES);

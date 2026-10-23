@@ -93,8 +93,17 @@ async function stooqChart(yahooSymbol, deadline) {
   return JSON.stringify({ chart: { result: [{ meta, timestamp, indicators: { quote: [{ close: closes }] } }], error: null } });
 }
 
-export async function proxyYahoo(path) {
-  if (!ALLOWED_PATH.test(path || '')) return { status: 400, body: JSON.stringify({ error: 'Niedozwolona ścieżka' }) };
+// Parametry pomocnicze aplikacji (np. „_” – znacznik czasu ze starszej wersji) nie trafiają do Yahoo
+function cleanPath(path) {
+  const [base, query] = String(path || '').split('?');
+  if (query === undefined) return base;
+  const kept = query.split('&').filter((p) => p && !/^(_|t)=/.test(p));
+  return kept.length ? `${base}?${kept.join('&')}` : base;
+}
+
+export async function proxyYahoo(rawPath) {
+  if (!ALLOWED_PATH.test(rawPath || '')) return { status: 400, body: JSON.stringify({ error: 'Niedozwolona ścieżka' }) };
+  const path = cleanPath(rawPath);
   const deadline = Date.now() + BUDGET_MS;
   const errors = [];
   let last = { status: 502, body: JSON.stringify({ error: 'Brak odpowiedzi Yahoo' }) };

@@ -144,11 +144,13 @@ export function AppProvider({ children, cloud = null }) {
   // silent – odświeżenie automatyczne (przy wejściu do aplikacji); komunikat o źródle kursów pokazywany zawsze
   // Trwające pobieranie trzymane w pamięci (nie w zapisywanym stanie) – zamknięcie aplikacji w trakcie nie blokuje
   // kolejnych odświeżeń; ponowne kliknięcie w trakcie pobierania nie uruchamia drugiego
-  const pricesInflight = useRef(false);
+  // Bezpiecznik: pobieranie trwające ponad 2 min (zawieszone połączenie) nie blokuje kolejnego odświeżenia
+  const pricesInflight = useRef(0);
   const refreshPrices = useCallback(
     async (modeOverride, { silent = false } = {}) => {
-      if (pricesInflight.current) return;
-      pricesInflight.current = true;
+      if (pricesInflight.current && Date.now() - pricesInflight.current < 120000) return;
+      const runId = Date.now();
+      pricesInflight.current = runId;
       const s = stateRef.current;
       setRefreshing(true);
       try {
@@ -159,19 +161,26 @@ export function AppProvider({ children, cloud = null }) {
           mode: modeOverride || s.settings.priceMode,
           trades: s.trades,
         });
-        dispatch({ type: 'SET_PRICES', payload: result });
+        // Wynik starszego (zawieszonego) pobierania nie nadpisuje nowszego
+        if (pricesInflight.current !== runId) return;
+        const { failures = [], ...payload } = result;
+        dispatch({ type: 'SET_PRICES', payload });
+        // Pierwsza przyczyna braku notowania na żywo – widoczna także na telefonie (bez konsoli)
+        const why = failures[0] ? ` · ${failures[0].ticker}: ${String(failures[0].error).split('; ')[0].slice(0, 90)}` : '';
         // Subtelny komunikat po każdym odświeżeniu: na żywo / częściowo / dane awaryjne (szczegóły w konsoli)
         const route = result.routes?.length ? ` · trasa: ${result.routes.join(', ')}` : '';
         if (result.status === 'live') notify(`Kursy pobrane na żywo (${result.live})${route}`, 'success');
-        else if (result.status === 'partial') notify(`Kursy: ${result.live} na żywo, ${result.fallback} z danych awaryjnych (ostatnie znane / transakcje)${route}`, 'warn');
-        else if (result.status === 'offline') notify('Yahoo Finance niedostępne (sieć lub proxy zablokowane) – kursy z danych awaryjnych: ostatnie znane i ceny z transakcji', 'warn');
+        else if (result.status === 'partial') notify(`Kursy: ${result.live} na żywo, ${result.fallback} z danych awaryjnych (ostatnie znane / transakcje)${route}${why}`, 'warn');
+        else if (result.status === 'offline') notify(`Notowania niedostępne – kursy z danych awaryjnych (ostatnie znane i ceny z transakcji)${why}`, 'warn');
         else if (!silent) notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');
       } catch {
         dispatch({ type: 'SET_PRICES', payload: { status: 'offline' } });
         if (!silent) notify('Nie udało się odświeżyć notowań – spróbuj ponownie za chwilę', 'warn');
       } finally {
-        pricesInflight.current = false;
-        setRefreshing(false);
+        if (pricesInflight.current === runId) {
+          pricesInflight.current = 0;
+          setRefreshing(false);
+        }
       }
     },
     [notify],

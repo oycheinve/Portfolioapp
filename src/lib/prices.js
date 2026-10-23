@@ -19,9 +19,9 @@ async function fetchJson(url) {
   }
 }
 
-// Parametr `_` (znacznik czasu) omija pamięć podręczną przeglądarki, CDN i publicznych proxy – zawsze świeże notowanie
+// Ścieżka identyczna z zapytaniem do Yahoo; świeżość zapewnia znacznik czasu w adresie trasy (yahooFetch.js)
 function yahooChartPath(symbol) {
-  return `/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d&_=${Date.now()}`;
+  return `/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
 }
 
 const warsawDay = (d) => new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
@@ -223,7 +223,7 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
     }
   }
 
-  return { quotes, fx, status, lastRefresh: now, log: log.slice(0, 30), routes: [...routesUsed], live: liveCount, fallback: fallbackCount };
+  return { quotes, fx, status, lastRefresh: now, log: log.slice(0, 30), routes: [...routesUsed], live: liveCount, fallback: fallbackCount, failures: failures.slice(0, 5) };
 }
 
 // Etap 3: historia notowań (domyślnie tygodniowa, 5 lat) – kurs skorygowany o dywidendy, jeśli dostępny
