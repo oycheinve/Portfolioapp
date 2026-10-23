@@ -6,6 +6,26 @@ const TTL_MS = 5 * 60 * 1000;
 const cache = new Map();
 
 export const TOPICS_KEY = 'wealth-app-news-topics';
+// Odznaczone pigułki (id tematów) – nowe spółki w portfelu i nowe frazy są domyślnie zaznaczone
+export const SELECTION_KEY = 'wealth-app-news-off';
+
+export function readOff() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SELECTION_KEY) || '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeOff(list) {
+  try {
+    localStorage.setItem(SELECTION_KEY, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key: SELECTION_KEY } }));
+  } catch {
+    // brak localStorage – wybór tylko do końca sesji
+  }
+}
 
 export function readTopics() {
   try {
