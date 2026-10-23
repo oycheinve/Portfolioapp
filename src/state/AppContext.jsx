@@ -162,7 +162,7 @@ export function AppProvider({ children, cloud = null }) {
         dispatch({ type: 'SET_PRICES', payload: result });
         // Subtelny komunikat po każdym odświeżeniu: na żywo / częściowo / dane awaryjne (szczegóły w konsoli)
         const route = result.routes?.length ? ` · trasa: ${result.routes.join(', ')}` : '';
-        if (result.status === 'live') notify(`Kursy pobrane na żywo z Yahoo Finance (${result.live})${route}`, 'success');
+        if (result.status === 'live') notify(`Kursy pobrane na żywo (${result.live})${route}`, 'success');
         else if (result.status === 'partial') notify(`Kursy: ${result.live} na żywo, ${result.fallback} z danych awaryjnych (ostatnie znane / transakcje)${route}`, 'warn');
         else if (result.status === 'offline') notify('Yahoo Finance niedostępne (sieć lub proxy zablokowane) – kursy z danych awaryjnych: ostatnie znane i ceny z transakcji', 'warn');
         else if (!silent) notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');

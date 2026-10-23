@@ -68,7 +68,9 @@ function parseYahooChart(json) {
 
 export async function fetchYahooQuote(symbol, corsProxy) {
   const { json, via } = await fetchYahooData(yahooChartPath(normalizeYahooSymbol(symbol)), { corsProxy, validate: parseYahooChart });
-  return { ...parseYahooChart(json), source: `Yahoo (${via})` };
+  // Serwer aplikacji podaje zapasowo notowanie ze Stooq (gdy Yahoo odrzuca zapytania) – w tym samym formacie
+  const provider = json?.chart?.result?.[0]?.meta?.dataSource === 'Stooq' ? 'Stooq' : 'Yahoo';
+  return { ...parseYahooChart(json), source: `${provider} (${via})` };
 }
 
 // Kursy średnie NBP (tabela A) – API NBP obsługuje CORS
@@ -180,7 +182,7 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
       try {
         const q = await fetchYahooQuote(symbol, corsProxy);
         quotes[inst.id] = { ...q, currency: q.currency || inst.currency, updatedAt: now };
-        routesUsed.add(q.source.replace(/^Yahoo \(|\)$/g, ''));
+        routesUsed.add(q.source.replace(/^(\w+) \((.*)\)$/, (_, p, r) => (p === 'Yahoo' ? r : `${r} · ${p}`)));
         liveCount += 1;
         return;
       } catch (e) {
