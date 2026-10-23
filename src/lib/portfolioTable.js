@@ -1,6 +1,6 @@
 // Tabela „Portfel”: wszystkie pozycje majątku pogrupowane w kategorie z podsumowaniami
 import { getCpiTable, valueBond } from './bonds.js';
-import { bondIncomeEvents, fxToPLN, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, tradeAmounts, valuePortfolio } from './engine.js';
+import { bondIncomeEvents, fxToPLN, positionDayChange, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, tradeAmounts, valuePortfolio } from './engine.js';
 import { belkaRateForAccount, bondBelkaRate } from './tax.js';
 import { OTHER_ASSET_CATEGORIES } from './constants.js';
 
@@ -68,7 +68,7 @@ export function buildPortfolioRows(state) {
     const ccy = q?.currency || inst.currency || 'PLN';
     const foreign = ccy !== 'PLN';
     const category = ['ETF', 'ETC', 'ETN'].includes(inst.kind) ? (foreign ? 'ETF_FOREIGN' : 'ETF_PL') : foreign ? 'STOCK_FOREIGN' : 'STOCK_PL';
-    const dayPct = q && q.prevClose ? q.price / q.prevClose - 1 : 0;
+    const posDay = positionDayChange(state, p);
     const trades = state.trades.filter((t) => t.accountId === p.accountId && t.instrumentId === p.instrumentId);
     const ops = sortOps([
       ...trades.map((t) => {
@@ -104,7 +104,7 @@ export function buildPortfolioRows(state) {
       value: p.value,
       cost: p.costPLN,
       gain: p.value - p.costPLN,
-      dayChange: dayPct ? p.value - p.value / (1 + dayPct) : 0,
+      dayChange: posDay,
       fxFees: p.fxFeesPLN || 0,
       ter: inst.kind === 'ETF' ? inst.ter : null,
     });

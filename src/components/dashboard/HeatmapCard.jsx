@@ -4,6 +4,7 @@ import { Grid3x3 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
 import { formatMoney, formatPLN, formatPercent } from '../../lib/format.js';
+import { quoteDayChangePct } from '../../lib/engine.js';
 import { Card, EmptyState, Segmented } from '../ui.jsx';
 
 const GROUPS = [
@@ -13,7 +14,7 @@ const GROUPS = [
 
 function dailyChange(quote) {
   if (!quote || !Number.isFinite(quote.price) || !Number.isFinite(quote.prevClose) || quote.prevClose === 0) return null;
-  return quote.price / quote.prevClose - 1;
+  return quoteDayChangePct(quote);
 }
 
 // Pastelowe tło i kolor tekstu kafelka wg zmiany dziennej (skala −2% … +2%): zielenie – wzrost, róże/czerwienie – spadek

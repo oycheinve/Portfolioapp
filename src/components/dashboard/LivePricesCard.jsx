@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowRightLeft, ChevronDown, ChevronUp, Radio, RefreshCw } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { fxToPLN } from '../../lib/engine.js';
+import { fxToPLN, quoteDayChangePct } from '../../lib/engine.js';
 import { formatDateTime, formatMoney, formatNumber, formatPLN, formatPercent, signClass } from '../../lib/format.js';
 import { Badge, Button, Card, Field, Input, Select } from '../ui.jsx';
 
@@ -63,7 +63,7 @@ export default function LivePricesCard() {
           <tbody className="tabular">
             {state.instruments.map((inst) => {
               const q = quotes[inst.id];
-              const change = q && q.prevClose ? q.price / q.prevClose - 1 : null;
+              const change = q && q.prevClose ? quoteDayChangePct(q) : null;
               const ccy = q?.currency || inst.currency;
               return (
                 <tr key={inst.id} className="border-b border-stone-100 last:border-0 dark:border-white/5">

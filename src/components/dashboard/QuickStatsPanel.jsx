@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../../state/AppContext.jsx';
-import { computePeriodStats, fxToPLN } from '../../lib/engine.js';
+import { computePeriodStats, positionDayChange } from '../../lib/engine.js';
 import { createPriceResolver } from '../../lib/history.js';
 import { formatPLN, formatPercent, signClass } from '../../lib/format.js';
 import { Segmented, Select } from '../ui.jsx';
@@ -59,8 +59,6 @@ export default function QuickStatsPanel() {
     const month = computePeriodStats(state, { ...opts, period: '1M' });
     const ytd = computePeriodStats(state, { ...opts, period: 'YTD' });
     const ids = new Set(all.accountIds);
-    const quotes = state.prices?.quotes || {};
-    const fx = state.prices?.fx;
     // Zmiana dzienna z notowań (kurs bieżący vs zamknięcie poprzedniej sesji) dla akcji i ETF w zakresie
     let dayChange = 0;
     let up = 0;
@@ -68,11 +66,7 @@ export default function QuickStatsPanel() {
     let unrealized = 0;
     for (const p of all.valuation.positions) {
       if (!ids.has(p.accountId)) continue;
-      const q = quotes[p.instrumentId];
-      if (q && q.prevClose > 0 && q.price > 0) {
-        const ccy = q.currency || p.instrument?.currency;
-        dayChange += p.quantity * (q.price - q.prevClose) * fxToPLN(fx, ccy);
-      }
+      dayChange += positionDayChange(state, p);
       const gain = p.value - p.costPLN;
       unrealized += gain;
       if (gain > 0.005) up += 1;

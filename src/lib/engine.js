@@ -77,6 +77,48 @@ export function fxToPLN(fx, currency) {
   return Number.isFinite(r) && r > 0 ? r : 1;
 }
 
+// Zmiana dzienna: bieżąca cena vs oficjalne zamknięcie poprzedniej sesji (prevClose z Yahoo/Stooq). Notowanie
+// z sesji wcześniejszej niż dziś (rano przed otwarciem, weekend, zapisane wczoraj) oznacza, że dziś kurs się jeszcze
+// nie ruszył – zmiana 0 (wcześniej pokazywał się wczorajszy ruch jako dzisiejszy). Dzień wg czasu polskiego.
+const warsawDay = (t) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+export function quoteDayBase(q, now = new Date()) {
+  if (!q || !(q.price > 0)) return null;
+  if (!(q.prevClose > 0)) return q.price;
+  const at = Number.isFinite(q.marketTime) ? q.marketTime : q.updatedAt ? Date.parse(q.updatedAt) : NaN;
+  if (Number.isFinite(at) && warsawDay(at) < warsawDay(now)) return q.price;
+  return q.prevClose;
+}
+export function quoteDayChangePct(q, now = new Date()) {
+  const base = quoteDayBase(q, now);
+  return base ? q.price / base - 1 : null;
+}
+
+// Zmiana dzienna pozycji w PLN: akcje posiadane od wczoraj vs zamknięcie poprzedniej sesji, a kupione dziś – vs cena
+// zakupu (nie vs wczorajsze zamknięcie)
+export function positionDayChange(state, position, now = new Date()) {
+  const q = state.prices?.quotes?.[position.instrumentId];
+  const base = quoteDayBase(q, now);
+  if (!base) return 0;
+  const today = isoDay(now);
+  let bought = 0;
+  let boughtCost = 0;
+  for (const t of state.trades) {
+    if (t.side !== 'BUY' || t.date !== today || t.accountId !== position.accountId || t.instrumentId !== position.instrumentId) continue;
+    const qty = Number(t.quantity) || 0;
+    const price = Number(t.price);
+    if (!(qty > 0) || !(price > 0)) continue;
+    bought += qty;
+    boughtCost += qty * price;
+  }
+  const qty = Number(position.quantity) || 0;
+  // Dzisiejsze zakupy ponad stan pozycji (część już sprzedana) – średnia cena zakupu dla pozostałej liczby
+  const kept = Math.min(bought, qty);
+  const boughtPart = kept > 0 ? kept * (q.price - boughtCost / bought) : 0;
+  const held = qty - kept;
+  const ccy = q.currency || position.instrument?.currency;
+  return (held * (q.price - base) + boughtPart) * fxToPLN(state.prices?.fx, ccy);
+}
+
 // Cena bieżąca instrumentu w PLN na podstawie notowań w stanie.
 export function livePriceLookup(state) {
   const { quotes = {}, fx } = state.prices || {};
