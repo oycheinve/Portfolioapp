@@ -3,12 +3,50 @@ import { Archive, CalendarCheck2, Check, ChevronLeft, ChevronRight, Cloud, HardD
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, archiveWeeks, cloudStore, localStore, logKey, makeTask, shiftWeek, tasksForWeek, weekId, weekLabel, weekNumber, weekProgress } from '../lib/weeklyTasks.js';
 import { Card, Segmented } from '../components/ui.jsx';
+import DailyTasksPanel from '../components/tasks/DailyTasksPanel.jsx';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 
+const TAB_KEY = 'wealth-app-tasks-tab';
+
+// Zadania: przełącznik „Dzienne” (nawyki codzienne i zadania na dzień) / „Tygodniowe”; wybór zapamiętany
+export default function TasksView() {
+  const [tab, setTabState] = useState(() => {
+    try {
+      return localStorage.getItem(TAB_KEY) === 'WEEKLY' ? 'WEEKLY' : 'DAILY';
+    } catch {
+      return 'DAILY';
+    }
+  });
+  const setTab = (v) => {
+    setTabState(v);
+    try {
+      localStorage.setItem(TAB_KEY, v);
+    } catch {
+      // brak localStorage – wybór tylko do końca sesji
+    }
+  };
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex justify-center">
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Rodzaj zadań"
+          options={[
+            { value: 'DAILY', label: 'Zadania dzienne' },
+            { value: 'WEEKLY', label: 'Zadania tygodniowe' },
+          ]}
+        />
+      </div>
+      {tab === 'DAILY' ? <DailyTasksPanel /> : <WeeklyTasksPanel />}
+    </div>
+  );
+}
+
 // Zadania tygodniowe / nawyki: bieżący tydzień z postępem, zadania cykliczne (co tydzień) i jednorazowe,
 // archiwum minionych tygodni. Po zalogowaniu – tabele Supabase, w trybie lokalnym – localStorage.
-export default function WeeklyTasksView() {
+function WeeklyTasksPanel() {
   const { cloud, actions } = useApp();
   const userId = cloud?.enabled ? cloud.user?.id : null;
   const current = weekId();

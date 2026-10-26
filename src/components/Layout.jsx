@@ -20,7 +20,7 @@ export const NAV_ITEMS = [
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper },
-  { id: 'tasks', label: 'Zadania', longLabel: 'Zadania tygodniowe', icon: ListChecks },
+  { id: 'tasks', label: 'Zadania', longLabel: 'Zadania', icon: ListChecks },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
 
