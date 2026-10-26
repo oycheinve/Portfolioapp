@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -20,6 +20,7 @@ export const NAV_ITEMS = [
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper },
+  { id: 'tasks', label: 'Zadania', longLabel: 'Zadania tygodniowe', icon: ListChecks },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
 
@@ -28,7 +29,7 @@ const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'goals'];
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon); Ustawienia na końcu, pod nimi przełącznik motywu
-const MORE_ORDER = ['news', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'settings'];
+const MORE_ORDER = ['news', 'tasks', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'settings'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)), ...NAV_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
