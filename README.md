@@ -76,7 +76,7 @@ Ustawienia zapisywane są w `settings.allocation` (`src/state/schema.js`), logik
 - **Wykresy i notowania**: wybór wykresu z listy (wartość vs wkład, zysk, drawdown, dywidendy, mapa cieplna, notowania i waluty), obok wybór aktywów i benchmarków.
 - **Dywidendy**: automatyczna synchronizacja (historia dywidend z Yahoo Finance; offline – prognoza z historii wypłat), opcjonalne automatyczne księgowanie wypłat; usunięto sekcję raportów/WZA (`src/lib/dividendSync.js`).
 - **Symulacje i kalkulator** (nowa zakładka): Symulacja FIRE (opcje celu w zwijanym panelu, dochód pasywny), Stress test / Co jeśli, Kalkulator inwestycyjny (`src/lib/calculator.js`) – układ: dane wejściowe → wykres → wyniki.
-- Dolny pasek na telefonie: Pulpit, Portfel, Wykresy, Budżet, Cele, Więcej (pozostałe sekcje w arkuszu „Więcej”; kolejność w `MOBILE_ORDER` w `src/components/Layout.jsx`, menu boczne bez zmian). Stare adresy `#/fire`, `#/stress`, `#/quotes` przekierowują do nowych miejsc.
+- Dolny pasek na telefonie: Pulpit, Portfel, Wykresy, Budżet, Zadania, Więcej (pozostałe sekcje w arkuszu „Więcej”; kolejność w `MOBILE_ORDER` w `src/components/Layout.jsx`, menu boczne bez zmian). Stare adresy `#/fire`, `#/stress`, `#/quotes` przekierowują do nowych miejsc.
 
 ## Usprawnienia: Portfel, akordeony, własne benchmarki, koszty FX
 
@@ -347,7 +347,7 @@ Po dodaniu do ekranu głównego aplikacja otwiera się bez paska przeglądarki: 
 
 ## Zadania (dzienne i tygodniowe)
 
-Zakładka „Zadania tygodniowe” (`#/tasks`, w „Więcej” zaraz po „Newsy” i w menu bocznym; `src/views/WeeklyTasks.jsx`, `src/lib/weeklyTasks.js`):
+Zakładka „Zadania” (`#/tasks`, w dolnym pasku w miejscu „Cele” i w menu bocznym w miejscu „Cele roczne”; „Cele” są teraz w „Więcej” zaraz po „Newsy”; `src/views/WeeklyTasks.jsx`, `src/lib/weeklyTasks.js`):
 - **Tydzień ISO** (`RRRR-Www`, poniedziałek–niedziela) z nawigacją ← →, paskiem postępu (wykonane / wszystkie, %) i informacją, gdzie zapisują się dane.
 - **Cykliczne** („Co tydzień”) – widoczne od tygodnia dodania do tygodnia zakończenia; **jednorazowe** – tylko w swoim tygodniu. Checkbox zapisuje wykonanie w danym tygodniu. Usunięcie zadania cyklicznego z historią zamyka je od bieżącego tygodnia (zostaje w archiwum); nowe lub jednorazowe usuwa się razem z wpisami wykonania.
 - **Archiwum tygodni** – 12 ostatnich minionych tygodni z wynikiem; kliknięcie otwiera tydzień (odhaczenia można poprawić, dodawanie tylko w bieżącym).

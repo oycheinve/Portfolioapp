@@ -13,23 +13,23 @@ export const NAV_ITEMS = [
   { id: 'simulations', label: 'Symulacje', longLabel: 'Symulacje i kalkulator', icon: FlaskConical },
   { id: 'safe', label: 'Poduszka', longLabel: 'Poduszka finansowa', icon: Shield },
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
-  { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target, mobile: true },
+  { id: 'tasks', label: 'Zadania', longLabel: 'Zadania', icon: ListChecks, mobile: true },
   // Nazwa z rokiem docelowym z ustawień FIRE (np. „FIRE 2055”) – navLabel()
   { id: 'fire', label: 'FIRE', longLabel: 'FIRE', icon: Flame },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper },
-  { id: 'tasks', label: 'Zadania', longLabel: 'Zadania', icon: ListChecks },
+  { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
 
 // Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
-const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'goals'];
+const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'tasks'];
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon); Ustawienia na końcu, pod nimi przełącznik motywu
-const MORE_ORDER = ['news', 'tasks', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'settings'];
+const MORE_ORDER = ['news', 'goals', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'settings'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)), ...NAV_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
