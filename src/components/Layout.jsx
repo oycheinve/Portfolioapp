@@ -5,6 +5,7 @@ import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
 
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
+// hidden: true = tymczasowo ukryta we wszystkich menu (widok i adres #/… nadal działają, kod bez zmian)
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard, mobile: true },
   { id: 'portfolio', label: 'Portfel', longLabel: 'Portfel', icon: Table2, mobile: true },
@@ -12,11 +13,11 @@ export const NAV_ITEMS = [
   { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins },
   { id: 'simulations', label: 'Symulacje', longLabel: 'Symulacje i kalkulator', icon: FlaskConical },
   { id: 'safe', label: 'Poduszka', longLabel: 'Poduszka finansowa', icon: Shield },
-  { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart },
+  { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart, hidden: true },
   { id: 'tasks', label: 'Zadania', longLabel: 'Zadania', icon: ListChecks, mobile: true },
   // Nazwa z rokiem docelowym z ustawień FIRE (np. „FIRE 2055”) – navLabel()
   { id: 'fire', label: 'FIRE', longLabel: 'FIRE', icon: Flame },
-  { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText },
+  { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText, hidden: true },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper },
@@ -26,11 +27,13 @@ export const NAV_ITEMS = [
 
 // Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
 const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'tasks'];
-const MOBILE_ITEMS = MOBILE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)).filter(Boolean);
+// Pozycje widoczne w menu (bez tymczasowo ukrytych)
+const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden);
+const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon); Ustawienia na końcu, pod nimi przełącznik motywu
 const MORE_ORDER = ['news', 'goals', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'settings'];
-const MORE_ITEMS = [...MORE_ORDER.map((id) => NAV_ITEMS.find((n) => n.id === id)), ...NAV_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
+const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
 export function navLabel(item, settings, long = true) {
@@ -108,7 +111,7 @@ export function Layout({ view, onNavigate, children }) {
           </div>
         </div>
         <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1" aria-label="Główna nawigacja">
-          {NAV_ITEMS.map((item) => {
+          {MENU_ITEMS.map((item) => {
             const active = item.id === view;
             const Icon = item.icon;
             return (
@@ -195,7 +198,7 @@ export function Layout({ view, onNavigate, children }) {
         <BottomTab
           item={{ id: 'more', label: 'Więcej', icon: Menu }}
           active={!NAV_ITEMS.find((n) => n.id === view)?.mobile}
-          badge={NAV_ITEMS.filter((n) => !n.mobile).reduce((s2, n) => s2 + (badges[n.id] || 0), 0) || null}
+          badge={MENU_ITEMS.filter((n) => !n.mobile).reduce((s2, n) => s2 + (badges[n.id] || 0), 0) || null}
           onClick={() => setMoreOpen(true)}
         />
       </nav>
