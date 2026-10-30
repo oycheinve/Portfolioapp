@@ -40,7 +40,13 @@ export function tasksForMonth(tasks, month) {
 
 export const monthKey = (taskId, month) => `${taskId}|${month}`;
 
+// Wpisy wykonania: done === false – tylko częściowy postęp (cel liczbowy jeszcze nieosiągnięty)
+export const monthDoneSet = (logs) => new Set(logs.filter((l) => l.done !== false).map((l) => monthKey(l.taskId, l.month)));
+export const monthProgressMap = (logs) => new Map(logs.filter((l) => Number(l.progress) > 0).map((l) => [monthKey(l.taskId, l.month), Number(l.progress)]));
+export const hasTarget = (t) => Number(t?.target) > 0;
+
 export function monthProgress(tasks, doneSet, month) {
+  // doneSet – monthDoneSet(logs): wpisy z częściowym postępem (done === false) nie liczą się jako wykonane
   const list = tasksForMonth(tasks, month);
   const done = list.filter((t) => doneSet.has(monthKey(t.id, month))).length;
   return { total: list.length, done, pct: list.length ? done / list.length : 0 };
@@ -60,8 +66,21 @@ export function historyMonths(tasks, doneSet, current, limit = 12) {
 
 const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`);
 
-export function makeMonthlyTask({ title, isRecurring, month }) {
-  return { id: newId(), title: String(title).trim().slice(0, 120), isRecurring: !!isRecurring, month, archivedMonth: null, sortOrder: Date.now() % 2147483647, createdAt: new Date().toISOString() };
+// target / unit / step – opcjonalny postęp liczbowy na miesiąc (jak w Celach)
+export function makeMonthlyTask({ title, isRecurring, month, target = null, unit = '', step = 1 }) {
+  const t = Number(target) > 0 ? Number(target) : null;
+  return {
+    id: newId(),
+    title: String(title).trim().slice(0, 120),
+    isRecurring: !!isRecurring,
+    month,
+    archivedMonth: null,
+    sortOrder: Date.now() % 2147483647,
+    createdAt: new Date().toISOString(),
+    target: t,
+    unit: t ? String(unit || '').trim().slice(0, 20) : '',
+    step: t ? Number(step) > 0 ? Number(step) : 1 : null,
+  };
 }
 
 // ── Zapis lokalny ──
@@ -105,32 +124,87 @@ export const monthlyLocalStore = {
     if (done) logs.push({ taskId, month, doneAt: new Date().toISOString() });
     writeLocal({ ...d, logs });
   },
+  // Postęp liczbowy w miesiącu (0 – wpis usunięty)
+  async setProgress(taskId, month, progress, done) {
+    const d = readLocal();
+    const logs = d.logs.filter((l) => !(l.taskId === taskId && l.month === month));
+    if (progress > 0 || done) logs.push({ taskId, month, progress, done, doneAt: new Date().toISOString() });
+    writeLocal({ ...d, logs });
+  },
+  async updateTask(id, patch) {
+    const d = readLocal();
+    writeLocal({ ...d, tasks: d.tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
+  },
+  progressReady: true,
 };
 
 // ── Zapis w Supabase ──
-const fromRow = (r) => ({ id: r.id, title: r.title, isRecurring: r.is_recurring, month: r.month, archivedMonth: r.archived_month, sortOrder: r.sort_order ?? 0, createdAt: r.created_at });
+const fromRow = (r) => ({
+  id: r.id,
+  title: r.title,
+  isRecurring: r.is_recurring,
+  month: r.month,
+  archivedMonth: r.archived_month,
+  sortOrder: r.sort_order ?? 0,
+  createdAt: r.created_at,
+  target: r.target != null ? Number(r.target) : null,
+  unit: r.unit || '',
+  step: r.step != null ? Number(r.step) : null,
+});
+// Brak kolumn postępu (skrypt sprzed tej wersji): 42703 (Postgres) / PGRST204 (PostgREST)
+const isMissingColumn = (e) => !!e && (e.code === '42703' || e.code === 'PGRST204' || /column .* does not exist|could not find the .* column/i.test(e.message || ''));
 function check(error) {
   if (!error) return;
   if (error.code === '42P01' || error.code === 'PGRST205' || /does not exist|could not find the table/i.test(error.message || '')) throw new MissingTablesError(error.message);
   throw new Error(error.message || 'Błąd zapisu w chmurze');
 }
 
+const BASE_TASK_COLS = 'id, title, is_recurring, month, archived_month, sort_order, created_at';
+const BASE_LOG_COLS = 'task_id, month, done_at';
+
+// progressReady – czy w bazie są kolumny postępu (ustalane przy wczytaniu; bez nich zadania działają jak dotąd)
 export function monthlyCloudStore(userId) {
-  return {
+  const store = {
     kind: 'cloud',
+    progressReady: true,
     async load() {
       const sb = await getClient();
-      const [t, l] = await Promise.all([
-        sb.from('monthly_tasks').select('id, title, is_recurring, month, archived_month, sort_order, created_at').eq('user_id', userId),
-        sb.from('monthly_task_logs').select('task_id, month, done_at').eq('user_id', userId),
-      ]);
+      const query = (full) =>
+        Promise.all([
+          sb.from('monthly_tasks').select(full ? `${BASE_TASK_COLS}, target, unit, step` : BASE_TASK_COLS).eq('user_id', userId),
+          sb.from('monthly_task_logs').select(full ? `${BASE_LOG_COLS}, progress, done` : BASE_LOG_COLS).eq('user_id', userId),
+        ]);
+      let [t, l] = await query(true);
+      store.progressReady = !isMissingColumn(t.error) && !isMissingColumn(l.error);
+      if (!store.progressReady) [t, l] = await query(false);
       check(t.error);
       check(l.error);
-      return { tasks: (t.data || []).map(fromRow), logs: (l.data || []).map((r) => ({ taskId: r.task_id, month: r.month, doneAt: r.done_at })) };
+      return {
+        tasks: (t.data || []).map(fromRow),
+        logs: (l.data || []).map((r) => ({ taskId: r.task_id, month: r.month, doneAt: r.done_at, progress: r.progress != null ? Number(r.progress) : undefined, done: r.done })),
+      };
     },
     async addTask(task) {
       const sb = await getClient();
-      const { error } = await sb.from('monthly_tasks').insert({ id: task.id, user_id: userId, title: task.title, is_recurring: task.isRecurring, month: task.month, sort_order: task.sortOrder });
+      const row = { id: task.id, user_id: userId, title: task.title, is_recurring: task.isRecurring, month: task.month, sort_order: task.sortOrder };
+      if (store.progressReady && task.target) Object.assign(row, { target: task.target, unit: task.unit || null, step: task.step });
+      const { error } = await sb.from('monthly_tasks').insert(row);
+      check(error);
+    },
+    async updateTask(id, patch) {
+      const sb = await getClient();
+      const row = { updated_at: new Date().toISOString() };
+      if ('title' in patch) row.title = patch.title;
+      if ('target' in patch) Object.assign(row, { target: patch.target, unit: patch.unit || null, step: patch.step });
+      const { error } = await sb.from('monthly_tasks').update(row).eq('id', id).eq('user_id', userId);
+      check(error);
+    },
+    async setProgress(taskId, month, progress, done) {
+      const sb = await getClient();
+      const { error } =
+        progress > 0 || done
+          ? await sb.from('monthly_task_logs').upsert({ task_id: taskId, month, user_id: userId, progress, done, done_at: new Date().toISOString() }, { onConflict: 'task_id,month' })
+          : await sb.from('monthly_task_logs').delete().eq('task_id', taskId).eq('month', month).eq('user_id', userId);
       check(error);
     },
     async archiveTask(id, month) {
@@ -146,9 +220,10 @@ export function monthlyCloudStore(userId) {
     async setDone(taskId, month, done) {
       const sb = await getClient();
       const { error } = done
-        ? await sb.from('monthly_task_logs').upsert({ task_id: taskId, month, user_id: userId, done_at: new Date().toISOString() }, { onConflict: 'task_id,month' })
+        ? await sb.from('monthly_task_logs').upsert({ task_id: taskId, month, user_id: userId, done_at: new Date().toISOString(), ...(store.progressReady ? { done: true } : {}) }, { onConflict: 'task_id,month' })
         : await sb.from('monthly_task_logs').delete().eq('task_id', taskId).eq('month', month).eq('user_id', userId);
       check(error);
     },
   };
+  return store;
 }

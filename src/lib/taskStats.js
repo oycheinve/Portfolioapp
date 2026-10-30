@@ -6,7 +6,7 @@
 //    w tym czasie skończyły); pokazuje, jak regularnie zadania są domykane.
 import { MissingTablesError, cloudStore, localStore, logKey, shiftWeek, weekId, weekProgress, weekStart } from './weeklyTasks.js';
 import { dailyCloudStore, dailyLocalStore, dayId, dayKey, dayProgress, shiftDay } from './dailyTasks.js';
-import { monthBounds, monthId, monthKey, monthProgress, monthlyCloudStore, monthlyLocalStore, shiftMonthId } from './monthlyTasks.js';
+import { monthBounds, monthDoneSet, monthId, monthProgress, monthlyCloudStore, monthlyLocalStore, shiftMonthId } from './monthlyTasks.js';
 
 const EMPTY = { tasks: [], logs: [] };
 
@@ -31,7 +31,7 @@ export async function loadAllTasks(userId) {
 const sets = ({ daily = EMPTY, weekly = EMPTY, monthly = EMPTY }) => ({
   daily: new Set(daily.logs.map((l) => dayKey(l.taskId, l.day))),
   weekly: new Set(weekly.logs.map((l) => logKey(l.taskId, l.weekId))),
-  monthly: new Set(monthly.logs.map((l) => monthKey(l.taskId, l.month))),
+  monthly: monthDoneSet(monthly.logs),
 });
 const sum = (parts) => {
   const done = parts.reduce((s, p) => s + p.done, 0);

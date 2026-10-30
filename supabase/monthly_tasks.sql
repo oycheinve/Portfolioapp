@@ -73,3 +73,16 @@ revoke all on public.monthly_tasks from anon;
 revoke all on public.monthly_task_logs from anon;
 grant select, insert, update, delete on public.monthly_tasks to authenticated;
 grant select, insert, update, delete on public.monthly_task_logs to authenticated;
+
+-- ── Postęp liczbowy (jak w Celach) – kolumny opcjonalne, dodawane bezpiecznie także do istniejących tabel ──
+-- monthly_tasks.target / unit / step – wartość docelowa na miesiąc (np. 4 książki), jednostka i krok przycisków +/−
+-- monthly_task_logs.progress – postęp w danym miesiącu; done – czy zadanie jest wykonane (cel osiągnięty
+-- albo odhaczone ręcznie); dotychczasowe wpisy pozostają wykonane (domyślnie true).
+alter table public.monthly_tasks add column if not exists target numeric check (target is null or target > 0);
+alter table public.monthly_tasks add column if not exists unit text check (unit is null or char_length(unit) <= 20);
+alter table public.monthly_tasks add column if not exists step numeric check (step is null or step > 0);
+alter table public.monthly_task_logs add column if not exists progress numeric check (progress is null or progress >= 0);
+alter table public.monthly_task_logs add column if not exists done boolean not null default true;
+
+-- Odświeżenie schematu API (nowe kolumny widoczne od razu)
+notify pgrst, 'reload schema';
