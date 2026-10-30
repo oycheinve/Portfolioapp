@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, CalendarCheck2, Check, ChevronLeft, ChevronRight, Cloud, HardDrive, ListChecks, Plus, Repeat, Target, Trash2 } from 'lucide-react';
+import { Archive, CalendarCheck2, Check, ChevronLeft, ChevronRight, Cloud, Gauge, HardDrive, ListChecks, Plus, Repeat, Target, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, archiveWeeks, cloudStore, localStore, logKey, makeTask, shiftWeek, tasksForWeek, weekId, weekLabel, weekNumber, weekProgress } from '../lib/weeklyTasks.js';
 import { Card, Segmented } from '../components/ui.jsx';
 import DailyTasksPanel from '../components/tasks/DailyTasksPanel.jsx';
+import MonthlyTasksPanel from '../components/tasks/MonthlyTasksPanel.jsx';
+import { consistencyScore, loadAllTasks } from '../lib/taskStats.js';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 
 const TAB_KEY = 'wealth-app-tasks-tab';
+const TABS = ['DAILY', 'WEEKLY', 'MONTHLY'];
 
-// Zadania: przełącznik „Dzienne” (nawyki codzienne i zadania na dzień) / „Tygodniowe”; wybór zapamiętany
+// Zadania: wskaźnik konsekwencji na górze i przełącznik „Dzienne” / „Tygodniowe” / „Miesięczne” (wybór zapamiętany)
 export default function TasksView() {
+  const { cloud } = useApp();
+  const userId = cloud?.enabled ? cloud.user?.id : null;
   const [tab, setTabState] = useState(() => {
     try {
-      return localStorage.getItem(TAB_KEY) === 'WEEKLY' ? 'WEEKLY' : 'DAILY';
+      const v = localStorage.getItem(TAB_KEY);
+      return TABS.includes(v) ? v : 'DAILY';
     } catch {
       return 'DAILY';
     }
@@ -26,27 +32,96 @@ export default function TasksView() {
       // brak localStorage – wybór tylko do końca sesji
     }
   };
+  // Dane wszystkich kategorii do wskaźnika; otwarty panel zgłasza swoje zmiany na bieżąco
+  const [all, setAll] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadAllTasks(userId).then((d) => alive && setAll((prev) => ({ ...d, ...(prev || {}) })));
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+  const report = useCallback((kind) => (data) => setAll((prev) => ({ ...(prev || {}), [kind]: data })), []);
+  const onDaily = useMemo(() => report('daily'), [report]);
+  const onWeekly = useMemo(() => report('weekly'), [report]);
+  const onMonthly = useMemo(() => report('monthly'), [report]);
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      <ConsistencyCard data={all} />
       <div className="flex justify-center">
         <Segmented
           value={tab}
           onChange={setTab}
           ariaLabel="Rodzaj zadań"
           options={[
-            { value: 'DAILY', label: 'Zadania dzienne' },
-            { value: 'WEEKLY', label: 'Zadania tygodniowe' },
+            { value: 'DAILY', label: 'Dzienne' },
+            { value: 'WEEKLY', label: 'Tygodniowe' },
+            { value: 'MONTHLY', label: 'Miesięczne' },
           ]}
         />
       </div>
-      {tab === 'DAILY' ? <DailyTasksPanel /> : <WeeklyTasksPanel />}
+      {tab === 'DAILY' && <DailyTasksPanel onDataChange={onDaily} />}
+      {tab === 'WEEKLY' && <WeeklyTasksPanel onDataChange={onWeekly} />}
+      {tab === 'MONTHLY' && <MonthlyTasksPanel onDataChange={onMonthly} />}
     </div>
+  );
+}
+
+const scoreTone = (p) => (p === null ? 'text-stone-400' : p >= 0.8 ? 'text-emerald-600 dark:text-emerald-400' : p >= 0.5 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400');
+const barTone = (p) => (p === null ? 'bg-stone-300 dark:bg-white/10' : p >= 0.8 ? 'bg-emerald-500' : p >= 0.5 ? 'bg-amber-500' : 'bg-red-500');
+const fmtPct = (p) => (p === null ? '—' : pct(p));
+
+// Wskaźnik konsekwencji: wykonane / wymagane do tej pory w bieżących okresach (dziś, ten tydzień, ten miesiąc)
+// oraz skuteczność w okresach zakończonych w ostatnich 30 dniach
+function ConsistencyCard({ data }) {
+  const score = useMemo(() => (data ? consistencyScore(data) : null), [data]);
+  const rows = score
+    ? [
+        { key: 'daily', label: 'Dziś', v: score.current.byKind.daily },
+        { key: 'weekly', label: 'Ten tydzień', v: score.current.byKind.weekly },
+        { key: 'monthly', label: 'Ten miesiąc', v: score.current.byKind.monthly },
+      ]
+    : [];
+  const main = score?.current.pct ?? null;
+  return (
+    <section className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900" aria-label="Konsekwencja">
+      <div className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">
+            <Gauge size={14} /> Konsekwencja · bieżący okres
+          </h2>
+          <p className={`mt-1 text-4xl font-extrabold tracking-tight tabular ${scoreTone(main)}`}>{score ? fmtPct(main) : '…'}</p>
+          <p className="text-xs text-stone-500 dark:text-stone-400">{score ? (score.current.total ? `Wykonane ${score.current.done} / ${score.current.total} wymaganych do tej pory` : 'Dodaj zadania, aby zobaczyć skuteczność') : 'Liczenie…'}</p>
+        </div>
+        <div className="w-40 shrink-0 space-y-1.5 sm:w-56">
+          {rows.map((r) => (
+            <div key={r.key} className="text-[11px]">
+              <div className="flex justify-between gap-2 text-stone-500 dark:text-stone-400">
+                <span>{r.label}</span>
+                <span className="font-semibold tabular text-stone-700 dark:text-stone-200">{r.v.total ? `${r.v.done}/${r.v.total}` : '—'}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-white/[0.06]">
+                <div className={`h-full rounded-full ${barTone(r.v.pct)}`} style={{ width: `${(r.v.pct || 0) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {score && (
+        <p className="mt-3 border-t border-stone-100 pt-2 text-[11px] text-stone-500 dark:border-white/5 dark:text-stone-400">
+          Ostatnie 30 dni (zakończone dni, tygodnie i miesiące):{' '}
+          <span className={`font-semibold tabular ${scoreTone(score.rolling.pct)}`}>{fmtPct(score.rolling.pct)}</span>
+          {score.rolling.total ? ` · ${score.rolling.done}/${score.rolling.total}` : ''}
+        </p>
+      )}
+    </section>
   );
 }
 
 // Zadania tygodniowe / nawyki: bieżący tydzień z postępem, zadania cykliczne (co tydzień) i jednorazowe,
 // archiwum minionych tygodni. Po zalogowaniu – tabele Supabase, w trybie lokalnym – localStorage.
-function WeeklyTasksPanel() {
+function WeeklyTasksPanel({ onDataChange }) {
   const { cloud, actions } = useApp();
   const userId = cloud?.enabled ? cloud.user?.id : null;
   const current = weekId();
@@ -72,6 +147,9 @@ function WeeklyTasksPanel() {
   useEffect(() => {
     load();
   }, [load]);
+  useEffect(() => {
+    if (!loading) onDataChange?.(data);
+  }, [data, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Zmiana optymistyczna: od razu na ekranie, zapis w tle; przy błędzie – ponowne wczytanie i komunikat
   const run = async (apply, persist) => {

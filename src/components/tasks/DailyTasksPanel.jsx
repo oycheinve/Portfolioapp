@@ -10,7 +10,8 @@ const plDays = (n) => (n === 1 ? 'dzień' : 'dni');
 
 // Zadania dzienne: nawyki codzienne (wracają każdego dnia) i zadania na dany dzień, postęp dnia, seria nawyku,
 // historia minionych dni. Po zalogowaniu – tabele Supabase daily_*, w trybie lokalnym – localStorage.
-export default function DailyTasksPanel() {
+// onDataChange(data) – zgłoszenie zmian (wskaźnik konsekwencji w widoku Zadań).
+export default function DailyTasksPanel({ onDataChange }) {
   const { cloud, actions } = useApp();
   const userId = cloud?.enabled ? cloud.user?.id : null;
   const today = dayId();
@@ -36,6 +37,9 @@ export default function DailyTasksPanel() {
   useEffect(() => {
     load();
   }, [load]);
+  useEffect(() => {
+    if (!loading) onDataChange?.(data);
+  }, [data, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Zmiana optymistyczna: od razu na ekranie, zapis w tle; przy błędzie – ponowne wczytanie i komunikat
   const run = async (apply, persist) => {
