@@ -8,6 +8,8 @@ const cache = new Map();
 export const TOPICS_KEY = 'wealth-app-news-topics';
 // Odznaczone pigułki (id tematów) – nowe spółki w portfelu i nowe frazy są domyślnie zaznaczone
 export const SELECTION_KEY = 'wealth-app-news-off';
+// Pigułka „Analizy ogólne” (artykuły bez konkretnej spółki w tytule) – domyślnie wyłączona
+export const GENERAL_KEY = 'wealth-app-news-general';
 
 export function readOff() {
   try {
@@ -86,7 +88,7 @@ export async function fetchNewsMany(topics, opts) {
   const lists = await mapLimited(topics, 3, async (t) => {
     try {
       const r = await fetchNews(t, opts);
-      return r.items.map((it) => ({ ...it, topic: t.label }));
+      return r.items.map((it) => ({ ...it, topic: t.label, topicId: t.id, custom: !!t.custom }));
     } catch (e) {
       errors.push(`${t.label}: ${e.message}`);
       return [];

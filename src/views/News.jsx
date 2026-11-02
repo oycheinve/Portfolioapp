@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, ExternalLink, Newspaper, Plus, RefreshCw, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { computeHoldings, isoDay } from '../lib/engine.js';
-import { fetchNewsMany, readOff, readTopics, timeAgo, writeOff, writeTopics } from '../lib/news.js';
+import { GENERAL_KEY, fetchNewsMany, readOff, readTopics, timeAgo, writeOff, writeTopics } from '../lib/news.js';
+import { GENERAL_ID, classifyArticle } from '../lib/newsSubject.js';
 import { Card, EmptyState } from '../components/ui.jsx';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
@@ -45,6 +46,25 @@ export default function NewsView() {
   };
   const selectAll = () => setOff(new Set());
   const selectNone = () => setOff(new Set(topics.map((t) => t.id)));
+
+  // „Analizy ogólne” – artykuły bez spółki z portfela w tytule (np. komentarze makro analityków XTB)
+  const [generalOn, setGeneralOn] = useState(() => {
+    try {
+      return localStorage.getItem(GENERAL_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleGeneral = () => {
+    setGeneralOn((v) => {
+      try {
+        localStorage.setItem(GENERAL_KEY, v ? '0' : '1');
+      } catch {
+        // brak localStorage
+      }
+      return !v;
+    });
+  };
 
   const [result, setResult] = useState({ items: [], errors: [] });
   const [loading, setLoading] = useState(false);
@@ -101,7 +121,23 @@ export default function NewsView() {
       on ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950' : 'border-stone-200 bg-white text-stone-500 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-400 dark:hover:bg-neutral-700'
     }`;
   const smallBtn = 'inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-40 dark:text-blue-300 dark:hover:bg-blue-500/10';
-  const items = result.items.slice(0, LIST_LIMIT);
+  // Główny podmiot artykułu zamiast tematu zapytania: tekst o Orlenie znaleziony przy XTB trafia do Orlenu,
+  // analiza makro autorstwa XTB – do „Analiz ogólnych”; frazy własne bez filtrowania
+  const classified = useMemo(() => {
+    const byId = Object.fromEntries(topics.map((t) => [t.id, t]));
+    return result.items.map((it) => {
+      if (it.custom) return { ...it, mainId: it.topicId, mentions: [], authorIds: [] };
+      return { ...it, ...classifyArticle(it, held) };
+    }).map((it) => ({
+      ...it,
+      tag: it.mainId === GENERAL_ID ? 'Analiza ogólna' : byId[it.mainId]?.label || it.topic,
+      also: it.mentions.filter((id) => id !== it.mainId).map((id) => byId[id]?.label).filter(Boolean),
+      authors: it.authorIds.filter((id) => id !== it.mainId).map((id) => byId[id]?.label).filter(Boolean),
+    }));
+  }, [result.items, held, topics]);
+  const selectedIds = useMemo(() => new Set(selected.map((t) => t.id)), [selected]);
+  const generalCount = classified.filter((it) => it.mainId === GENERAL_ID).length;
+  const items = classified.filter((it) => (it.mainId === GENERAL_ID ? generalOn : selectedIds.has(it.mainId))).slice(0, LIST_LIMIT);
   const allErrors = result.errors.length > 0 && result.items.length === 0;
 
   return (
@@ -165,6 +201,14 @@ export default function NewsView() {
               </span>
             );
           })}
+          {held.length > 0 && (
+            <button type="button" className={pill(generalOn)} aria-pressed={generalOn} onClick={toggleGeneral} title="Artykuły bez konkretnej spółki z portfela w tytule – np. komentarze makro analityków XTB">
+              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border ${generalOn ? 'border-white/80 bg-white/20 dark:border-neutral-900/50' : 'border-stone-300 dark:border-white/20'}`} aria-hidden="true">
+                {generalOn && <Check size={11} strokeWidth={3} />}
+              </span>
+              <span className="truncate">Analizy ogólne{generalCount ? ` (${generalCount})` : ''}</span>
+            </button>
+          )}
           {!adding && (
             <button
               type="button"
@@ -221,13 +265,21 @@ export default function NewsView() {
         {loading && !items.length && Array.from({ length: 4 }, (_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />)}
         {items.map((it) => (
           <article key={it.link} className="min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-neutral-900">
-            {it.topic && <span className="mb-1.5 inline-block rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{it.topic}</span>}
+            <div className="mb-1.5 flex flex-wrap items-center gap-1">
+              <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${it.mainId === GENERAL_ID ? 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'}`}>{it.tag}</span>
+              {it.also.map((l) => (
+                <span key={l} className="inline-block rounded-md border border-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:border-blue-500/20 dark:text-blue-300">
+                  {l}
+                </span>
+              ))}
+            </div>
             <a href={it.link} target="_blank" rel="noopener noreferrer" className="group flex items-start gap-2">
               <span className="min-w-0 flex-1 text-sm leading-snug font-semibold break-words text-stone-800 group-hover:text-blue-700 group-hover:underline dark:text-stone-100 dark:group-hover:text-blue-300">{it.title}</span>
               <ExternalLink size={14} className="mt-0.5 shrink-0 text-stone-400" aria-hidden="true" />
             </a>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
               <span className="font-medium text-stone-600 dark:text-stone-300">{it.source}</span>
+              {it.authors.length > 0 && <span title="Spółka jest tu autorem / źródłem komentarza, nie tematem artykułu">· autor: {it.authors.join(', ')}</span>}
               {it.pubDate && (
                 <time dateTime={it.pubDate} title={new Date(it.pubDate).toLocaleString('pl-PL')}>
                   · {timeAgo(it.pubDate)}
