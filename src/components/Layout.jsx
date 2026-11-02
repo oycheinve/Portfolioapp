@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
+import { useTaskReminder } from '../state/useTaskReminder.js';
 
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 // hidden: true = tymczasowo ukryta we wszystkich menu (widok i adres #/… nadal działają, kod bez zmian)
@@ -83,7 +84,20 @@ function CloudStatus({ onNavigate }) {
 }
 
 export function Layout({ view, onNavigate, children }) {
-  const { state, actions, refreshing } = useApp();
+  const { state, actions, refreshing, cloud } = useApp();
+  useTaskReminder(cloud?.enabled ? cloud.user?.id : null);
+  // Brak sieci (np. aplikacja na telefonie offline) – widoczny znaczek; dane działają z pamięci urządzenia
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
   const theme = state.settings.theme;
   const ThemeIcon = THEME_ICON[theme] || Monitor;
   const current = NAV_ITEMS.find((n) => n.id === view);
@@ -152,7 +166,7 @@ export function Layout({ view, onNavigate, children }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Górny pasek */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-stone-200 bg-white/85 px-4 backdrop-blur sm:px-6 dark:border-white/10 dark:bg-neutral-950/85">
+        <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b pt-[env(safe-area-inset-top)] border-stone-200 bg-white/85 px-4 backdrop-blur sm:px-6 dark:border-white/10 dark:bg-neutral-950/85">
           <div className="flex items-center gap-2 md:hidden">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white dark:bg-blue-500">
               <Wallet size={16} />
@@ -160,6 +174,11 @@ export function Layout({ view, onNavigate, children }) {
           </div>
           <h1 className="truncate text-base font-semibold">{navLabel(current, state.settings)}</h1>
           <div className="ml-auto flex items-center gap-2">
+            {!online && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300" title="Brak połączenia – dane z pamięci urządzenia, kursy z ostatnich danych">
+                <CloudOff size={12} /> Offline
+              </span>
+            )}
             <CloudStatus onNavigate={onNavigate} />
             <PriceStatus />
             <button
@@ -184,7 +203,7 @@ export function Layout({ view, onNavigate, children }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-10">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 md:pb-10">{children}</main>
       </div>
 
       {/* Nawigacja dolna – mobile */}
@@ -306,7 +325,7 @@ export function Toast() {
     info: 'border-stone-200 bg-white text-stone-800 dark:border-white/10 dark:bg-neutral-900 dark:text-stone-200',
   };
   return (
-    <div className="fixed inset-x-4 bottom-20 z-50 flex justify-center md:bottom-6" role="status" aria-live="polite">
+    <div className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50 flex justify-center md:bottom-6" role="status" aria-live="polite">
       <button
         type="button"
         onClick={dismissToast}

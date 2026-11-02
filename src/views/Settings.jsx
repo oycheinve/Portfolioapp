@@ -8,6 +8,7 @@ import { Badge, Button, Card, CardCollapseContext, Field, IconButton, Input, Mod
 import LimitsCard from '../components/settings/LimitsCard.jsx';
 import BackupCard from '../components/settings/BackupCard.jsx';
 import CloudCard from '../components/settings/CloudCard.jsx';
+import NotificationsCard from '../components/settings/NotificationsCard.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
@@ -23,6 +24,7 @@ export default function SettingsView({ param }) {
         <FireGoalsCard defaultOpen={param === 'fire'} />
         <OtherAssetsSection />
         <CloudCard />
+        <NotificationsCard />
         <BackupCard />
       </div>
     </CardCollapseContext.Provider>

@@ -23,6 +23,21 @@ body {
   @apply bg-stone-50 text-stone-900 antialiased dark:bg-neutral-950 dark:text-stone-100;
 }
 
+/* Aplikacja zainstalowana (PWA, tryb standalone): bez „gumowego” przewijania / przypadkowego odświeżenia stroną
+   i bez podświetlenia dotyku – zachowanie jak w aplikacji natywnej */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+  body {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+html {
+  @apply bg-stone-50 dark:bg-neutral-950;
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }

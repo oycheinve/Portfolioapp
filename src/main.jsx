@@ -9,13 +9,14 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 );
 
-// Sprzątanie po wycofanym service workerze (wcześniejsza wersja PWA) – aplikacja działa bez niego
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker
-    .getRegistrations()
-    .then((regs) => regs.forEach((r) => r.unregister()))
-    .catch(() => {});
+// PWA: service worker (praca offline powłoki aplikacji, powiadomienia) – tylko w wersji produkcyjnej, żeby nie
+// przeszkadzał serwerowi deweloperskiemu Vite. Rejestracja zastępuje dawny „wyłącznik” sw.js pod tym samym adresem.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+  });
 }
+// Pamięci podręczne bardzo starej wersji PWA (portfolio-app-*) – do usunięcia
 if (typeof caches !== 'undefined') {
   caches
     .keys()
