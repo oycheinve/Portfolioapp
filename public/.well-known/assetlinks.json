@@ -4,7 +4,9 @@
     "target": {
       "namespace": "android_app",
       "package_name": "com.fintrack.app",
-      "sha256_cert_fingerprints": ["00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"]
+      "sha256_cert_fingerprints": [
+        "AD:39:3F:35:DD:84:64:65:62:57:86:E9:B9:6A:40:CE:17:64:9D:82:69:15:D7:64:B1:85:2F:5A:A5:54:07:7F"
+      ]
     }
   }
 ]
