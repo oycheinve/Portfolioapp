@@ -154,8 +154,15 @@ export default async function handler(req, res) {
   const path = typeof req.query?.path === 'string' ? req.query.path : new URL(req.url, 'http://localhost').searchParams.get('path') || '';
   const result = await proxyYahoo(path);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  // Notowania muszą być świeże – bez długiego serwowania starej odpowiedzi z pamięci CDN
-  res.setHeader('Cache-Control', result.status === 200 ? 's-maxage=15, stale-while-revalidate=15' : 'no-store');
+  // Bieżące notowania (range=5d, interval=1d) – nigdy z pamięci podręcznej (CDN Vercel, przeglądarka, pośrednicy):
+  // po weekendzie odpowiedź z piątku nie może zostać podana w poniedziałek. Historia (lata) – krótki cache w CDN.
+  const quote = /[?&]range=5d(&|$)/.test(path) && /[?&]interval=1d(&|$)/.test(path);
+  const noStore = 'no-store, no-cache, must-revalidate, max-age=0';
+  res.setHeader('Cache-Control', result.status === 200 && !quote ? 's-maxage=60, stale-while-revalidate=60' : noStore);
+  if (quote || result.status !== 200) {
+    res.setHeader('CDN-Cache-Control', 'no-store');
+    res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
+  }
   if (result.source) res.setHeader('X-Quote-Source', result.source);
   if (result.errors?.length) res.setHeader('X-Quote-Errors', result.errors.join('; ').replace(/[^\x20-\x7e]/g, '?').slice(0, 500));
   res.statusCode = result.status;

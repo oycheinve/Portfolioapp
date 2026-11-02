@@ -1,7 +1,7 @@
 // Moduł notowań: Yahoo Finance (GPW .WA, ETF-y z giełd zagranicznych) + kursy walut NBP.
 // Trasy do Yahoo (serwer aplikacji → proxy z ustawień → publiczne proxy CORS) w yahooFetch.js.
 // Gdy Yahoo jest niedostępne: ostatnie znane notowanie albo cena z transakcji (bez losowych danych); źródło kursów w toaście i konsoli.
-import { fetchYahooData, mapLimited, normalizeYahooSymbol, resetYahooCooldowns, yahooSymbolFor } from './yahooFetch.js';
+import { fetchYahooData, mapLimited, normalizeYahooSymbol, resetYahooCooldowns, resetYahooRoutes, yahooSymbolFor } from './yahooFetch.js';
 
 const TIMEOUT_MS = 7000;
 const FX_CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF'];
@@ -10,7 +10,7 @@ async function fetchJson(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    const res = await fetch(url, { signal: controller.signal, cache: 'no-store', headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     return JSON.parse(text);
@@ -68,8 +68,8 @@ function parseYahooChart(json) {
   return { price: p, prevClose: pc, currency, marketTime: meta.regularMarketTime ? meta.regularMarketTime * 1000 : null };
 }
 
-export async function fetchYahooQuote(symbol, corsProxy) {
-  const { json, via } = await fetchYahooData(yahooChartPath(normalizeYahooSymbol(symbol)), { corsProxy, validate: parseYahooChart });
+export async function fetchYahooQuote(symbol, corsProxy, { fresh = false } = {}) {
+  const { json, via } = await fetchYahooData(yahooChartPath(normalizeYahooSymbol(symbol)), { corsProxy, validate: parseYahooChart, fresh });
   // Serwer aplikacji podaje zapasowo notowanie ze Stooq (gdy Yahoo odrzuca zapytania) – w tym samym formacie
   const provider = json?.chart?.result?.[0]?.meta?.dataSource === 'Stooq' ? 'Stooq' : 'Yahoo';
   return { ...parseYahooChart(json), source: `${provider} (${via})` };
@@ -87,10 +87,10 @@ export async function fetchNbpRates() {
   return { rates, source: `NBP tabela ${table.no} (${table.effectiveDate})` };
 }
 
-async function fetchYahooFx(corsProxy) {
+async function fetchYahooFx(corsProxy, fresh = false) {
   const rates = { PLN: 1 };
   for (const c of FX_CURRENCIES) {
-    const q = await fetchYahooQuote(`${c}PLN=X`, corsProxy);
+    const q = await fetchYahooQuote(`${c}PLN=X`, corsProxy, { fresh });
     rates[c] = q.price;
   }
   return { rates, source: 'Yahoo FX' };
@@ -142,10 +142,14 @@ function reconstructedPrice(instrument, trades) {
 
 // Główna funkcja odświeżania: zwraca nowe notowania + kursy + dziennik zdarzeń.
 // mode: 'auto' (Yahoo/NBP, a przy braku sieci ostatnie znane dane lub ceny z transakcji) | 'mock' (wyłącznie symulacja)
-export async function refreshAllPrices({ instruments, previous, corsProxy, mode = 'auto', trades = [] }) {
+// force – ręczne odświeżenie: pełny reset tras i zapytania z pominięciem wszelkiej pamięci podręcznej (fresh=1)
+export async function refreshAllPrices({ instruments, previous, corsProxy, mode = 'auto', trades = [], force = false }) {
   const log = [];
   const now = new Date().toISOString();
-  if (mode !== 'mock') resetYahooCooldowns();
+  if (mode !== 'mock') {
+    if (force) resetYahooRoutes();
+    else resetYahooCooldowns();
+  }
   const quotes = {};
   let liveCount = 0;
   let fallbackCount = 0;
@@ -161,7 +165,7 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
     } catch (e) {
       log.push({ level: 'info', message: `NBP niedostępne (${e.message}) – próba Yahoo FX` });
       try {
-        fx = await fetchYahooFx(corsProxy);
+        fx = await fetchYahooFx(corsProxy, force);
       } catch {
         // Ostatnie znane kursy (bez losowania); przy pierwszym uruchomieniu – kursy domyślne
         const prev = previous?.fx;
@@ -182,7 +186,7 @@ export async function refreshAllPrices({ instruments, previous, corsProxy, mode 
     const symbol = yahooSymbolFor(inst);
     if (symbol) {
       try {
-        const q = await fetchYahooQuote(symbol, corsProxy);
+        const q = await fetchYahooQuote(symbol, corsProxy, { fresh: force });
         quotes[inst.id] = { ...q, currency: q.currency || inst.currency, updatedAt: now };
         routesUsed.add(q.source.replace(/^(\w+) \((.*)\)$/, (_, p, r) => (p === 'Yahoo' ? r : `${r} · ${p}`)));
         liveCount += 1;

@@ -50,6 +50,21 @@ function useSystemDark() {
   return dark;
 }
 
+const RETRY_MS = 3 * 60 * 1000;
+const RETRY_MAX = 15;
+const RETRY_UNTIL_MIN = 10 * 60; // ponawianie tylko do 10:00 czasu polskiego
+const warsawDayOf = (t) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
+
+// Notowania GPW pobrane na żywo, ale z sesji wcześniejszej niż dzisiejsza (opóźnienie danych tuż po otwarciu sesji)
+export function delayedSessionQuotes(instruments, quotes = {}, now = Date.now()) {
+  const today = warsawDayOf(now);
+  return instruments.filter((inst) => {
+    const q = quotes[inst.id];
+    const gpw = /\.WA$/i.test(inst.yahooSymbol || '') || (!inst.yahooSymbol && (inst.currency || 'PLN') === 'PLN');
+    return gpw && q && !q.stale && Number.isFinite(q.marketTime) && /yahoo|stooq/i.test(q.source || '') && warsawDayOf(q.marketTime) < today;
+  });
+}
+
 export function AppProvider({ children, cloud = null }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadInitialState);
   const [refreshing, setRefreshing] = useState(false);
@@ -146,8 +161,13 @@ export function AppProvider({ children, cloud = null }) {
   // kolejnych odświeżeń; ponowne kliknięcie w trakcie pobierania nie uruchamia drugiego
   // Bezpiecznik: pobieranie trwające ponad 2 min (zawieszone połączenie) nie blokuje kolejnego odświeżenia
   const pricesInflight = useRef(0);
+  // Poranek sesji (zwłaszcza poniedziałek po weekendzie): Yahoo podaje GPW z ok. 15-min opóźnieniem, więc tuż po 9:00
+  // przychodzą jeszcze notowania z poprzedniej sesji. Wtedy ponowienie co 3 min (do 10:00), aż przyjdą dzisiejsze.
+  const retryTimer = useRef(null);
+  const retries = useRef({ day: '', count: 0 });
   const refreshPrices = useCallback(
-    async (modeOverride, { silent = false } = {}) => {
+    async (modeOverride, { silent = false, force = !silent } = {}) => {
+      clearTimeout(retryTimer.current);
       if (pricesInflight.current && Date.now() - pricesInflight.current < 120000) return;
       const runId = Date.now();
       pricesInflight.current = runId;
@@ -160,6 +180,7 @@ export function AppProvider({ children, cloud = null }) {
           corsProxy: s.settings.corsProxy,
           mode: modeOverride || s.settings.priceMode,
           trades: s.trades,
+          force,
         });
         // Wynik starszego (zawieszonego) pobierania nie nadpisuje nowszego
         if (pricesInflight.current !== runId) return;
@@ -173,6 +194,18 @@ export function AppProvider({ children, cloud = null }) {
         else if (result.status === 'partial') notify(`Kursy: ${result.live} na żywo, ${result.fallback} z danych awaryjnych (ostatnie znane / transakcje)${route}${why}`, 'warn');
         else if (result.status === 'offline') notify(`Notowania niedostępne – kursy z danych awaryjnych (ostatnie znane i ceny z transakcji)${why}`, 'warn');
         else if (!silent) notify(result.log[0]?.message || 'Zaktualizowano notowania', 'success');
+
+        const delayed = delayedSessionQuotes(s.instruments, result.quotes);
+        const today = isoDay(new Date());
+        if (retries.current.day !== today) retries.current = { day: today, count: 0 };
+        const { minutes } = warsawClock();
+        if (delayed.length && isWarsawMarketOpen() && minutes < RETRY_UNTIL_MIN && retries.current.count < RETRY_MAX) {
+          retries.current.count += 1;
+          if (!silent) notify(`${delayed.length} ${delayed.length === 1 ? 'notowanie jest' : 'notowań jest'} jeszcze z poprzedniej sesji (opóźnienie Yahoo ok. 15 min) – ponowię za 3 min`, 'info');
+          retryTimer.current = setTimeout(() => {
+            if (document.visibilityState !== 'hidden') refreshPrices(undefined, { silent: true });
+          }, RETRY_MS);
+        }
       } catch {
         dispatch({ type: 'SET_PRICES', payload: { status: 'offline' } });
         if (!silent) notify('Nie udało się odświeżyć notowań – spróbuj ponownie za chwilę', 'warn');
@@ -230,11 +263,17 @@ export function AppProvider({ children, cloud = null }) {
     const { weekday, minutes } = warsawClock();
     const openAt = MARKET_OPEN_MIN + 1;
     const atOpen = weekday !== 'Sat' && weekday !== 'Sun' && minutes < openAt ? setTimeout(onEnter, (openAt - minutes) * 60000) : null;
+    // …i drugie po upływie opóźnienia Yahoo (ok. 15 min), gdy pierwsze dało jeszcze notowania z poprzedniej sesji
+    const afterDelay = weekday !== 'Sat' && weekday !== 'Sun' && minutes < MARKET_OPEN_MIN + 17 ? setTimeout(() => {
+      if (document.visibilityState !== 'hidden' && delayedSessionQuotes(stateRef.current.instruments, stateRef.current.prices.quotes).length) refreshPrices(undefined, { silent: true });
+    }, (MARKET_OPEN_MIN + 17 - minutes) * 60000) : null;
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('focus', onEnter);
     return () => {
       clearTimeout(start);
       clearTimeout(atOpen);
+      clearTimeout(afterDelay);
+      clearTimeout(retryTimer.current);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', onEnter);
     };

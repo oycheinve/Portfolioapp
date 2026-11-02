@@ -28,6 +28,16 @@ export function resetYahooCooldowns() {
   for (const k of Object.keys(failedAt)) delete failedAt[k];
 }
 
+// Ręczne odświeżenie: pełny reset stanu tras (odpoczynek i zapamiętana trasa) – kolejność od serwera aplikacji
+export function resetYahooRoutes() {
+  resetYahooCooldowns();
+  try {
+    localStorage.removeItem(PREFERRED_KEY);
+  } catch {
+    // brak localStorage
+  }
+}
+
 function readPreferred() {
   try {
     return localStorage.getItem(PREFERRED_KEY);
@@ -59,7 +69,7 @@ function customRoute(corsProxy) {
 function routes(corsProxy, ignoreCooldown = false) {
   // Serwer aplikacji sam próbuje query1 i query2 – jedna trasa
   // `t` – znacznik czasu poza ścieżką Yahoo: omija pamięć podręczną przeglądarki i CDN, serwer go nie przekazuje dalej
-  const list = [{ id: 'app', label: 'serwer aplikacji', wrap: (_url, path) => `/api/yahoo?path=${encodeURIComponent(path)}&t=${Date.now()}`, singleHost: true }];
+  const list = [{ id: 'app', label: 'serwer aplikacji', wrap: (_url, path, fresh) => `/api/yahoo?path=${encodeURIComponent(path)}&t=${Date.now()}${fresh ? '&fresh=1' : ''}`, singleHost: true }];
   const custom = customRoute(corsProxy);
   if (custom) list.push(custom);
   list.push(...PUBLIC_PROXIES);
@@ -103,7 +113,7 @@ function report(entry) {
 // Ścieżka API Yahoo (np. /v8/finance/chart/PKO.WA?range=5d&interval=1d) → JSON; validate(json) rzuca, gdy dane są niepełne.
 // Kolejno wszystkie dostępne trasy; przy błędzie HTTP danej trasy także druga domena Yahoo (query2). Gdy wszystkie trasy
 // zawiodły przed chwilą (odpoczywają) – szybka odpowiedź bez ponownego czekania (dane awaryjne), po przerwie – nowa próba.
-export async function fetchYahooData(path, { corsProxy, validate } = {}) {
+export async function fetchYahooData(path, { corsProxy, validate, fresh = false } = {}) {
   const errors = [];
   const list = routes(corsProxy);
   if (!list.length) {
@@ -114,7 +124,7 @@ export async function fetchYahooData(path, { corsProxy, validate } = {}) {
   for (const route of list) {
     for (const host of route.singleHost ? [YAHOO_HOSTS[0]] : YAHOO_HOSTS) {
       try {
-        const raw = await fetchJsonWithTimeout(route.wrap(`${host}${path}`, path), route.id === 'app' ? APP_TIMEOUT_MS : TIMEOUT_MS);
+        const raw = await fetchJsonWithTimeout(route.wrap(`${host}${path}`, path, fresh), route.id === 'app' ? APP_TIMEOUT_MS : TIMEOUT_MS);
         const json = route.unwrap ? route.unwrap(raw) : raw;
         if (validate) validate(json);
         savePreferred(route.id);
