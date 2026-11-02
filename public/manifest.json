@@ -2,7 +2,7 @@
   "id": "/",
   "name": "FinTrack",
   "short_name": "FinTrack",
-  "description": "FinTrack – portfel inwestycyjny (XTB, IKE/IKZE), notowania, dywidendy, cele FIRE, budżet i zadania w jednej aplikacji.",
+  "description": "FinTrack – zaawansowana aplikacja do zarządzania portfelem inwestycyjnym, budżetem i codziennymi zadaniami.",
   "lang": "pl",
   "dir": "ltr",
   "start_url": "/?source=pwa",

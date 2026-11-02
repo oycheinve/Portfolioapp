@@ -6,7 +6,7 @@
 //  • /api/yahoo, /api/news i wszystkie zapytania do innych domen (Supabase, Yahoo, NBP…) – NIGDY z pamięci
 //    (świeże notowania i dane; bez sieci aplikacja używa własnych danych awaryjnych).
 // Wersja w nazwie pamięci – przy zmianie poprzednie pamięci są usuwane.
-const VERSION = 'fintrack-v3'; // nowa nazwa i ikony – stare pamięci (majatek-*) usuwane przy aktywacji
+const VERSION = 'fintrack-v4'; // zmiana wersji odświeża zapamiętany manifest i ikony; stare pamięci usuwane przy aktywacji
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const MEDIA = `${VERSION}-media`;
