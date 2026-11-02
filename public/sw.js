@@ -1,4 +1,4 @@
-// Service worker „Mój Majątek” (PWA): praca offline powłoki aplikacji i powiadomienia.
+// Service worker FinTrack (PWA): praca offline powłoki aplikacji i powiadomienia.
 // Zasady pamięci podręcznej:
 //  • nawigacja (index.html) – najpierw sieć, bez sieci ostatnia zapisana wersja (aplikacja startuje offline);
 //  • /assets/* (pliki z hashem w nazwie, niezmienne) – z pamięci, w tle brak potrzeby odświeżania;
@@ -6,11 +6,11 @@
 //  • /api/yahoo, /api/news i wszystkie zapytania do innych domen (Supabase, Yahoo, NBP…) – NIGDY z pamięci
 //    (świeże notowania i dane; bez sieci aplikacja używa własnych danych awaryjnych).
 // Wersja w nazwie pamięci – przy zmianie poprzednie pamięci są usuwane.
-const VERSION = 'majatek-v2';
+const VERSION = 'fintrack-v3'; // nowa nazwa i ikony – stare pamięci (majatek-*) usuwane przy aktywacji
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const MEDIA = `${VERSION}-media`;
-const PRECACHE = ['/', '/index.html', '/manifest.json', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+const PRECACHE = ['/', '/index.html', '/manifest.json', '/icons/favicon-32.png', '/icons/icon-96.png', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

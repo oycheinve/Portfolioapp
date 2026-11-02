@@ -40,7 +40,7 @@ export async function requestNotificationPermission() {
 // Wysyłka: najpierw przez service worker (wymagane na Androidzie w aplikacji zainstalowanej), potem bezpośrednio
 export async function showNotification(title, { body = '', url = '/', tag } = {}) {
   if (notificationPermission() !== 'granted') return false;
-  const options = { body, tag, icon: '/icons/icon-192.png', badge: '/icons/icon-monochrome-512.png', data: { url }, lang: 'pl' };
+  const options = { body, tag, icon: '/icons/icon-192.png', badge: '/icons/icon-96.png', data: { url }, lang: 'pl' };
   try {
     const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
     if (reg) {

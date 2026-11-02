@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Mój Majątek – portfel i budżet",
-  "short_name": "Majątek",
-  "description": "Portfel inwestycyjny (XTB, IKE/IKZE), notowania, dywidendy, cele FIRE, budżet i zadania – w jednej aplikacji.",
+  "name": "FinTrack",
+  "short_name": "FinTrack",
+  "description": "FinTrack – portfel inwestycyjny (XTB, IKE/IKZE), notowania, dywidendy, cele FIRE, budżet i zadania w jednej aplikacji.",
   "lang": "pl",
   "dir": "ltr",
   "start_url": "/?source=pwa",
@@ -10,8 +10,8 @@
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#0b0e19",
+  "theme_color": "#0b0e19",
   "categories": ["finance", "productivity", "business"],
   "prefer_related_applications": false,
   "launch_handler": { "client_mode": ["navigate-existing", "auto"] },
@@ -28,8 +28,7 @@
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icons/icon-monochrome-512.png", "sizes": "512x512", "type": "image/png", "purpose": "monochrome" }
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
     { "name": "Pulpit", "short_name": "Pulpit", "description": "Majątek i statystyki portfela", "url": "/#/dashboard", "icons": [{ "src": "/icons/shortcut-dashboard.png", "sizes": "96x96", "type": "image/png" }] },
@@ -38,8 +37,8 @@
     { "name": "Zadania na dziś", "short_name": "Zadania", "description": "Zadania dzienne, tygodniowe i miesięczne", "url": "/#/tasks", "icons": [{ "src": "/icons/shortcut-tasks.png", "sizes": "96x96", "type": "image/png" }] }
   ],
   "screenshots": [
-    { "src": "/screenshots/mobile-dashboard.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Pulpit – majątek i statystyki portfela" },
+    { "src": "/screenshots/mobile-dashboard.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "FinTrack – Pulpit: majątek i statystyki portfela" },
     { "src": "/screenshots/mobile-tasks.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Zadania dzienne, tygodniowe i miesięczne" },
-    { "src": "/screenshots/desktop-dashboard.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Pulpit na komputerze" }
+    { "src": "/screenshots/desktop-dashboard.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "FinTrack na komputerze" }
   ]
 }

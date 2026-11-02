@@ -26,7 +26,7 @@ export default function NotificationsCard() {
     return undefined;
   };
   const test = async () => {
-    const ok = await showNotification('Mój Majątek', { body: 'Powiadomienia działają ✓', url: '/#/settings', tag: 'test' });
+    const ok = await showNotification('FinTrack', { body: 'Powiadomienia działają ✓', url: '/#/settings', tag: 'test' });
     if (!ok) actions.notify('Nie udało się wyświetlić powiadomienia – sprawdź zgodę w ustawieniach telefonu', 'warn');
   };
   const on = settings.enabled && permission === 'granted';
