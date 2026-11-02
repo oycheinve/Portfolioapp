@@ -4,6 +4,7 @@ import { useApp } from '../../state/AppContext.jsx';
 import { MissingTablesError } from '../../lib/weeklyTasks.js';
 import { daysLeftInMonth, hasTarget, historyMonths, makeMonthlyTask, monthDoneSet, monthId, monthKey, monthLabel, monthProgress, monthProgressMap, monthlyCloudStore, monthlyLocalStore, shiftMonthId, tasksForMonth } from '../../lib/monthlyTasks.js';
 import { Card, Segmented } from '../ui.jsx';
+import ScheduledCard, { PlanInput } from './ScheduledCard.jsx';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 const plDays = (n) => (n === 1 ? 'dzień' : 'dni');
@@ -80,6 +81,16 @@ export default function MonthlyTasksPanel({ onDataChange }) {
   const progress = monthProgress(data.tasks, doneSet, month);
   const history = useMemo(() => historyMonths(data.tasks, doneSet, current), [data.tasks, doneSet, current]);
   const isCurrent = month === current;
+  const isFuture = month > current; // zaplanowany miesiąc: dodawanie i usuwanie, odhaczanie / postęp dopiero w nim
+  const canEdit = month >= current;
+  const scheduled = useMemo(
+    () =>
+      data.tasks
+        .filter((t) => t.month > current && (!t.archivedMonth || t.archivedMonth > t.month))
+        .sort((a, b) => a.month.localeCompare(b.month) || a.title.localeCompare(b.title, 'pl'))
+        .map((t) => ({ id: t.id, title: t.title, isRecurring: t.isRecurring, period: t.month, label: monthLabel(t.month) })),
+    [data.tasks, current],
+  );
 
   // Postęp w miesiącu: zapis wartości i stanu wykonania (wykonane = cel osiągnięty)
   const setProgressValue = (task, value) => {
@@ -167,11 +178,12 @@ export default function MonthlyTasksPanel({ onDataChange }) {
           </button>
           <div className="min-w-0 flex-1 text-center">
             <h2 className="text-base font-semibold first-letter:uppercase">
-              {monthLabel(month)} {isCurrent ? <span className="text-blue-600 dark:text-blue-400">· bieżący miesiąc</span> : <span className="text-stone-400">· historia</span>}
+              {monthLabel(month)}{' '}
+              {isCurrent ? <span className="text-blue-600 dark:text-blue-400">· bieżący miesiąc</span> : isFuture ? <span className="text-violet-600 dark:text-violet-400">· zaplanowany</span> : <span className="text-stone-400">· historia</span>}
             </h2>
-            <p className="text-xs text-stone-500 dark:text-stone-400">{isCurrent ? `Do końca miesiąca: ${daysLeftInMonth(month)} ${plDays(daysLeftInMonth(month))}` : 'Miesiąc zakończony'}</p>
+            <p className="text-xs text-stone-500 dark:text-stone-400">{isCurrent ? `Do końca miesiąca: ${daysLeftInMonth(month)} ${plDays(daysLeftInMonth(month))}` : isFuture ? 'Miesiąc jeszcze się nie zaczął' : 'Miesiąc zakończony'}</p>
           </div>
-          <button type="button" className={navBtn} onClick={() => setMonth(shiftMonthId(month, 1))} disabled={isCurrent} aria-label="Następny miesiąc">
+          <button type="button" className={navBtn} onClick={() => setMonth(shiftMonthId(month, 1))} aria-label="Następny miesiąc">
             <ChevronRight size={18} />
           </button>
         </div>
@@ -196,7 +208,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
         </div>
       </section>
 
-      {isCurrent && (
+      {canEdit && (
         <form onSubmit={add} className="flex flex-col gap-2 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center dark:border-white/10 dark:bg-neutral-900" aria-label="Nowe zadanie miesięczne">
           <input
             value={title}
@@ -213,7 +225,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
               onChange={setKind}
               ariaLabel="Rodzaj zadania miesięcznego"
               options={[
-                { value: 'HABIT', label: 'Co miesiąc' },
+                { value: 'HABIT', label: isCurrent ? 'Co miesiąc' : 'Co miesiąc od tego' },
                 { value: 'TODAY', label: 'Tylko w tym miesiącu' },
               ]}
             />
@@ -222,10 +234,13 @@ export default function MonthlyTasksPanel({ onDataChange }) {
               disabled={!title.trim() || (withTarget && !(Number(String(goal.target).replace(',', '.')) > 0))}
               className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:text-neutral-950"
             >
-              <Plus size={16} /> Dodaj
+              <Plus size={16} /> {isCurrent ? 'Dodaj' : 'Zaplanuj'}
             </button>
           </div>
           <div className="w-full sm:basis-full">
+            <div className="mb-2">
+              <PlanInput type="month" value={month} min={current} onChange={(v) => setMonth(v)} label="Miesiąc zadania" />
+            </div>
             <button
               type="button"
               onClick={() => setWithTarget((v) => !v)}
@@ -263,7 +278,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
           {groups.map((g) => (
             <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(monthKey(t.id, month))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
               {g.items.length === 0 ? (
-                <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'H' ? 'Dodaj zadanie „Co miesiąc” – np. głęboki audyt portfela.' : 'Brak zadań tylko na ten miesiąc.') : 'Brak zadań.'}</p>
+                <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'H' ? 'Dodaj zadanie „Co miesiąc” – np. głęboki audyt portfela.' : 'Brak zadań tylko na ten miesiąc.') : isFuture ? 'Brak zadań zaplanowanych na ten miesiąc.' : 'Brak zadań.'}</p>
               ) : (
                 <ul className="space-y-1">
                   {g.items.map((t) => {
@@ -275,7 +290,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
                     return (
                       <li key={t.id} className="group rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
                        <div className="flex items-center gap-2">
-                        <button type="button" role="checkbox" aria-checked={done} onClick={() => toggle(t)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left">
+                        <button type="button" role="checkbox" aria-checked={done} onClick={() => toggle(t)} disabled={isFuture} title={isFuture ? 'Odhaczysz w tym miesiącu' : undefined} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default">
                           <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>
                             {done && <Check size={15} strokeWidth={3} />}
                           </span>
@@ -286,7 +301,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
                             </span>
                           )}
                         </button>
-                        {isCurrent && progressReady && (
+                        {canEdit && progressReady && (
                           <button
                             type="button"
                             onClick={() => setEditing(editing?.id === t.id ? null : { id: t.id, target: target ?? '', unit: t.unit || '', step: t.step ?? 1 })}
@@ -297,7 +312,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
                             <Pencil size={14} />
                           </button>
                         )}
-                        {isCurrent && (
+                        {canEdit && (
                           <button
                             type="button"
                             onClick={() => remove(t)}
@@ -322,7 +337,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
                               <div className={`h-full rounded-full transition-all ${done ? 'bg-emerald-500' : 'bg-blue-600 dark:bg-blue-500'}`} style={{ width: `${share * 100}%` }} />
                             </div>
                             <div className="mt-1.5 flex items-center gap-1">
-                              <button type="button" className={stepBtn} onClick={() => bump(t, -1)} disabled={value <= 0} aria-label={`Zmniejsz: ${t.title}`}>
+                              <button type="button" className={stepBtn} onClick={() => bump(t, -1)} disabled={value <= 0 || isFuture} aria-label={`Zmniejsz: ${t.title}`}>
                                 <Minus size={14} />
                               </button>
                               <input
@@ -331,10 +346,11 @@ export default function MonthlyTasksPanel({ onDataChange }) {
                                 step={t.step || 1}
                                 value={value}
                                 onChange={(e) => setProgressValue(t, e.target.value)}
+                                disabled={isFuture}
                                 aria-label={`Postęp: ${t.title}`}
                                 className="h-8 w-20 rounded-lg border border-stone-200 bg-white px-2 text-center text-sm tabular outline-none focus:border-blue-500 dark:border-white/10 dark:bg-neutral-800"
                               />
-                              <button type="button" className={stepBtn} onClick={() => bump(t, 1)} aria-label={`Zwiększ: ${t.title}`}>
+                              <button type="button" className={stepBtn} onClick={() => bump(t, 1)} disabled={isFuture} aria-label={`Zwiększ: ${t.title}`}>
                                 <Plus size={14} />
                               </button>
                               <span className="ml-1 text-[11px] text-stone-400">krok {fmtNum(Number(t.step) || 1)}</span>
@@ -369,6 +385,11 @@ export default function MonthlyTasksPanel({ onDataChange }) {
           ))}
         </div>
       )}
+
+      <ScheduledCard items={scheduled} onOpen={(p) => {
+        setMonth(p);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }} unitLabel="miesiące" />
 
       <Card title="Historia miesięcy" subtitle="Wykonanie zadań w minionych miesiącach – kliknij, aby zobaczyć szczegóły" icon={History} bodyClassName="p-2 sm:p-3">
         {history.length === 0 ? (

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Archive, CalendarCheck2, Check, ChevronLeft, ChevronRight, Cloud, Gauge, HardDrive, ListChecks, Plus, Repeat, Target, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { MissingTablesError, archiveWeeks, cloudStore, localStore, logKey, makeTask, shiftWeek, tasksForWeek, weekId, weekLabel, weekNumber, weekProgress } from '../lib/weeklyTasks.js';
+import { MissingTablesError, archiveWeeks, cloudStore, localStore, logKey, makeTask, shiftWeek, tasksForWeek, weekId, weekLabel, weekNumber, weekProgress, weekStart } from '../lib/weeklyTasks.js';
+import ScheduledCard, { PlanInput } from '../components/tasks/ScheduledCard.jsx';
+import { dayId } from '../lib/dailyTasks.js';
 import { Card, Segmented } from '../components/ui.jsx';
 import DailyTasksPanel from '../components/tasks/DailyTasksPanel.jsx';
 import MonthlyTasksPanel from '../components/tasks/MonthlyTasksPanel.jsx';
@@ -169,6 +171,16 @@ function WeeklyTasksPanel({ onDataChange }) {
   const archive = useMemo(() => archiveWeeks(data.tasks, doneSet, current), [data.tasks, doneSet, current]);
   const isCurrent = week === current;
   const isPast = week < current;
+  const isFuture = week > current; // zaplanowany tydzień: dodawanie i usuwanie, odhaczanie dopiero w tym tygodniu
+  const canEdit = !isPast;
+  const scheduled = useMemo(
+    () =>
+      data.tasks
+        .filter((t) => t.weekId > current && (!t.archivedWeek || t.archivedWeek > t.weekId))
+        .sort((a, b) => a.weekId.localeCompare(b.weekId) || a.title.localeCompare(b.title, 'pl'))
+        .map((t) => ({ id: t.id, title: t.title, isRecurring: t.isRecurring, period: t.weekId, label: `Tydz. ${weekNumber(t.weekId)} · ${weekLabel(t.weekId).split(' – ')[0]}` })),
+    [data.tasks, current],
+  );
 
   const toggle = (task) => {
     const done = !doneSet.has(logKey(task.id, week));
@@ -216,11 +228,11 @@ function WeeklyTasksPanel({ onDataChange }) {
           </button>
           <div className="min-w-0 flex-1 text-center">
             <h2 className="text-base font-semibold">
-              Tydzień {weekNumber(week)} {isCurrent ? <span className="text-blue-600 dark:text-blue-400">· bieżący</span> : isPast ? <span className="text-stone-400">· archiwum</span> : null}
+              Tydzień {weekNumber(week)} {isCurrent ? <span className="text-blue-600 dark:text-blue-400">· bieżący</span> : isPast ? <span className="text-stone-400">· archiwum</span> : <span className="text-violet-600 dark:text-violet-400">· zaplanowany</span>}
             </h2>
             <p className="text-xs text-stone-500 tabular dark:text-stone-400">{weekLabel(week)}</p>
           </div>
-          <button type="button" className={navBtn} onClick={() => setWeek(shiftWeek(week, 1))} disabled={!isPast} aria-label="Następny tydzień">
+          <button type="button" className={navBtn} onClick={() => setWeek(shiftWeek(week, 1))} aria-label="Następny tydzień">
             <ChevronRight size={18} />
           </button>
         </div>
@@ -245,8 +257,8 @@ function WeeklyTasksPanel({ onDataChange }) {
         </div>
       </section>
 
-      {isCurrent && (
-        <form onSubmit={add} className="flex flex-col gap-2 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center dark:border-white/10 dark:bg-neutral-900" aria-label="Nowe zadanie">
+      {canEdit && (
+        <form onSubmit={add} className="flex flex-col gap-2 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center dark:border-white/10 dark:bg-neutral-900" aria-label="Nowe zadanie">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -262,13 +274,16 @@ function WeeklyTasksPanel({ onDataChange }) {
               onChange={setRecurring}
               ariaLabel="Rodzaj zadania"
               options={[
-                { value: 'RECURRING', label: 'Co tydzień' },
+                { value: 'RECURRING', label: isCurrent ? 'Co tydzień' : 'Co tydzień od tego' },
                 { value: 'ONCE', label: 'Jednorazowe' },
               ]}
             />
             <button type="submit" disabled={!title.trim()} className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:text-neutral-950">
-              <Plus size={16} /> Dodaj
+              <Plus size={16} /> {isCurrent ? 'Dodaj' : 'Zaplanuj'}
             </button>
+          </div>
+          <div className="w-full sm:basis-full">
+            <PlanInput value={dayId(weekStart(week))} min={dayId(weekStart(current))} onChange={(v) => setWeek(weekId(new Date(`${v}T12:00:00`)))} label="Tydzień zadania (dowolny dzień tygodnia)" />
           </div>
         </form>
       )}
@@ -280,7 +295,7 @@ function WeeklyTasksPanel({ onDataChange }) {
           {groups.map((g) => (
             <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(logKey(t.id, week))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
               {g.items.length === 0 ? (
-                <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'R' ? 'Dodaj zadanie „Co tydzień” – np. nawyk lub stały przegląd.' : 'Brak zadań jednorazowych w tym tygodniu.') : 'Brak zadań.'}</p>
+                <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'R' ? 'Dodaj zadanie „Co tydzień” – np. nawyk lub stały przegląd.' : 'Brak zadań jednorazowych w tym tygodniu.') : isFuture ? 'Brak zadań zaplanowanych na ten tydzień.' : 'Brak zadań.'}</p>
               ) : (
                 <ul className="space-y-1">
                   {g.items.map((t) => {
@@ -292,7 +307,9 @@ function WeeklyTasksPanel({ onDataChange }) {
                           role="checkbox"
                           aria-checked={done}
                           onClick={() => toggle(t)}
-                          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left"
+                          disabled={isFuture}
+                          title={isFuture ? 'Odhaczysz w tym tygodniu' : undefined}
+                          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default"
                         >
                           <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>
                             {done && <Check size={15} strokeWidth={3} />}
@@ -300,7 +317,7 @@ function WeeklyTasksPanel({ onDataChange }) {
                           <span className={`min-w-0 flex-1 text-sm break-words ${done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{t.title}</span>
                           {t.isRecurring && <Repeat size={13} className="shrink-0 text-stone-300 dark:text-stone-600" aria-label="cykliczne" />}
                         </button>
-                        {isCurrent && (
+                        {canEdit && (
                           <button
                             type="button"
                             onClick={() => remove(t)}
@@ -320,6 +337,11 @@ function WeeklyTasksPanel({ onDataChange }) {
           ))}
         </div>
       )}
+
+      <ScheduledCard items={scheduled} onOpen={(p) => {
+        setWeek(p);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }} unitLabel="tygodnie" />
 
       <Card title="Archiwum tygodni" subtitle="Wykonanie zadań w minionych tygodniach – kliknij, aby zobaczyć szczegóły" icon={Archive} bodyClassName="p-2 sm:p-3">
         {archive.length === 0 ? (

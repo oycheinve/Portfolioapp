@@ -4,6 +4,7 @@ import { useApp } from '../../state/AppContext.jsx';
 import { MissingTablesError } from '../../lib/weeklyTasks.js';
 import { dailyCloudStore, dailyLocalStore, dayId, dayKey, dayLabel, dayProgress, dayShort, habitStreak, historyDays, makeDailyTask, shiftDay, tasksForDay } from '../../lib/dailyTasks.js';
 import { Card, Segmented } from '../ui.jsx';
+import ScheduledCard, { PlanInput } from './ScheduledCard.jsx';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 const plDays = (n) => (n === 1 ? 'dzień' : 'dni');
@@ -58,6 +59,17 @@ export default function DailyTasksPanel({ onDataChange }) {
   const progress = dayProgress(data.tasks, doneSet, day);
   const history = useMemo(() => historyDays(data.tasks, doneSet, today), [data.tasks, doneSet, today]);
   const isToday = day === today;
+  const isFuture = day > today; // zaplanowany dzień: dodawanie i usuwanie tak, odhaczanie dopiero w tym dniu
+  const canEdit = day >= today;
+  // Zadania zaplanowane na przyszłe dni (od dnia startu nawyku / dzień zadania jednodniowego)
+  const scheduled = useMemo(
+    () =>
+      data.tasks
+        .filter((t) => t.day > today && (!t.archivedDay || t.archivedDay > t.day))
+        .sort((a, b) => a.day.localeCompare(b.day) || a.title.localeCompare(b.title, 'pl'))
+        .map((t) => ({ id: t.id, title: t.title, isRecurring: t.isRecurring, period: t.day, label: dayShort(t.day) })),
+    [data.tasks, today],
+  );
 
   const toggle = (task) => {
     const done = !doneSet.has(dayKey(task.id, day));
@@ -104,11 +116,12 @@ export default function DailyTasksPanel({ onDataChange }) {
           </button>
           <div className="min-w-0 flex-1 text-center">
             <h2 className="text-base font-semibold first-letter:uppercase">
-              {isToday ? 'Dziś' : dayLabel(day).split(',')[0]} {isToday ? <span className="text-blue-600 dark:text-blue-400">· bieżący dzień</span> : <span className="text-stone-400">· historia</span>}
+              {isToday ? 'Dziś' : dayLabel(day).split(',')[0]}{' '}
+              {isToday ? <span className="text-blue-600 dark:text-blue-400">· bieżący dzień</span> : isFuture ? <span className="text-violet-600 dark:text-violet-400">· zaplanowany</span> : <span className="text-stone-400">· historia</span>}
             </h2>
             <p className="text-xs text-stone-500 dark:text-stone-400">{dayLabel(day)}</p>
           </div>
-          <button type="button" className={navBtn} onClick={() => setDay(shiftDay(day, 1))} disabled={isToday} aria-label="Następny dzień">
+          <button type="button" className={navBtn} onClick={() => setDay(shiftDay(day, 1))} aria-label="Następny dzień">
             <ChevronRight size={18} />
           </button>
         </div>
@@ -133,8 +146,8 @@ export default function DailyTasksPanel({ onDataChange }) {
         </div>
       </section>
 
-      {isToday && (
-        <form onSubmit={add} className="flex flex-col gap-2 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center dark:border-white/10 dark:bg-neutral-900" aria-label="Nowe zadanie dzienne">
+      {canEdit && (
+        <form onSubmit={add} className="flex flex-col gap-2 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center dark:border-white/10 dark:bg-neutral-900" aria-label="Nowe zadanie dzienne">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -150,13 +163,16 @@ export default function DailyTasksPanel({ onDataChange }) {
               onChange={setKind}
               ariaLabel="Rodzaj zadania dziennego"
               options={[
-                { value: 'HABIT', label: 'Codziennie' },
-                { value: 'TODAY', label: 'Tylko dziś' },
+                { value: 'HABIT', label: isToday ? 'Codziennie' : 'Codziennie od tego dnia' },
+                { value: 'TODAY', label: isToday ? 'Tylko dziś' : 'Tylko ten dzień' },
               ]}
             />
             <button type="submit" disabled={!title.trim()} className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:text-neutral-950">
-              <Plus size={16} /> Dodaj
+              <Plus size={16} /> {isToday ? 'Dodaj' : 'Zaplanuj'}
             </button>
+          </div>
+          <div className="w-full sm:basis-full">
+            <PlanInput value={day} min={today} onChange={(v) => setDay(v)} label="Dzień zadania" />
           </div>
         </form>
       )}
@@ -168,7 +184,7 @@ export default function DailyTasksPanel({ onDataChange }) {
           {groups.map((g) => (
             <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(dayKey(t.id, day))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
               {g.items.length === 0 ? (
-                <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isToday ? (g.key === 'H' ? 'Dodaj nawyk „Codziennie” – np. zapisanie wydatków.' : 'Brak zadań na dziś.') : 'Brak zadań.'}</p>
+                <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isToday ? (g.key === 'H' ? 'Dodaj nawyk „Codziennie” – np. zapisanie wydatków.' : 'Brak zadań na dziś.') : isFuture ? 'Brak zadań zaplanowanych na ten dzień.' : 'Brak zadań.'}</p>
               ) : (
                 <ul className="space-y-1">
                   {g.items.map((t) => {
@@ -176,7 +192,7 @@ export default function DailyTasksPanel({ onDataChange }) {
                     const streak = t.isRecurring ? habitStreak(t, doneSet, day) : 0;
                     return (
                       <li key={t.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
-                        <button type="button" role="checkbox" aria-checked={done} onClick={() => toggle(t)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left">
+                        <button type="button" role="checkbox" aria-checked={done} onClick={() => toggle(t)} disabled={isFuture} title={isFuture ? 'Odhaczysz w dniu zadania' : undefined} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default">
                           <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>
                             {done && <Check size={15} strokeWidth={3} />}
                           </span>
@@ -187,7 +203,7 @@ export default function DailyTasksPanel({ onDataChange }) {
                             </span>
                           )}
                         </button>
-                        {isToday && (
+                        {canEdit && (
                           <button
                             type="button"
                             onClick={() => remove(t)}
@@ -207,6 +223,11 @@ export default function DailyTasksPanel({ onDataChange }) {
           ))}
         </div>
       )}
+
+      <ScheduledCard items={scheduled} onOpen={(p) => {
+        setDay(p);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }} unitLabel="dni" />
 
       <Card title="Historia dni" subtitle="Wykonanie zadań w ostatnich dniach – kliknij, aby zobaczyć szczegóły" icon={History} bodyClassName="p-2 sm:p-3">
         {history.length === 0 ? (
