@@ -1,4 +1,4 @@
-// Budżet miesięczny (Demo): tabela kategorii jak w arkuszu – plan, wydane, pozostało (plan − wydane), typ.
+// Budżet miesięczny: tabela kategorii jak w arkuszu – plan, wydane, pozostało (plan − wydane), typ.
 // Dane w localStorage (`wealth-app-budget-v1`: { 'RRRR-MM': [wiersze] }) – poza modelem portfela; prefiks
 // „wealth-app-” sprawia, że budżet trafia do kopii zapasowej JSON i synchronizacji ustawień w chmurze.
 

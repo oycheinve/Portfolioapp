@@ -21,7 +21,7 @@ export const NAV_ITEMS = [
   { id: 'fire', label: 'FIRE', longLabel: 'FIRE', icon: Flame },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText, hidden: true },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
-  { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList, mobile: true },
+  { id: 'budget', label: 'Budżet', longLabel: 'Budżet', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper, mobile: true },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings, topbar: true },

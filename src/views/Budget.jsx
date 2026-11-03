@@ -21,7 +21,7 @@ const editInput =
   'h-8 w-full min-w-0 rounded border border-stone-200 bg-white px-1.5 outline-none focus:border-[#1f3864] focus:ring-1 focus:ring-[#1f3864]/30 dark:border-white/10 dark:bg-neutral-800 dark:focus:border-blue-400';
 const leftTone = (v) => (v < -0.004 ? 'text-red-600 dark:text-red-400' : '');
 
-// Budżet miesięczny (Demo) – minimalistyczna tabela wzorowana na arkuszu: Kategoria, Planowany Budżet,
+// Budżet miesięczny – minimalistyczna tabela wzorowana na arkuszu: Kategoria, Planowany Budżet,
 // Kwota Wydana, Pozostało (plan − wydane) i wiersz RAZEM. Podgląd (szybkie zakupy, limit dzienny) i tryb „Edytuj”
 // (nazwy, kwoty, dodawanie i usuwanie kategorii).
 export default function BudgetView() {
@@ -134,7 +134,7 @@ export default function BudgetView() {
     <section className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900">
       <div className="mb-3 flex items-start justify-between gap-2">
         <h2 className="min-w-0 text-lg font-bold text-[#1f3864] sm:text-xl dark:text-blue-300">
-          Budżet na: {monthName(month)} <span className="ml-1 align-middle text-[10px] font-semibold tracking-wide text-amber-600 uppercase dark:text-amber-400">demo</span>
+          Budżet na: {monthName(month)}
         </h2>
         <div className="flex shrink-0 items-center gap-1.5">
           {editing && (
@@ -287,7 +287,7 @@ export default function BudgetView() {
           <RecentEntries entries={entries} rows={rows} onUndo={undoPurchase} />
           <DailyTile rows={rows} month={month} />
           <p className="mt-2 text-right text-[11px] text-stone-400">
-            {isTemplate ? 'Przykładowe kategorie – zmień je w trybie „Edytuj”' : 'Moduł demo · zapis w tej przeglądarce i kopii zapasowej'}
+            {isTemplate ? 'Przykładowe kategorie – zmień je w trybie „Edytuj”' : 'Zapis w tej przeglądarce i kopii zapasowej'}
           </p>
         </>
       )}
