@@ -72,52 +72,73 @@ export default function TasksView() {
 }
 
 const scoreTone = (p) => (p === null ? 'text-stone-400' : p >= 0.8 ? 'text-emerald-600 dark:text-emerald-400' : p >= 0.5 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400');
-const barTone = (p) => (p === null ? 'bg-stone-300 dark:bg-white/10' : p >= 0.8 ? 'bg-emerald-500' : p >= 0.5 ? 'bg-amber-500' : 'bg-red-500');
+const ringTone = (p) => (p === null ? '#a8a29e' : p >= 0.8 ? '#10b981' : p >= 0.5 ? '#f59e0b' : '#ef4444');
 const fmtPct = (p) => (p === null ? '—' : pct(p));
+// Akcenty okresów: dzień – błękit, tydzień – fiolet, miesiąc – bursztyn
+const KINDS = [
+  { key: 'daily', label: 'Dziś', dot: 'bg-sky-400', bar: 'from-sky-500 to-sky-300', text: 'text-sky-600 dark:text-sky-300' },
+  { key: 'weekly', label: 'Ten tydzień', dot: 'bg-violet-400', bar: 'from-violet-500 to-violet-300', text: 'text-violet-600 dark:text-violet-300' },
+  { key: 'monthly', label: 'Ten miesiąc', dot: 'bg-amber-400', bar: 'from-amber-500 to-amber-300', text: 'text-amber-600 dark:text-amber-300' },
+];
+
+// Pierścień postępu (SVG) z wynikiem w środku; kolor wg skuteczności (≥80% zielony, ≥50% bursztyn, niżej czerwony)
+function ScoreRing({ value, loading }) {
+  const r = 34;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="relative h-24 w-24 shrink-0">
+      <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90" aria-hidden="true">
+        <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7" className="stroke-stone-100 dark:stroke-white/[0.07]" />
+        {value !== null && <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7" strokeLinecap="round" stroke={ringTone(value)} strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(1, value))} className="transition-[stroke-dashoffset] duration-700 ease-out" />}
+      </svg>
+      <span className={`absolute inset-0 flex items-center justify-center text-2xl font-bold tracking-tight tabular ${scoreTone(value)}`}>{loading ? '…' : fmtPct(value)}</span>
+    </div>
+  );
+}
 
 // Wskaźnik konsekwencji: wykonane / wymagane do tej pory w bieżących okresach (dziś, ten tydzień, ten miesiąc)
 // oraz skuteczność w okresach zakończonych w ostatnich 30 dniach
 function ConsistencyCard({ data }) {
   const score = useMemo(() => (data ? consistencyScore(data) : null), [data]);
-  const rows = score
-    ? [
-        { key: 'daily', label: 'Dziś', v: score.current.byKind.daily },
-        { key: 'weekly', label: 'Ten tydzień', v: score.current.byKind.weekly },
-        { key: 'monthly', label: 'Ten miesiąc', v: score.current.byKind.monthly },
-      ]
-    : [];
   const main = score?.current.pct ?? null;
   return (
-    <section className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900" aria-label="Konsekwencja">
-      <div className="flex items-center gap-4">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-gradient-to-br dark:from-neutral-900 dark:to-neutral-950" aria-label="Konsekwencja">
+      <div className="flex items-center gap-4 p-4 sm:gap-6 sm:p-5">
+        <ScoreRing value={main} loading={!score} />
         <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">
-            <Gauge size={14} /> Konsekwencja · bieżący okres
+          <h2 className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-stone-500 uppercase dark:text-stone-400">
+            <Gauge size={13} /> Konsekwencja
           </h2>
-          <p className={`mt-1 text-4xl font-extrabold tracking-tight tabular ${scoreTone(main)}`}>{score ? fmtPct(main) : '…'}</p>
-          <p className="text-xs text-stone-500 dark:text-stone-400">{score ? (score.current.total ? `Wykonane ${score.current.done} / ${score.current.total} wymaganych do tej pory` : 'Dodaj zadania, aby zobaczyć skuteczność') : 'Liczenie…'}</p>
-        </div>
-        <div className="w-40 shrink-0 space-y-1.5 sm:w-56">
-          {rows.map((r) => (
-            <div key={r.key} className="text-[11px]">
-              <div className="flex justify-between gap-2 text-stone-500 dark:text-stone-400">
-                <span>{r.label}</span>
-                <span className="font-semibold tabular text-stone-700 dark:text-stone-200">{r.v.total ? `${r.v.done}/${r.v.total}` : '—'}</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-white/[0.06]">
-                <div className={`h-full rounded-full ${barTone(r.v.pct)}`} style={{ width: `${(r.v.pct || 0) * 100}%` }} />
-              </div>
-            </div>
-          ))}
+          <p className="mt-0.5 text-sm font-medium text-stone-800 dark:text-stone-100">{score ? (score.current.total ? `Wykonane ${score.current.done} z ${score.current.total}` : 'Brak wymaganych zadań') : 'Liczenie…'}</p>
+          <p className="text-[11px] text-stone-500 dark:text-stone-400">{score?.current.total ? 'wymaganych do tej pory w bieżącym okresie' : 'Dodaj zadania, aby zobaczyć skuteczność'}</p>
+          {score && (
+            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] text-stone-600 dark:bg-white/[0.06] dark:text-stone-300" title="Zakończone dni, tygodnie i miesiące z ostatnich 30 dni">
+              Ostatnie 30 dni <span className={`font-semibold tabular ${scoreTone(score.rolling.pct)}`}>{fmtPct(score.rolling.pct)}</span>
+              {score.rolling.total ? <span className="tabular text-stone-400 dark:text-stone-500">· {score.rolling.done}/{score.rolling.total}</span> : null}
+            </span>
+          )}
         </div>
       </div>
-      {score && (
-        <p className="mt-3 border-t border-stone-100 pt-2 text-[11px] text-stone-500 dark:border-white/5 dark:text-stone-400">
-          Ostatnie 30 dni (zakończone dni, tygodnie i miesiące):{' '}
-          <span className={`font-semibold tabular ${scoreTone(score.rolling.pct)}`}>{fmtPct(score.rolling.pct)}</span>
-          {score.rolling.total ? ` · ${score.rolling.done}/${score.rolling.total}` : ''}
-        </p>
-      )}
+      <div className="grid grid-cols-3 divide-x divide-stone-100 border-t border-stone-100 dark:divide-white/5 dark:border-white/5">
+        {KINDS.map((k) => {
+          const v = score?.current.byKind[k.key];
+          return (
+            <div key={k.key} className="min-w-0 px-3 py-2.5 sm:px-4">
+              <div className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${k.dot}`} />
+                <span className="truncate">{k.label}</span>
+              </div>
+              <div className="mt-0.5 flex items-baseline gap-1">
+                <span className={`text-base font-semibold tabular ${v?.total ? k.text : 'text-stone-400 dark:text-stone-500'}`}>{v?.total ? fmtPct(v.pct) : '—'}</span>
+                {v?.total ? <span className="text-[11px] tabular text-stone-400 dark:text-stone-500">{v.done}/{v.total}</span> : null}
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-white/[0.06]">
+                <div className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ${k.bar}`} style={{ width: `${(v?.pct || 0) * 100}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -289,62 +310,49 @@ function WeeklyTasksPanel({ onDataChange }) {
         <div className="h-32 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />
       ) : (
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-          {groups.map((g) => {
-            const count = `${g.items.filter((t) => doneSet.has(logKey(t.id, week))).length}/${g.items.length}`;
-            const items = (
-              <>
+          {groups.map((g) => (
+            <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(logKey(t.id, week))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
               {g.items.length === 0 ? (
-                  <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'R' ? 'Dodaj zadanie „Co tydzień” – np. nawyk lub stały przegląd.' : 'Brak zadań jednorazowych w tym tygodniu.') : isFuture ? 'Brak zadań zaplanowanych na ten tydzień.' : 'Brak zadań.'}</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {g.items.map((t) => {
-                      const done = doneSet.has(logKey(t.id, week));
-                      return (
-                        <li key={t.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
+                <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'R' ? 'Dodaj zadanie „Co tydzień” – np. nawyk lub stały przegląd.' : 'Brak zadań jednorazowych w tym tygodniu.') : isFuture ? 'Brak zadań zaplanowanych na ten tydzień.' : 'Brak zadań.'}</p>
+              ) : (
+                <ul className="space-y-1">
+                  {g.items.map((t) => {
+                    const done = doneSet.has(logKey(t.id, week));
+                    return (
+                      <li key={t.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={done}
+                          onClick={() => toggle(t)}
+                          disabled={isFuture}
+                          title={isFuture ? 'Odhaczysz w tym tygodniu' : undefined}
+                          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default"
+                        >
+                          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>
+                            {done && <Check size={15} strokeWidth={3} />}
+                          </span>
+                          <span className={`min-w-0 flex-1 text-sm break-words ${done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{t.title}</span>
+                          {t.isRecurring && <Repeat size={13} className="shrink-0 text-stone-300 dark:text-stone-600" aria-label="cykliczne" />}
+                        </button>
+                        {canEdit && (
                           <button
                             type="button"
-                            role="checkbox"
-                            aria-checked={done}
-                            onClick={() => toggle(t)}
-                            disabled={isFuture}
-                            title={isFuture ? 'Odhaczysz w tym tygodniu' : undefined}
-                            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default"
+                            onClick={() => remove(t)}
+                            aria-label={`Usuń zadanie ${t.title}`}
+                            title={t.isRecurring && t.weekId < week ? 'Zakończ zadanie (zostanie w archiwum)' : 'Usuń zadanie'}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10"
                           >
-                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>
-                              {done && <Check size={15} strokeWidth={3} />}
-                            </span>
-                            <span className={`min-w-0 flex-1 text-sm break-words ${done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{t.title}</span>
-                            {t.isRecurring && <Repeat size={13} className="shrink-0 text-stone-300 dark:text-stone-600" aria-label="cykliczne" />}
+                            <Trash2 size={15} />
                           </button>
-                          {canEdit && (
-                            <button
-                              type="button"
-                              onClick={() => remove(t)}
-                              aria-label={`Usuń zadanie ${t.title}`}
-                              title={t.isRecurring && t.weekId < week ? 'Zakończ zadanie (zostanie w archiwum)' : 'Usuń zadanie'}
-                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </>
-            );
-            // Jednorazowe – minimalistyczny akordeon (domyślnie zwinięty), cykliczne – stała karta
-            return g.key === 'O' ? (
-              <TaskAccordion key={g.key} title={g.title} count={count} hint={g.hint}>
-                {items}
-              </TaskAccordion>
-            ) : (
-              <Card key={g.key} title={`${g.title} (${count})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
-                {items}
-              </Card>
-            );
-          })}
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          ))}
         </div>
       )}
 

@@ -22,20 +22,30 @@ export const NAV_ITEMS = [
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText, hidden: true },
   { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList, mobile: true },
-  { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper },
+  { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper, mobile: true },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings, topbar: true },
 ];
 
 // Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
-const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'tasks'];
+const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'tasks', 'news'];
 // Pozycje widoczne w menu (bez tymczasowo ukrytych i dostępnych z górnego paska)
 const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden && !n.topbar);
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
-// Kolejność kafelków w arkuszu „Więcej” (telefon), pod nimi przełącznik motywu; Ustawienia – przycisk na górnym pasku
-const MORE_ORDER = ['news', 'goals', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends'];
-const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
+// Arkusz „Więcej” (telefon): powiązane sekcje zebrane w grupy, pod nimi przełącznik motywu.
+// Ustawienia – przycisk na górnym pasku; pozycje spoza grup (np. odkryte ponownie ukryte) trafiają do „Inne”.
+const MORE_GROUPS = [
+  { id: 'goals', emoji: '🎯', title: 'Cele i FIRE', items: ['goals', 'fire'] },
+  { id: 'plan', emoji: '🛡️', title: 'Bezpieczeństwo i symulacje', items: ['safe', 'simulations', 'allocation'] },
+  { id: 'flows', emoji: '💰', title: 'Dywidendy i wpłaty', items: ['dividends', 'cash', 'reports'] },
+];
+const MORE_SECTIONS = (() => {
+  const pick = (ids) => ids.map((id) => MENU_ITEMS.find((n) => n.id === id && !n.mobile)).filter(Boolean);
+  const grouped = new Set(MORE_GROUPS.flatMap((g) => g.items));
+  const rest = MENU_ITEMS.filter((n) => !n.mobile && !grouped.has(n.id));
+  return [...MORE_GROUPS.map((g) => ({ ...g, items: pick(g.items) })), { id: 'other', emoji: '✨', title: 'Inne', items: rest }].filter((g) => g.items.length);
+})();
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
 export function navLabel(item, settings, long = true) {
@@ -251,33 +261,40 @@ export function Layout({ view, onNavigate, children }) {
             <button type="button" onClick={() => setMoreOpen(false)} aria-label="Zamknij" className="mx-auto mb-3 flex h-6 w-16 items-center justify-center">
               <span className="h-1.5 w-12 rounded-full bg-stone-300 dark:bg-white/20" />
             </button>
-            <div className="grid max-h-[62vh] grid-cols-2 gap-3 overflow-y-auto">
-              {MORE_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const active = item.id === view;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setMoreOpen(false);
-                      onNavigate(item.id);
-                    }}
-                    aria-current={active ? 'page' : undefined}
-                    className={`relative flex min-h-[4.75rem] items-center gap-3 rounded-[22px] px-3.5 py-3 text-left text-[15px] leading-tight font-semibold transition-colors ${
-                      active
-                        ? 'bg-blue-100/80 text-blue-900 dark:bg-blue-500/15 dark:text-blue-200'
-                        : 'bg-stone-100/80 text-stone-800 active:bg-stone-200 dark:bg-white/[0.06] dark:text-stone-100 dark:active:bg-white/10'
-                    }`}
-                  >
-                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${active ? 'bg-white/80 dark:bg-white/10' : 'bg-white/70 dark:bg-white/10'}`}>
-                      <Icon size={20} strokeWidth={1.8} />
-                    </span>
-                    <span className="min-w-0">{navLabel(item, state.settings)}</span>
-                    {badges[item.id] && <span className="absolute top-2 right-2.5 rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
-                  </button>
-                );
-              })}
+            <div className="max-h-[62vh] space-y-2.5 overflow-y-auto">
+              {MORE_SECTIONS.map((g) => (
+                <section key={g.id} className="rounded-[22px] bg-stone-100/80 p-2 dark:bg-white/[0.05]" aria-label={g.title}>
+                  <h3 className="flex items-center gap-1.5 px-2 pt-0.5 pb-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">
+                    <span aria-hidden="true">{g.emoji}</span> {g.title}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {g.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = item.id === view;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setMoreOpen(false);
+                            onNavigate(item.id);
+                          }}
+                          aria-current={active ? 'page' : undefined}
+                          className={`relative flex min-h-[3.25rem] items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left text-sm leading-tight font-semibold transition-colors ${
+                            active ? 'bg-blue-100 text-blue-900 dark:bg-blue-500/15 dark:text-blue-200' : 'bg-white/80 text-stone-800 active:bg-stone-200 dark:bg-white/[0.06] dark:text-stone-100 dark:active:bg-white/10'
+                          }`}
+                        >
+                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${active ? 'bg-white/80 dark:bg-white/10' : 'bg-stone-100 dark:bg-white/[0.08]'}`}>
+                            <Icon size={17} strokeWidth={1.8} />
+                          </span>
+                          <span className="min-w-0">{navLabel(item, state.settings)}</span>
+                          {badges[item.id] && <span className="absolute top-1.5 right-2 rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
             <div className="mt-3 flex items-center justify-between rounded-[22px] bg-stone-100/80 py-2.5 pr-2.5 pl-4 dark:bg-white/[0.06]">
               <span className="text-[15px] font-semibold">Motyw</span>
