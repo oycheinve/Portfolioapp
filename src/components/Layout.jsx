@@ -33,19 +33,10 @@ const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'tasks', 'ne
 const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden && !n.topbar);
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
-// Arkusz „Więcej” (telefon): powiązane sekcje zebrane w grupy, pod nimi przełącznik motywu.
-// Ustawienia – przycisk na górnym pasku; pozycje spoza grup (np. odkryte ponownie ukryte) trafiają do „Inne”.
-const MORE_GROUPS = [
-  { id: 'goals', emoji: '🎯', title: 'Cele i FIRE', items: ['goals', 'fire'] },
-  { id: 'plan', emoji: '🛡️', title: 'Bezpieczeństwo i symulacje', items: ['safe', 'simulations', 'allocation'] },
-  { id: 'flows', emoji: '💰', title: 'Dywidendy i wpłaty', items: ['dividends', 'cash', 'reports'] },
-];
-const MORE_SECTIONS = (() => {
-  const pick = (ids) => ids.map((id) => MENU_ITEMS.find((n) => n.id === id && !n.mobile)).filter(Boolean);
-  const grouped = new Set(MORE_GROUPS.flatMap((g) => g.items));
-  const rest = MENU_ITEMS.filter((n) => !n.mobile && !grouped.has(n.id));
-  return [...MORE_GROUPS.map((g) => ({ ...g, items: pick(g.items) })), { id: 'other', emoji: '✨', title: 'Inne', items: rest }].filter((g) => g.items.length);
-})();
+// Kolejność kafelków w arkuszu „Więcej” (telefon) – płaska siatka 2 kolumn; pod nią przełącznik motywu i Ustawienia.
+// Pozycje z dolnego paska (np. Newsy) i ukryte nie trafiają do arkusza.
+const MORE_ORDER = ['goals', 'fire', 'safe', 'simulations', 'allocation', 'reports', 'dividends', 'cash'];
+const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !MORE_ORDER.includes(n.id))].filter((n) => n && !n.mobile);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
 export function navLabel(item, settings, long = true) {
@@ -261,65 +252,77 @@ export function Layout({ view, onNavigate, children }) {
             <button type="button" onClick={() => setMoreOpen(false)} aria-label="Zamknij" className="mx-auto mb-3 flex h-6 w-16 items-center justify-center">
               <span className="h-1.5 w-12 rounded-full bg-stone-300 dark:bg-white/20" />
             </button>
-            <div className="max-h-[62vh] space-y-2.5 overflow-y-auto">
-              {MORE_SECTIONS.map((g) => (
-                <section key={g.id} className="rounded-[22px] bg-stone-100/80 p-2 dark:bg-white/[0.05]" aria-label={g.title}>
-                  <h3 className="flex items-center gap-1.5 px-2 pt-0.5 pb-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">
-                    <span aria-hidden="true">{g.emoji}</span> {g.title}
-                  </h3>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {g.items.map((item) => {
-                      const Icon = item.icon;
-                      const active = item.id === view;
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setMoreOpen(false);
-                            onNavigate(item.id);
-                          }}
-                          aria-current={active ? 'page' : undefined}
-                          className={`relative flex min-h-[3.25rem] items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left text-sm leading-tight font-semibold transition-colors ${
-                            active ? 'bg-blue-100 text-blue-900 dark:bg-blue-500/15 dark:text-blue-200' : 'bg-white/80 text-stone-800 active:bg-stone-200 dark:bg-white/[0.06] dark:text-stone-100 dark:active:bg-white/10'
-                          }`}
-                        >
-                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${active ? 'bg-white/80 dark:bg-white/10' : 'bg-stone-100 dark:bg-white/[0.08]'}`}>
-                            <Icon size={17} strokeWidth={1.8} />
-                          </span>
-                          <span className="min-w-0">{navLabel(item, state.settings)}</span>
-                          {badges[item.id] && <span className="absolute top-1.5 right-2 rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
+            <div className="grid max-h-[62vh] grid-cols-2 gap-3 overflow-y-auto">
+              {MORE_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const active = item.id === view;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onNavigate(item.id);
+                    }}
+                    aria-current={active ? 'page' : undefined}
+                    className={`relative flex min-h-[4.75rem] items-center gap-2.5 rounded-[22px] px-3 py-3 text-left text-[15px] leading-tight font-semibold transition-colors ${
+                      active
+                        ? 'bg-blue-100/80 text-blue-900 dark:bg-blue-500/15 dark:text-blue-200'
+                        : 'bg-stone-100/80 text-stone-800 active:bg-stone-200 dark:bg-white/[0.06] dark:text-stone-100 dark:active:bg-white/10'
+                    }`}
+                  >
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${active ? 'bg-white/80 dark:bg-white/10' : 'bg-white/70 dark:bg-white/10'}`}>
+                      <Icon size={20} strokeWidth={1.8} />
+                    </span>
+                    <span className="min-w-0">{navLabel(item, state.settings).replace(/\//g, '/\u200b')}</span>
+                    {badges[item.id] && <span className="absolute top-2 right-2.5 rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
+                  </button>
+                );
+              })}
             </div>
-            <div className="mt-3 flex items-center justify-between rounded-[22px] bg-stone-100/80 py-2.5 pr-2.5 pl-4 dark:bg-white/[0.06]">
-              <span className="text-[15px] font-semibold">Motyw</span>
-              <div className="flex items-center gap-1 rounded-full bg-white/70 p-1 dark:bg-white/10" role="radiogroup" aria-label="Motyw aplikacji">
-                {['light', 'dark', 'system'].map((t) => {
-                  const TIcon = THEME_ICON[t];
-                  const on = theme === t;
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      role="radio"
-                      aria-checked={on}
-                      aria-label={THEME_LABEL[t]}
-                      title={THEME_LABEL[t]}
-                      onClick={() => actions.updateSettings({ theme: t })}
-                      className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
-                        on ? 'bg-white text-amber-500 shadow-sm dark:bg-neutral-700 dark:text-amber-300' : 'text-stone-500 dark:text-stone-400'
-                      }`}
-                    >
-                      <TIcon size={18} />
-                    </button>
-                  );
-                })}
+            <div className="mt-3 flex items-stretch gap-3">
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-[22px] bg-stone-100/80 py-2.5 pr-2.5 pl-4 dark:bg-white/[0.06]">
+                <span className="truncate text-[15px] font-semibold">Motyw</span>
+                <div className="flex items-center gap-1 rounded-full bg-white/70 p-1 dark:bg-white/10" role="radiogroup" aria-label="Motyw aplikacji">
+                  {['light', 'dark', 'system'].map((t) => {
+                    const TIcon = THEME_ICON[t];
+                    const on = theme === t;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        aria-label={THEME_LABEL[t]}
+                        title={THEME_LABEL[t]}
+                        onClick={() => actions.updateSettings({ theme: t })}
+                        className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+                          on ? 'bg-white text-amber-500 shadow-sm dark:bg-neutral-700 dark:text-amber-300' : 'text-stone-500 dark:text-stone-400'
+                        }`}
+                      >
+                        <TIcon size={18} />
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+              {/* Konta i ustawienia – także z arkusza „Więcej”, obok przełącznika motywu */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreOpen(false);
+                  onNavigate('settings');
+                }}
+                aria-current={view === 'settings' ? 'page' : undefined}
+                aria-label="Konta i ustawienia"
+                title="Konta i ustawienia"
+                className={`flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-[22px] px-4 text-[11px] font-semibold transition-colors ${
+                  view === 'settings' ? 'bg-blue-100/80 text-blue-900 dark:bg-blue-500/15 dark:text-blue-200' : 'bg-stone-100/80 text-stone-700 active:bg-stone-200 dark:bg-white/[0.06] dark:text-stone-200 dark:active:bg-white/10'
+                }`}
+              >
+                <Settings size={20} strokeWidth={1.8} />
+                Ustawienia
+              </button>
             </div>
           </div>
         </div>
