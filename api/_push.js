@@ -128,7 +128,7 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
     if (!prefs.enabled) continue;
     const clock = localClock(now, sub.tz || 'Europe/Warsaw');
     const kinds = dueKinds(prefs, clock, sub.last_sent || {});
-    if (prefs.prices.on && (loaders.anyTime || marketWindow(now, sub.tz || 'Europe/Warsaw'))) kinds.push('prices'); // krytyczne zmiany – co godzinę w czasie sesji
+    if (prefs.prices.on && (loaders.anyTime || marketWindow(now, sub.tz || 'Europe/Warsaw'))) kinds.push('prices'); // zmiany notowań – co godzinę w czasie sesji
     if (!kinds.length) continue;
     const lastSent = { ...(sub.last_sent || {}) };
     for (const kind of kinds) {
@@ -141,7 +141,7 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
         msg = topics.length ? newsDigestMessage(newsDigest(items, topics, previousDay(clock.day), sub.tz), prefs.news.min) : null;
       } else if (kind === 'prices') {
         const { alerts, state } = priceAlerts(await loadChangesFn(sub.watch), prefs.prices.threshold, lastSent.prices, clock.day);
-        msg = priceAlertMessage(alerts, prefs.prices.threshold);
+        msg = priceAlertMessage(alerts);
         lastSent.prices = state;
         if (!msg) continue; // bez przekroczeń – bez wpisu w raporcie
       }

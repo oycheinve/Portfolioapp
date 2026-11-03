@@ -130,7 +130,7 @@ export default function NotificationsView({ embedded = false }) {
     const all = heldDayChanges(state).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
     const over = all.filter((c) => Math.abs(c.pct * 100) >= prefs.prices.threshold);
     setPriceCheck({ all, over, at: state.prices?.lastRefresh });
-    const msg = priceAlertMessage(over, prefs.prices.threshold);
+    const msg = priceAlertMessage(over);
     if (sendNow && msg) await showNotification(msg.title, msg);
   };
 
@@ -235,7 +235,7 @@ export default function NotificationsView({ embedded = false }) {
             </select>
           </label>
           <p className="text-[11px] text-stone-500 dark:text-stone-400">
-            Np. „FinTrack 📊 – 🚨 Krytyczna zmiana notowań: PKO Bank Polski zanotowała zmianę o −4,6%! 📉”. Sprawdzane po każdym pobraniu kursów w aplikacji, a przy Web Push także przez serwer co godzinę w dni robocze 9–22. Jedno powiadomienie na spółkę dziennie – kolejne, gdy ruch pogłębi się o następną wielokrotność progu (np. ±8%).
+            Np. „FinTrack 📊 – 📉 Zmiana notowań: PKO Bank Polski zanotowała zmianę o −4,6%!”. Sprawdzane po każdym pobraniu kursów w aplikacji, a przy Web Push także przez serwer co godzinę w dni robocze 9–22. O danej spółce najwyżej jedno powiadomienie dziennie w danym kierunku; drugie tylko przy zwrocie w ciągu dnia (np. „🔄 Odbicie: …” po wcześniejszym spadku).
           </p>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => checkPrices(false)} className={btnCls}>

@@ -1,7 +1,7 @@
 // Treść powiadomień – czyste funkcje wspólne dla aplikacji (harmonogram lokalny) i serwera (/api/push-cron):
 //  • wieczorne przypomnienie o niewykonanych zadaniach dziennych,
 //  • poranne / południowe podsumowanie wiadomości z poprzedniego dnia o spółkach z portfela (od progu liczby artykułów),
-//  • krytyczne zmiany notowań – dzisiejsza zmiana spółki z portfela przekracza próg (domyślnie ±4%).
+//  • zmiany notowań – dzisiejsza zmiana spółki z portfela przekracza próg (domyślnie ±4%).
 // Bez zależności od przeglądarki i Reacta.
 import { GENERAL_ID, classifyArticle } from './newsSubject.js';
 
@@ -123,10 +123,12 @@ export function dueKinds(prefs, clock, lastSent = {}) {
   return out;
 }
 
-// ── Krytyczne zmiany notowań ──
-// changes: [{ id, label, title, pct }] – dzisiejsza zmiana (ułamek, np. -0.046). Poziom = wielokrotność progu
-// (±4% → 1, ±8% → 2…). Powiadomienie, gdy spółka pierwszy raz danego dnia przekroczy próg albo pogłębi ruch
-// o kolejną wielokrotność (lub zmieni kierunek). state: { day, levels: { [id]: poziom ze znakiem } } – zapis wysłanych.
+// ── Zmiany notowań (alarm cenowy) ──
+// changes: [{ id, label, title, pct }] – dzisiejsza zmiana (ułamek, np. -0.046); próg (domyślnie ±4%) jest tylko
+// warunkiem wysyłki i nie trafia do treści. Anty-spam: o danej spółce najwyżej jedno powiadomienie dziennie w danym
+// kierunku; drugie tylko przy zwrocie (np. spadek ponad próg, potem wzrost ponad próg) – alert z reversal: true.
+// state: { day, levels: { [id]: ±1 – wysłano w tym kierunku, 'both' – wysłano w obu (koniec na dziś) } } – zapis
+// wysłanych (starsze poziomy ±2… liczą się jako ten sam kierunek).
 export function priceAlerts(changes, threshold, state = {}, day) {
   const t = Math.max(0.1, Number(threshold) || DEFAULT_PREFS.prices.threshold);
   const prev = state && state.day === day ? state.levels || {} : {};
@@ -134,13 +136,13 @@ export function priceAlerts(changes, threshold, state = {}, day) {
   const alerts = [];
   for (const c of changes) {
     if (!Number.isFinite(c?.pct)) continue;
-    const pctAbs = Math.abs(c.pct * 100);
-    const level = Math.sign(c.pct) * Math.floor(pctAbs / t + 1e-9);
-    if (level === 0) continue;
-    const before = prev[c.id] || 0;
-    if (Math.sign(before) === Math.sign(level) && Math.abs(before) >= Math.abs(level)) continue;
-    levels[c.id] = level;
-    alerts.push({ ...c, level });
+    if (Math.abs(c.pct * 100) + 1e-9 < t) continue;
+    const dir = Math.sign(c.pct);
+    const before = prev[c.id];
+    if (before === 'both' || Math.sign(before || 0) === dir) continue; // w tym kierunku już dziś wysłano
+    const reversal = Math.sign(before || 0) === -dir;
+    levels[c.id] = reversal ? 'both' : dir;
+    alerts.push({ ...c, level: dir, reversal });
   }
   alerts.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
   return { alerts, state: { day, levels } };
@@ -149,18 +151,17 @@ export function priceAlerts(changes, threshold, state = {}, day) {
 const arrow = (pct) => (pct < 0 ? '📉' : '📈');
 const fmtPct = (pct) => `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct * 100).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 
-export function priceAlertMessage(alerts, threshold) {
+// Treść bez progu: „📈 Zmiana notowań: X zanotowała zmianę o +4,9%!”; przy zwrocie w ciągu dnia –
+// „🔄 Odbicie: X …” (ze spadku na wzrost) albo „🔄 Zwrot w dół: X …” (ze wzrostu na spadek)
+export function priceAlertMessage(alerts) {
   if (!alerts.length) return null;
   const name = (a) => a.title || a.label;
+  const msg = (body) => ({ title: NOTIFY_TITLE, body, url: '/#/portfolio', tag: 'price-alert', renotify: true });
   if (alerts.length === 1) {
     const a = alerts[0];
-    return { title: NOTIFY_TITLE, body: `🚨 Krytyczna zmiana notowań: ${name(a)} zanotowała zmianę o ${fmtPct(a.pct)}! ${arrow(a.pct)} (próg ±${threshold}%)`, url: '/#/portfolio', tag: 'price-alert', renotify: true };
+    if (a.reversal) return msg(`🔄 ${a.pct > 0 ? 'Odbicie' : 'Zwrot w dół'}: ${name(a)} zanotowała zmianę o ${fmtPct(a.pct)}! ${arrow(a.pct)}`);
+    return msg(`${arrow(a.pct)} Zmiana notowań: ${name(a)} zanotowała zmianę o ${fmtPct(a.pct)}!`);
   }
-  return {
-    title: NOTIFY_TITLE,
-    body: `🚨 Krytyczne zmiany notowań (${alerts.length}): ${alerts.slice(0, 5).map((a) => `${arrow(a.pct)} ${a.label} ${fmtPct(a.pct)}`).join(' · ')}${alerts.length > 5 ? '…' : ''} (próg ±${threshold}%)`,
-    url: '/#/portfolio',
-    tag: 'price-alert',
-    renotify: true,
-  };
+  const list = alerts.slice(0, 5).map((a) => `${a.reversal ? '🔄' : arrow(a.pct)} ${a.label} ${fmtPct(a.pct)}`).join(' · ');
+  return msg(`📊 Zmiany notowań (${alerts.length}): ${list}${alerts.length > 5 ? '…' : ''}`);
 }

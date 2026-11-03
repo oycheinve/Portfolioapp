@@ -61,7 +61,7 @@ export function useNotificationScheduler(state, userId) {
     };
   }, [userId]);
 
-  // Krytyczne zmiany notowań: sprawdzenie po każdym pobraniu kursów (automatycznym i ręcznym)
+  // Zmiany notowań: sprawdzenie po każdym pobraniu kursów (automatycznym i ręcznym)
   const lastRefresh = state.prices?.lastRefresh;
   useEffect(() => {
     const prefs = readNotifySettings();
@@ -69,7 +69,7 @@ export function useNotificationScheduler(state, userId) {
     const day = localClock(new Date()).day;
     const { alerts, state: next } = priceAlerts(heldDayChanges(stateRef.current), prefs.prices.threshold, readSent().prices, day);
     writeSentState('prices', next);
-    const msg = priceAlertMessage(alerts, prefs.prices.threshold);
+    const msg = priceAlertMessage(alerts);
     if (msg) showNotification(msg.title, msg);
   }, [lastRefresh]);
 }
