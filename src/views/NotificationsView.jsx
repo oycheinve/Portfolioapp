@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bell, BellOff, CalendarCheck2, Cloud, Eye, Newspaper, Send, Smartphone } from 'lucide-react';
+import { Activity, Bell, BellOff, CalendarCheck2, Cloud, Eye, Newspaper, Send, Smartphone } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { NEWS_SLOTS, localClock, newsDigest, newsDigestMessage, previousDay } from '../lib/notifyPlan.js';
+import { NEWS_SLOTS, localClock, newsDigest, newsDigestMessage, previousDay, priceAlertMessage } from '../lib/notifyPlan.js';
+import { heldDayChanges } from '../lib/priceAlerts.js';
 import {
   currentPushSubscription,
   notificationPermission,
@@ -22,6 +23,8 @@ import { Card } from '../components/ui.jsx';
 
 const EVENING_HOURS = Array.from({ length: 12 }, (_, i) => i + 12); // 12:00 – 23:00 (zapisana inna godzina też na liście)
 const MAX_TOPICS = 15;
+const THRESHOLDS = [2, 3, 4, 5, 6, 7, 8, 10];
+const pctText = (p) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p * 100).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 
 function Switch({ on, onChange, label, disabled }) {
   return (
@@ -61,7 +64,7 @@ export default function NotificationsView() {
   }, []);
 
   const save = (patch) => {
-    const next = { ...prefs, ...patch, tasks: { ...prefs.tasks, ...(patch.tasks || {}) }, news: { ...prefs.news, ...(patch.news || {}) } };
+    const next = { ...prefs, ...patch, tasks: { ...prefs.tasks, ...(patch.tasks || {}) }, news: { ...prefs.news, ...(patch.news || {}) }, prices: { ...prefs.prices, ...(patch.prices || {}) } };
     setPrefs(next);
     writeNotifySettings(next);
     if (pushSub && userId) syncPushSubscription(userId, next, watch).catch((e) => actions.notify(`Powiadomienia z serwera: ${e.message}`, 'warn'));
@@ -97,6 +100,16 @@ export default function NotificationsView() {
     } finally {
       setBusy('');
     }
+  };
+
+  // Bieżące dzisiejsze zmiany posiadanych pozycji (z ostatnio pobranych kursów) – ponad próg
+  const [priceCheck, setPriceCheck] = useState(null);
+  const checkPrices = async (sendNow = false) => {
+    const all = heldDayChanges(state).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+    const over = all.filter((c) => Math.abs(c.pct * 100) >= prefs.prices.threshold);
+    setPriceCheck({ all, over, at: state.prices?.lastRefresh });
+    const msg = priceAlertMessage(over, prefs.prices.threshold);
+    if (sendNow && msg) await showNotification(msg.title, msg);
   };
 
   const togglePush = async () => {
@@ -180,6 +193,48 @@ export default function NotificationsView() {
             </select>
           </label>
           <p className="text-[11px] text-stone-500 dark:text-stone-400">Np. „Zadania na dziś: zostało 2 – Sprawdzenie portfela, Zapisanie wydatków – uzupełnij przed końcem dnia.” Raz dziennie; bez powiadomienia, gdy wszystko jest odhaczone.</p>
+        </div>
+      </Card>
+
+      <Card title="Krytyczne zmiany notowań" subtitle="Nagły ruch ceny spółki lub ETF-u z portfela w ciągu dnia" icon={Activity}>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-stone-700 dark:text-stone-200">Powiadamiaj o krytycznych zmianach cen</span>
+            <Switch on={prefs.prices.on} onChange={(v) => save({ prices: { on: v } })} label="Krytyczne zmiany notowań" disabled={!ready} />
+          </div>
+          <label className="flex flex-wrap items-center gap-2 text-stone-600 dark:text-stone-300">
+            Próg dzisiejszej zmiany
+            <select value={prefs.prices.threshold} onChange={(e) => save({ prices: { threshold: Number(e.target.value) } })} disabled={!ready || !prefs.prices.on} aria-label="Próg krytycznej zmiany" className={selectCls}>
+              {[...new Set([...THRESHOLDS, prefs.prices.threshold])].sort((a, b) => a - b).map((t) => (
+                <option key={t} value={t}>
+                  ±{t}%
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-[11px] text-stone-500 dark:text-stone-400">
+            Np. „Krytyczna zmiana notowań: PKO – PKO Bank Polski zanotowała zmianę o −4,6%!”. Sprawdzane po każdym pobraniu kursów w aplikacji, a przy Web Push także przez serwer co godzinę w dni robocze 9–22. Jedno powiadomienie na spółkę dziennie – kolejne, gdy ruch pogłębi się o następną wielokrotność progu (np. ±8%).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => checkPrices(false)} className={btnCls}>
+              <Eye size={15} /> Sprawdź dzisiejsze zmiany
+            </button>
+            <button type="button" onClick={() => checkPrices(true)} disabled={!ready} className={btnCls}>
+              <Send size={15} /> Wyślij teraz
+            </button>
+          </div>
+          {priceCheck && (
+            <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs dark:border-white/10 dark:bg-white/[0.03]" aria-label="Wynik sprawdzenia zmian">
+              {priceCheck.all.length === 0 ? (
+                <p className="text-stone-500 dark:text-stone-400">Brak dzisiejszych notowań na żywo dla pozycji z portfela – odśwież kursy w trakcie sesji.</p>
+              ) : (
+                <>
+                  <p className="font-semibold">{priceCheck.over.length ? `Ponad próg ±${prefs.prices.threshold}%: ${priceCheck.over.map((c) => `${c.label} ${pctText(c.pct)}`).join(', ')}` : `Żadna pozycja nie przekracza ±${prefs.prices.threshold}%`}</p>
+                  <p className="mt-1 text-stone-500 dark:text-stone-400">Największe ruchy dziś: {priceCheck.all.slice(0, 5).map((c) => `${c.label} ${pctText(c.pct)}`).join(' · ')}</p>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 

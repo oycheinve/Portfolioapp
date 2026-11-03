@@ -27,7 +27,8 @@ function yahooChartPath(symbol) {
 const warsawDay = (d) => new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
 const dayOf = (sec, gmtoffset) => Math.floor((sec + gmtoffset) / 86400);
 
-function parseYahooChart(json) {
+// Eksport także dla serwera (/api/push-cron – sprawdzanie krytycznych zmian notowań)
+export function parseYahooChart(json) {
   const result = json?.chart?.result?.[0];
   if (!result) throw new Error('Brak danych w odpowiedzi Yahoo');
   const meta = result.meta || {};

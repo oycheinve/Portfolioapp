@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { loadAllTasks } from '../lib/taskStats.js';
 import { fetchNewsMany, heldNewsTopics } from '../lib/news.js';
-import { dueKinds, localClock, newsDigest, newsDigestMessage, previousDay, tasksReminderMessage, unfinishedDailyTasks } from '../lib/notifyPlan.js';
-import { markSent, notificationPermission, readNotifySettings, readSent, showNotification, syncPushSubscription } from '../lib/notifications.js';
+import { dueKinds, localClock, newsDigest, newsDigestMessage, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../lib/notifyPlan.js';
+import { heldDayChanges } from '../lib/priceAlerts.js';
+import { markSent, notificationPermission, readNotifySettings, readSent, showNotification, syncPushSubscription, writeSentState } from '../lib/notifications.js';
 
 const CHECK_MS = 5 * 60 * 1000;
 const MAX_TOPICS = 15;
@@ -59,4 +60,16 @@ export function useNotificationScheduler(state, userId) {
       window.removeEventListener('wealth-app-notify-check', check);
     };
   }, [userId]);
+
+  // Krytyczne zmiany notowań: sprawdzenie po każdym pobraniu kursów (automatycznym i ręcznym)
+  const lastRefresh = state.prices?.lastRefresh;
+  useEffect(() => {
+    const prefs = readNotifySettings();
+    if (!lastRefresh || !prefs.enabled || !prefs.prices.on || notificationPermission() !== 'granted') return;
+    const day = localClock(new Date()).day;
+    const { alerts, state: next } = priceAlerts(heldDayChanges(stateRef.current), prefs.prices.threshold, readSent().prices, day);
+    writeSentState('prices', next);
+    const msg = priceAlertMessage(alerts, prefs.prices.threshold);
+    if (msg) showNotification(msg.title, msg);
+  }, [lastRefresh]);
 }

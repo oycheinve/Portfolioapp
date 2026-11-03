@@ -6,7 +6,7 @@
 //  • /api/yahoo, /api/news i wszystkie zapytania do innych domen (Supabase, Yahoo, NBP…) – NIGDY z pamięci
 //    (świeże notowania i dane; bez sieci aplikacja używa własnych danych awaryjnych).
 // Wersja w nazwie pamięci – przy zmianie poprzednie pamięci są usuwane.
-const VERSION = 'fintrack-v6'; // zmiana wersji odświeża zapamiętany manifest i ikony; stare pamięci usuwane przy aktywacji
+const VERSION = 'fintrack-v7'; // zmiana wersji odświeża zapamiętany manifest i ikony; stare pamięci usuwane przy aktywacji
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const MEDIA = `${VERSION}-media`;
@@ -101,6 +101,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(title, {
       body: data.body || '',
       tag: data.tag,
+      renotify: !!(data.renotify && data.tag), // kolejny alarm cenowy z tym samym tagiem – ponowny dźwięk
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-monochrome-512.png',
       data: { url: data.url || '/' },

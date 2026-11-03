@@ -1,6 +1,7 @@
 // Treść powiadomień – czyste funkcje wspólne dla aplikacji (harmonogram lokalny) i serwera (/api/push-cron):
 //  • wieczorne przypomnienie o niewykonanych zadaniach dziennych,
-//  • poranne / południowe podsumowanie wiadomości z poprzedniego dnia o spółkach z portfela (od progu liczby artykułów).
+//  • poranne / południowe podsumowanie wiadomości z poprzedniego dnia o spółkach z portfela (od progu liczby artykułów),
+//  • krytyczne zmiany notowań – dzisiejsza zmiana spółki z portfela przekracza próg (domyślnie ±4%).
 // Bez zależności od przeglądarki i Reacta.
 import { GENERAL_ID, classifyArticle } from './newsSubject.js';
 
@@ -10,6 +11,7 @@ export const DEFAULT_PREFS = {
   enabled: false, // powiadomienia na tym urządzeniu (zgoda systemu + włącznik)
   tasks: { on: true, hour: 20 },
   news: { on: false, min: 3, slot: 'MORNING' },
+  prices: { on: false, threshold: 4 },
 };
 
 // Ustawienia z zapisu (także starszego formatu { enabled, taskHour }) z poprawnymi wartościami domyślnymi
@@ -23,6 +25,10 @@ export function normalizePrefs(raw = {}) {
       on: !!r.news?.on,
       min: Math.max(1, Math.min(50, Math.round(Number(r.news?.min) || DEFAULT_PREFS.news.min))),
       slot: NEWS_SLOTS[r.news?.slot] ? r.news.slot : DEFAULT_PREFS.news.slot,
+    },
+    prices: {
+      on: !!r.prices?.on,
+      threshold: Math.max(1, Math.min(20, Number(r.prices?.threshold) || DEFAULT_PREFS.prices.threshold)),
     },
   };
 }
@@ -107,4 +113,45 @@ export function dueKinds(prefs, clock, lastSent = {}) {
   const h = NEWS_SLOTS[p.news.slot].hour;
   if (p.news.on && clock.hour >= h && clock.hour < h + 6 && lastSent.news !== clock.day) out.push('news');
   return out;
+}
+
+// ── Krytyczne zmiany notowań ──
+// changes: [{ id, label, title, pct }] – dzisiejsza zmiana (ułamek, np. -0.046). Poziom = wielokrotność progu
+// (±4% → 1, ±8% → 2…). Powiadomienie, gdy spółka pierwszy raz danego dnia przekroczy próg albo pogłębi ruch
+// o kolejną wielokrotność (lub zmieni kierunek). state: { day, levels: { [id]: poziom ze znakiem } } – zapis wysłanych.
+export function priceAlerts(changes, threshold, state = {}, day) {
+  const t = Math.max(0.1, Number(threshold) || DEFAULT_PREFS.prices.threshold);
+  const prev = state && state.day === day ? state.levels || {} : {};
+  const levels = { ...prev };
+  const alerts = [];
+  for (const c of changes) {
+    if (!Number.isFinite(c?.pct)) continue;
+    const pctAbs = Math.abs(c.pct * 100);
+    const level = Math.sign(c.pct) * Math.floor(pctAbs / t + 1e-9);
+    if (level === 0) continue;
+    const before = prev[c.id] || 0;
+    if (Math.sign(before) === Math.sign(level) && Math.abs(before) >= Math.abs(level)) continue;
+    levels[c.id] = level;
+    alerts.push({ ...c, level });
+  }
+  alerts.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+  return { alerts, state: { day, levels } };
+}
+
+const fmtPct = (pct) => `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct * 100).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+
+export function priceAlertMessage(alerts, threshold) {
+  if (!alerts.length) return null;
+  const name = (a) => a.title || a.label;
+  if (alerts.length === 1) {
+    const a = alerts[0];
+    return { title: `Krytyczna zmiana notowań: ${a.label}`, body: `${name(a)} zanotowała zmianę o ${fmtPct(a.pct)}! (próg ±${threshold}%)`, url: '/#/portfolio', tag: 'price-alert', renotify: true };
+  }
+  return {
+    title: `Krytyczne zmiany notowań (${alerts.length})`,
+    body: `${alerts.slice(0, 5).map((a) => `${a.label} ${fmtPct(a.pct)}`).join(' · ')}${alerts.length > 5 ? '…' : ''} (próg ±${threshold}%)`,
+    url: '/#/portfolio',
+    tag: 'price-alert',
+    renotify: true,
+  };
 }

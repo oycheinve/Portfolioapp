@@ -6,7 +6,10 @@
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
 import { fetchNews } from './news.js';
-import { dueKinds, localClock, newsDigest, newsDigestMessage, normalizePrefs, previousDay, tasksReminderMessage, unfinishedDailyTasks } from '../src/lib/notifyPlan.js';
+import { proxyYahoo } from './yahoo.js';
+import { parseYahooChart } from '../src/lib/prices.js';
+import { quoteDayChangePct } from '../src/lib/engine.js';
+import { dueKinds, localClock, newsDigest, newsDigestMessage, normalizePrefs, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../src/lib/notifyPlan.js';
 
 const env = (...names) => names.map((n) => process.env[n]).find((v) => v && String(v).trim()) || '';
 const MAX_TOPICS = 15;
@@ -70,12 +73,52 @@ async function loadNews(watch) {
   return { topics, items };
 }
 
+// Dzisiejsza zmiana notowania symbolu (Yahoo / Stooq przez ten sam pośrednik co aplikacja); null – brak danych
+async function quoteChange(symbol, now) {
+  if (!symbol) return null;
+  try {
+    const r = await proxyYahoo(`/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`);
+    if (r.status !== 200) return null;
+    const q = parseYahooChart(JSON.parse(r.body));
+    return quoteDayChangePct(q, now);
+  } catch {
+    return null;
+  }
+}
+
+async function loadChanges(watch, now, cache) {
+  const topics = (Array.isArray(watch) ? watch : []).filter((t) => t?.id && t?.symbol).slice(0, MAX_TOPICS);
+  // Po 4 symbole naraz (wspólna pamięć między subskrypcjami w jednym przebiegu)
+  const todo = [...new Set(topics.map((t) => t.symbol))].filter((s) => !cache.has(s));
+  for (let i = 0; i < todo.length; i += 4) {
+    const chunk = todo.slice(i, i + 4);
+    const res = await Promise.all(chunk.map((s) => quoteChange(s, now)));
+    chunk.forEach((s, j) => cache.set(s, res[j]));
+  }
+  return topics
+    .map((t) => ({ id: t.id, label: t.label, title: t.title || t.label, pct: cache.get(t.symbol) }))
+    .filter((c) => Number.isFinite(c.pct));
+}
+
+// Sesje giełdowe: dni robocze 9:00–22:00 w strefie użytkownika (GPW, giełdy europejskie i sesja w USA)
+function marketWindow(now, timeZone) {
+  try {
+    const wd = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(now);
+    const { hour } = localClock(now, timeZone);
+    return wd !== 'Sat' && wd !== 'Sun' && hour >= 9 && hour < 22;
+  } catch {
+    return true;
+  }
+}
+
 // Przegląd wszystkich subskrypcji: co jest należne o tej godzinie (strefa użytkownika), treść i wysyłka.
 // dry – bez wysyłki i bez zapisu last_sent (podgląd planu). Zwraca raport.
 export async function runPushCron({ cfg, sb, now = new Date(), dry = false, loaders = {} }) {
   const loadTasks = loaders.loadTasks || ((userId) => loadDailyTasks(sb, userId));
   const loadNewsFn = loaders.loadNews || loadNews;
   const send = loaders.send || ((sub, msg) => sendPush(cfg, sub, msg));
+  const quoteCache = new Map();
+  const loadChangesFn = loaders.loadChanges || ((watch) => loadChanges(watch, now, quoteCache));
   const { data: subs, error } = await sb.from('push_subscriptions').select('id, user_id, endpoint, p256dh, auth, prefs, watch, tz, last_sent');
   if (error) throw new Error(error.message);
   const report = [];
@@ -85,6 +128,7 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
     if (!prefs.enabled) continue;
     const clock = localClock(now, sub.tz || 'Europe/Warsaw');
     const kinds = dueKinds(prefs, clock, sub.last_sent || {});
+    if (prefs.prices.on && (loaders.anyTime || marketWindow(now, sub.tz || 'Europe/Warsaw'))) kinds.push('prices'); // krytyczne zmiany – co godzinę w czasie sesji
     if (!kinds.length) continue;
     const lastSent = { ...(sub.last_sent || {}) };
     for (const kind of kinds) {
@@ -95,6 +139,11 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
       } else if (kind === 'news') {
         const { topics, items } = await loadNewsFn(sub.watch);
         msg = topics.length ? newsDigestMessage(newsDigest(items, topics, previousDay(clock.day), sub.tz), prefs.news.min) : null;
+      } else if (kind === 'prices') {
+        const { alerts, state } = priceAlerts(await loadChangesFn(sub.watch), prefs.prices.threshold, lastSent.prices, clock.day);
+        msg = priceAlertMessage(alerts, prefs.prices.threshold);
+        lastSent.prices = state;
+        if (!msg) continue; // bez przekroczeń – bez wpisu w raporcie
       }
       const entry = { sub: sub.id, user: sub.user_id, kind, day: clock.day, hour: clock.hour, message: msg };
       if (msg && !dry) {
@@ -108,7 +157,7 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
         }
       }
       // Odnotowanie także bez treści (np. wszystkie zadania wykonane) – kolejne sprawdzenie dopiero następnego dnia
-      lastSent[kind] = clock.day;
+      if (kind !== 'prices') lastSent[kind] = clock.day;
       report.push(entry);
     }
     if (!dry && !report.some((e) => e.sub === sub.id && e.removed)) {

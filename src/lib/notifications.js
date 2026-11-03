@@ -42,9 +42,9 @@ export async function requestNotificationPermission() {
 }
 
 // Wysyłka: najpierw przez service worker (wymagane na Androidzie w aplikacji zainstalowanej), potem bezpośrednio
-export async function showNotification(title, { body = '', url = '/', tag } = {}) {
+export async function showNotification(title, { body = '', url = '/', tag, renotify = false } = {}) {
   if (notificationPermission() !== 'granted') return false;
-  const options = { body, tag, icon: '/icons/icon-192.png', badge: '/icons/icon-monochrome-512.png', data: { url }, lang: 'pl' };
+  const options = { body, tag, renotify: !!(renotify && tag), icon: '/icons/icon-192.png', badge: '/icons/icon-monochrome-512.png', data: { url }, lang: 'pl' };
   try {
     const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
     if (reg) {
@@ -73,6 +73,14 @@ export function readSent() {
 }
 export function sentToday(kind, day) {
   return readSent()[kind] === day;
+}
+// Stan alarmów cenowych ({ day, levels }) – w tym samym zapisie co znaczniki „wysłano dziś”
+export function writeSentState(kind, value) {
+  try {
+    localStorage.setItem(SENT_KEY, JSON.stringify({ ...readSent(), [kind]: value }));
+  } catch {
+    // brak localStorage
+  }
 }
 export function markSent(kind, day) {
   try {
