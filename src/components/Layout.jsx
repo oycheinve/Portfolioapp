@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, X } from 'lucide-react';
+import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -116,7 +116,9 @@ export function Layout({ view, onNavigate, children }) {
       {/* Nawigacja boczna – desktop */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-stone-200 bg-white px-3 py-5 md:flex dark:border-white/10 dark:bg-neutral-900">
         <div className="mb-4 flex shrink-0 items-center gap-2.5 px-2">
-          <img src="/icons/icon-96.png" alt="" width="36" height="36" className="h-9 w-9 shrink-0 rounded-xl" />
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white dark:bg-blue-500">
+            <Wallet size={18} />
+          </span>
           <div>
             <div className="text-sm font-semibold leading-tight">FinTrack</div>
             <div className="text-[11px] text-stone-500 dark:text-stone-400">Portfel · budżet · zadania</div>
@@ -166,7 +168,9 @@ export function Layout({ view, onNavigate, children }) {
         {/* Górny pasek */}
         <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b pt-[env(safe-area-inset-top)] border-stone-200 bg-white/85 px-4 backdrop-blur sm:px-6 dark:border-white/10 dark:bg-neutral-950/85">
           <div className="flex items-center gap-2 md:hidden">
-            <img src="/icons/icon-96.png" alt="FinTrack" width="32" height="32" className="h-8 w-8 rounded-lg" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white dark:bg-blue-500">
+              <Wallet size={16} />
+            </span>
           </div>
           <h1 className="truncate text-base font-semibold">{navLabel(current, state.settings)}</h1>
           <div className="ml-auto flex items-center gap-2">

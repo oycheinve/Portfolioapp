@@ -6,11 +6,11 @@
 //  • /api/yahoo, /api/news i wszystkie zapytania do innych domen (Supabase, Yahoo, NBP…) – NIGDY z pamięci
 //    (świeże notowania i dane; bez sieci aplikacja używa własnych danych awaryjnych).
 // Wersja w nazwie pamięci – przy zmianie poprzednie pamięci są usuwane.
-const VERSION = 'fintrack-v4'; // zmiana wersji odświeża zapamiętany manifest i ikony; stare pamięci usuwane przy aktywacji
+const VERSION = 'fintrack-v5'; // zmiana wersji odświeża zapamiętany manifest i ikony; stare pamięci usuwane przy aktywacji
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const MEDIA = `${VERSION}-media`;
-const PRECACHE = ['/', '/index.html', '/manifest.json', '/icons/favicon-32.png', '/icons/icon-96.png', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+const PRECACHE = ['/', '/index.html', '/manifest.json', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

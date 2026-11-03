@@ -8,37 +8,186 @@
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait",
-  "background_color": "#0b0e19",
-  "theme_color": "#0b0e19",
-  "categories": ["finance", "productivity", "business"],
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "categories": [
+    "finance",
+    "productivity",
+    "business"
+  ],
   "prefer_related_applications": false,
-  "launch_handler": { "client_mode": ["navigate-existing", "auto"] },
+  "launch_handler": {
+    "client_mode": [
+      "navigate-existing",
+      "auto"
+    ]
+  },
   "icons": [
-    { "src": "/icons/icon-48.png", "sizes": "48x48", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-72.png", "sizes": "72x72", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icons/icon-48.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-monochrome-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "monochrome"
+    }
   ],
   "shortcuts": [
-    { "name": "Pulpit", "short_name": "Pulpit", "description": "Majątek i statystyki portfela", "url": "/#/dashboard", "icons": [{ "src": "/icons/shortcut-dashboard.png", "sizes": "96x96", "type": "image/png" }] },
-    { "name": "Portfel", "short_name": "Portfel", "description": "Pozycje, zmiana dzienna i wyniki", "url": "/#/portfolio", "icons": [{ "src": "/icons/shortcut-portfolio.png", "sizes": "96x96", "type": "image/png" }] },
-    { "name": "Dodaj zakup (Budżet)", "short_name": "Budżet", "description": "Budżet miesięczny i szybkie zakupy", "url": "/#/budget", "icons": [{ "src": "/icons/shortcut-budget.png", "sizes": "96x96", "type": "image/png" }] },
-    { "name": "Zadania na dziś", "short_name": "Zadania", "description": "Zadania dzienne, tygodniowe i miesięczne", "url": "/#/tasks", "icons": [{ "src": "/icons/shortcut-tasks.png", "sizes": "96x96", "type": "image/png" }] }
+    {
+      "name": "Pulpit",
+      "short_name": "Pulpit",
+      "description": "Majątek i statystyki portfela",
+      "url": "/#/dashboard",
+      "icons": [
+        {
+          "src": "/icons/shortcut-dashboard.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Portfel",
+      "short_name": "Portfel",
+      "description": "Pozycje, zmiana dzienna i wyniki",
+      "url": "/#/portfolio",
+      "icons": [
+        {
+          "src": "/icons/shortcut-portfolio.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Dodaj zakup (Budżet)",
+      "short_name": "Budżet",
+      "description": "Budżet miesięczny i szybkie zakupy",
+      "url": "/#/budget",
+      "icons": [
+        {
+          "src": "/icons/shortcut-budget.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Zadania na dziś",
+      "short_name": "Zadania",
+      "description": "Zadania dzienne, tygodniowe i miesięczne",
+      "url": "/#/tasks",
+      "icons": [
+        {
+          "src": "/icons/shortcut-tasks.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
   ],
   "screenshots": [
-    { "src": "/screenshots/mobile-dashboard.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "FinTrack – Pulpit: majątek i statystyki portfela" },
-    { "src": "/screenshots/mobile-tasks.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Zadania dzienne, tygodniowe i miesięczne" },
-    { "src": "/screenshots/desktop-dashboard.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "FinTrack na komputerze" }
+    {
+      "src": "/screenshots/mobile-dashboard.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Pulpit – majątek i statystyki portfela"
+    },
+    {
+      "src": "/screenshots/mobile-tasks.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Zadania dzienne, tygodniowe i miesięczne"
+    },
+    {
+      "src": "/screenshots/desktop-dashboard.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "FinTrack na komputerze"
+    }
   ]
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cloud, KeyRound, Loader2, LogIn, Mail, UserPlus } from 'lucide-react';
+import { Cloud, KeyRound, Loader2, LogIn, Mail, UserPlus, Wallet } from 'lucide-react';
 import { STORAGE_KEY, createEmptyState } from '../../state/schema.js';
 import {
   OWNER_KEY,
@@ -150,7 +150,9 @@ function AuthScreen({ initialError, onSignedIn, onLocal }) {
     <div className="flex min-h-screen items-center justify-center bg-stone-50 px-4 py-10 text-stone-900 dark:bg-neutral-950 dark:text-stone-100">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center justify-center gap-2.5">
-          <img src="/icons/icon-96.png" alt="" width="44" height="44" className="h-11 w-11 shrink-0 rounded-xl" />
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white dark:bg-blue-500">
+            <Wallet size={20} />
+          </span>
           <div>
             <p className="text-lg font-semibold leading-tight">FinTrack</p>
             <p className="text-xs text-stone-500 dark:text-stone-400">Portfel, budżet i zadania · konto w chmurze</p>
