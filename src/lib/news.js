@@ -1,6 +1,24 @@
 // Wiadomości giełdowe przez serwer aplikacji (/api/news: Google News RSS + Yahoo Finance) – Google News nie obsługuje
 // CORS, więc pobieranie wyłącznie przez własny endpoint. Wyniki trzymane w pamięci 5 min (odświeżenie je pomija).
 import { mapLimited } from './yahooFetch.js';
+import { computeHoldings, isoDay } from './engine.js';
+
+// Spółki / ETF-y z otwartych pozycji jako tematy wiadomości (te same zapytania co zakładka Newsy) – także do
+// podsumowania w powiadomieniach (zapisywane w subskrypcji Web Push jako „watch”)
+const cleanSearchName = (inst) =>
+  String(inst.name || inst.ticker || '')
+    .replace(/\s+(S\.?A\.?|SA|ASA|AG|NV|PLC|Inc\.?|Ltd\.?)$/i, '')
+    .trim();
+export function heldNewsTopics(state) {
+  const ids = new Set(computeHoldings(state, isoDay(new Date()), null).filter((h) => h.quantity > 1e-9).map((h) => h.instrumentId));
+  return state.instruments
+    .filter((i) => ids.has(i.id))
+    .map((i) => {
+      const name = cleanSearchName(i);
+      return { id: `inst:${i.id}`, label: i.ticker || name, query: `${name} giełda`, symbol: i.yahooSymbol || null, title: i.name };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
+}
 
 const TTL_MS = 5 * 60 * 1000;
 const cache = new Map();

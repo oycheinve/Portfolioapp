@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, Bell, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
-import { useTaskReminder } from '../state/useTaskReminder.js';
+import { useNotificationScheduler } from '../state/useNotificationScheduler.js';
 
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 // hidden: true = tymczasowo ukryta we wszystkich menu (widok i adres #/… nadal działają, kod bez zmian)
@@ -23,6 +23,7 @@ export const NAV_ITEMS = [
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet (Demo)', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
+  { id: 'notifications', label: 'Powiadomienia', longLabel: 'Powiadomienia', icon: Bell },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
 ];
 
@@ -33,7 +34,7 @@ const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden);
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon); Ustawienia na końcu, pod nimi przełącznik motywu
-const MORE_ORDER = ['news', 'goals', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'settings'];
+const MORE_ORDER = ['news', 'goals', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'notifications', 'settings'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
@@ -85,7 +86,7 @@ function CloudStatus({ onNavigate }) {
 
 export function Layout({ view, onNavigate, children }) {
   const { state, actions, refreshing, cloud } = useApp();
-  useTaskReminder(cloud?.enabled ? cloud.user?.id : null);
+  useNotificationScheduler(state, cloud?.enabled ? cloud.user?.id : null);
   // Brak sieci (np. aplikacja na telefonie offline) – widoczny znaczek; dane działają z pamięci urządzenia
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   useEffect(() => {

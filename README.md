@@ -384,3 +384,19 @@ Zakładka „Zadania” (`#/tasks`, w dolnym pasku w miejscu „Cele” i w menu
 - **Pełny ekran (standalone)**: nagłówek z odstępem `safe-area-inset-top`, treść i komunikaty nad dolnym paskiem z `safe-area-inset-bottom`, bez „gumowego” przewijania i podświetlenia dotyku w trybie aplikacji, kolor paska stanu zgodny z motywem.
 
 
+
+## Powiadomienia (panel, harmonogram, Web Push)
+
+**Panel „Powiadomienia”** (`#/notifications`, w „Więcej”; skrót w Ustawieniach; `src/views/NotificationsView.jsx`): zgoda systemu i włącznik na urządzeniu, powiadomienie testowe; **wieczorne przypomnienie o zadaniach** (przełącznik + godzina, domyślnie 20:00 – niewykonane zadania dzienne z dzisiaj); **raport o spółkach z portfela** (przełącznik, próg – co najmniej X artykułów, pora: rano 8:00 / w południe 12:00; liczą się artykuły z poprzedniego dnia, których głównym podmiotem jest spółka z portfela, bez „Analiz ogólnych”) z podglądem i „Wyślij teraz”; **powiadomienia z serwera (Web Push)** – włącznik subskrypcji i test z serwera. Ustawienia: localStorage `wealth-app-notify` (`{ enabled, tasks: { on, hour }, news: { on, min, slot } }`, zgodnie ze starszym `{ enabled, taskHour }`), a przy Web Push także w Supabase.
+
+**Treść i terminy** – czyste funkcje `src/lib/notifyPlan.js` wspólne dla aplikacji i serwera (`unfinishedDailyTasks`, `tasksReminderMessage`, `newsDigest`, `newsDigestMessage`, `dueKinds` – raz dziennie każdego rodzaju; raport w oknie 6 h od wybranej pory).
+
+**Bez serwera** (`src/state/useNotificationScheduler.js`): gdy aplikacja działa (także w tle) – sprawdzenie co 5 min i przy powrocie do aplikacji; wysyłka przez service worker.
+
+**Web Push (także przy zamkniętej aplikacji)**:
+1. Supabase: uruchom `supabase/push_subscriptions.sql` (tabela `push_subscriptions` z RLS: endpoint, klucze, `prefs`, `watch` – spółki z portfela, `tz`, `last_sent`).
+2. Klucze VAPID: `npx web-push generate-vapid-keys`. Vercel → Environment Variables: `VITE_VAPID_PUBLIC_KEY` (publiczny – wbudowywany w aplikację), `VAPID_PUBLIC_KEY` (ten sam), `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:…`), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (tajny, tylko serwer), `CRON_SECRET` (losowy ciąg). Po dodaniu – ponowne wdrożenie.
+3. Harmonogram co godzinę: w Supabase włącz rozszerzenia `pg_cron` i `pg_net` i uruchom `cron.schedule(...)` z końca `supabase/push_subscriptions.sql` (wywołuje `GET /api/push-cron` z nagłówkiem `Authorization: Bearer <CRON_SECRET>`). Celowo bez `crons` w `vercel.json` – plan Hobby dopuszcza tylko dzienne zadania i godzinowe zablokowałoby wdrożenie.
+4. W aplikacji: Więcej → Powiadomienia → „Powiadomienia z serwera” (wymaga logowania) → „Wyślij testowe z serwera”.
+
+Endpointy: `api/push-cron.js` (przegląd subskrypcji w strefie czasowej użytkownika, zadania z `daily_tasks` / `daily_task_logs`, wiadomości przez `api/news.js` + klasyfikację podmiotu, wysyłka `web-push`, usuwanie wygasłych subskrypcji 404/410, `?dry=1` – podgląd planu), `api/push-test.js` (POST z tokenem sesji – test na urządzenia użytkownika), wspólna logika `api/_push.js`. Service worker: zdarzenia `push` (JSON `{ title, body, url, tag }` → `showNotification`), `pushsubscriptionchange`, `notificationclick` (otwiera aplikację w danym widoku). Ten sam `tag` powiadomień lokalnych i z serwera – system zastępuje je zamiast dublować. Bez konfiguracji wszystko działa w trybie lokalnym.

@@ -6,7 +6,7 @@
 //  • /api/yahoo, /api/news i wszystkie zapytania do innych domen (Supabase, Yahoo, NBP…) – NIGDY z pamięci
 //    (świeże notowania i dane; bez sieci aplikacja używa własnych danych awaryjnych).
 // Wersja w nazwie pamięci – przy zmianie poprzednie pamięci są usuwane.
-const VERSION = 'fintrack-v5'; // zmiana wersji odświeża zapamiętany manifest i ikony; stare pamięci usuwane przy aktywacji
+const VERSION = 'fintrack-v6'; // zmiana wersji odświeża zapamiętany manifest i ikony; stare pamięci usuwane przy aktywacji
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const MEDIA = `${VERSION}-media`;
@@ -86,6 +86,34 @@ self.addEventListener('fetch', (event) => {
   if (/^\/(icons|logos|screenshots)\//.test(url.pathname) || /^\/(manifest\.json|favicon\.svg)$/.test(url.pathname)) {
     event.respondWith(staleWhileRevalidate(request, MEDIA));
   }
+});
+
+// Web Push: wiadomość z serwera (/api/push-cron, /api/push-test) – JSON { title, body, url, tag }
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+  const title = data.title || 'FinTrack';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || '',
+      tag: data.tag,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-monochrome-512.png',
+      data: { url: data.url || '/' },
+      lang: 'pl',
+    }),
+  );
+});
+
+// Przeglądarka odnowiła subskrypcję – ponowna rejestracja z tym samym kluczem (zapis w bazie przy otwarciu aplikacji)
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const options = event.oldSubscription?.options;
+  if (!options) return;
+  event.waitUntil(self.registration.pushManager.subscribe(options).catch(() => {}));
 });
 
 // Powiadomienia: kliknięcie otwiera aplikację (istniejące okno albo nowe) pod wskazanym adresem

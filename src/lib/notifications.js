@@ -1,8 +1,11 @@
-// Powiadomienia systemowe (PWA): zgoda użytkownika, wysyłka przez service worker (działa w aplikacji zainstalowanej
-// na telefonie) albo bezpośrednio przez Notification API. Ustawienia w localStorage `wealth-app-notify`:
-// { enabled, taskHour } – przypomnienie o niewykonanych zadaniach dziennych (raz dziennie od wskazanej godziny,
-// gdy aplikacja jest uruchomiona – także w tle). Powiadomienia przy całkowicie zamkniętej aplikacji wymagają
-// serwera Web Push i nie są częścią tej wersji.
+// Powiadomienia (PWA): zgoda użytkownika, wysyłka lokalna (service worker / Notification API), ustawienia oraz
+// subskrypcja Web Push (powiadomienia z serwera także przy zamkniętej aplikacji).
+// Ustawienia: localStorage `wealth-app-notify` – { enabled, tasks: { on, hour }, news: { on, min, slot } }
+// (starszy zapis { enabled, taskHour } jest odczytywany zgodnie). Po włączeniu Web Push te same ustawienia trafiają
+// do tabeli Supabase `push_subscriptions` (supabase/push_subscriptions.sql), z której korzysta /api/push-cron.
+import { normalizePrefs } from './notifyPlan.js';
+import { getClient } from './cloud.js';
+
 export const NOTIFY_KEY = 'wealth-app-notify';
 const SENT_KEY = 'wealth-app-notify-sent';
 
@@ -11,16 +14,17 @@ export const notificationPermission = () => (notificationsSupported() ? Notifica
 
 export function readNotifySettings() {
   try {
-    const v = JSON.parse(localStorage.getItem(NOTIFY_KEY) || '{}');
-    return { enabled: !!v.enabled, taskHour: Number.isInteger(v.taskHour) ? v.taskHour : 20 };
+    return normalizePrefs(JSON.parse(localStorage.getItem(NOTIFY_KEY) || '{}'));
   } catch {
-    return { enabled: false, taskHour: 20 };
+    return normalizePrefs({});
   }
 }
 
 export function writeNotifySettings(v) {
   try {
-    localStorage.setItem(NOTIFY_KEY, JSON.stringify(v));
+    const p = normalizePrefs(v);
+    // taskHour – zgodność ze starszymi wersjami aplikacji (kopie zapasowe / inne urządzenia)
+    localStorage.setItem(NOTIFY_KEY, JSON.stringify({ ...p, taskHour: p.tasks.hour }));
     window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key: NOTIFY_KEY } }));
   } catch {
     // brak localStorage
@@ -60,18 +64,96 @@ export async function showNotification(title, { body = '', url = '/', tag } = {}
 }
 
 // Czy dziś już wysłano przypomnienie danego rodzaju (raz dziennie)
-export function sentToday(kind, day) {
+export function readSent() {
   try {
-    return JSON.parse(localStorage.getItem(SENT_KEY) || '{}')[kind] === day;
+    return JSON.parse(localStorage.getItem(SENT_KEY) || '{}') || {};
   } catch {
-    return false;
+    return {};
   }
+}
+export function sentToday(kind, day) {
+  return readSent()[kind] === day;
 }
 export function markSent(kind, day) {
   try {
-    const v = JSON.parse(localStorage.getItem(SENT_KEY) || '{}');
-    localStorage.setItem(SENT_KEY, JSON.stringify({ ...v, [kind]: day }));
+    localStorage.setItem(SENT_KEY, JSON.stringify({ ...readSent(), [kind]: day }));
   } catch {
     // brak localStorage
   }
+}
+
+// ── Web Push ──
+// Klucz publiczny VAPID (zmienna VITE_VAPID_PUBLIC_KEY); bez niego działają tylko powiadomienia lokalne
+export const vapidPublicKey = () => (import.meta.env?.VITE_VAPID_PUBLIC_KEY || '').trim();
+export const pushSupported = () => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && !!vapidPublicKey();
+
+function urlBase64ToUint8Array(base64) {
+  const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+export async function currentPushSubscription() {
+  if (!pushSupported()) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+const timeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Warsaw';
+  } catch {
+    return 'Europe/Warsaw';
+  }
+};
+
+// Zapis subskrypcji z ustawieniami i obserwowanymi spółkami (watch – tematy z portfela do podsumowania wiadomości)
+async function saveSubscription(userId, sub, prefs, watch) {
+  const json = sub.toJSON();
+  const sb = await getClient();
+  const { error } = await sb.from('push_subscriptions').upsert(
+    { user_id: userId, endpoint: json.endpoint, p256dh: json.keys?.p256dh, auth: json.keys?.auth, prefs: normalizePrefs(prefs), watch, tz: timeZone(), updated_at: new Date().toISOString() },
+    { onConflict: 'endpoint' },
+  );
+  if (error) throw new Error(/push_subscriptions/.test(error.message || '') ? 'brak tabeli push_subscriptions – uruchom supabase/push_subscriptions.sql' : error.message);
+}
+
+export async function subscribePush(userId, prefs, watch = []) {
+  if (!pushSupported()) throw new Error('Web Push nie jest skonfigurowany (VITE_VAPID_PUBLIC_KEY) albo nieobsługiwany przez przeglądarkę');
+  if (!userId) throw new Error('Zaloguj się, aby włączyć powiadomienia z serwera');
+  const reg = await navigator.serviceWorker.ready;
+  const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey()) }));
+  await saveSubscription(userId, sub, prefs, watch);
+  return sub;
+}
+
+// Aktualizacja ustawień / spółek w istniejącej subskrypcji (np. po zmianie godziny albo portfela)
+export async function syncPushSubscription(userId, prefs, watch = []) {
+  const sub = await currentPushSubscription();
+  if (!sub || !userId) return false;
+  await saveSubscription(userId, sub, prefs, watch);
+  return true;
+}
+
+export async function unsubscribePush(userId) {
+  const sub = await currentPushSubscription();
+  if (!sub) return;
+  const endpoint = sub.endpoint;
+  await sub.unsubscribe().catch(() => {});
+  if (userId) {
+    const sb = await getClient();
+    await sb.from('push_subscriptions').delete().eq('endpoint', endpoint).eq('user_id', userId);
+  }
+}
+
+// Powiadomienie testowe z serwera (sprawdza całą ścieżkę: VAPID, subskrypcja, service worker)
+export async function sendServerTestPush() {
+  const sb = await getClient();
+  const { data } = await sb.auth.getSession();
+  const token = data?.session?.access_token;
+  if (!token) throw new Error('Brak sesji – zaloguj się ponownie');
+  const res = await fetch('/api/push-test', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  return body;
 }
