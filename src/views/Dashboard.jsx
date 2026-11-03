@@ -26,7 +26,7 @@ export default function Dashboard({ onNavigate }) {
           description="Utwórz konta IKE, IKZE, maklerskie lub oszczędnościowe w ustawieniach albo wczytaj dane demonstracyjne."
           action={
             <div className="mt-3 flex gap-2">
-              <Button variant="primary" onClick={() => onNavigate('settings')}>
+              <Button variant="primary" onClick={() => onNavigate('settings/accounts')}>
                 Dodaj konto
               </Button>
               <Button onClick={actions.loadDemo}>Wczytaj demo</Button>

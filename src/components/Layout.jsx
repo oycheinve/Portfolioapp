@@ -79,7 +79,7 @@ function CloudStatus({ onNavigate }) {
   const color = cloud.status === 'error' ? 'text-red-600 dark:text-red-400' : cloud.status === 'synced' ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400 animate-pulse';
   const label = `${CLOUD_LABEL[cloud.status] || ''} · ${cloud.user.email}`;
   return (
-    <button type="button" onClick={() => onNavigate('settings')} className={`inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-white/5 ${color}`} aria-label={label} title={label}>
+    <button type="button" onClick={() => onNavigate('settings/cloud')} className={`inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-white/5 ${color}`} aria-label={label} title={label}>
       <Icon size={18} />
     </button>
   );

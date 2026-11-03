@@ -47,29 +47,8 @@ const btnCls = 'inline-flex h-9 items-center gap-2 rounded-lg border border-ston
 
 // Ustawienia powiadomień: zgoda na urządzeniu, wieczorne przypomnienie o zadaniach, raport o spółkach z portfela,
 // powiadomienia z serwera (Web Push – także przy zamkniętej aplikacji)
-// Lekka podsekcja wewnątrz karty „Powiadomienia” w Ustawieniach (zamiast zagnieżdżonych kart)
-function SubSection({ title, subtitle, icon: Icon, children }) {
-  return (
-    <section className="min-w-0 rounded-xl border border-stone-100 bg-stone-50/60 dark:border-white/5 dark:bg-white/[0.03]">
-      <header className="flex items-center gap-2.5 px-3.5 pt-3">
-        {Icon && (
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-stone-600 dark:bg-white/5 dark:text-stone-300">
-            <Icon size={15} />
-          </span>
-        )}
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold">{title}</h3>
-          {subtitle && <p className="truncate text-xs text-stone-500 dark:text-stone-400">{subtitle}</p>}
-        </div>
-      </header>
-      <div className="p-3.5">{children}</div>
-    </section>
-  );
-}
-
-// embedded – w Ustawieniach (karta „Powiadomienia”): podsekcje bez zagnieżdżonych kart
-export default function NotificationsView({ embedded = false }) {
-  const Box = embedded ? SubSection : Card;
+// Widok sekcji „Powiadomienia” w Ustawieniach (#/settings/notifications)
+export default function NotificationsView() {
   const { state, actions, cloud } = useApp();
   const userId = cloud?.enabled ? cloud.user?.id : null;
   const [prefs, setPrefs] = useState(readNotifySettings);
@@ -171,15 +150,15 @@ export default function NotificationsView({ embedded = false }) {
 
   if (!supported) {
     return (
-      <Box title="Powiadomienia" icon={BellOff}>
+      <Card title="Powiadomienia" icon={BellOff}>
         <p className="text-sm text-stone-500 dark:text-stone-400">Ta przeglądarka nie obsługuje powiadomień. Na iPhonie działają po dodaniu aplikacji do ekranu początkowego (iOS 16.4+), na Androidzie w Chrome.</p>
-      </Box>
+      </Card>
     );
   }
 
   return (
-    <div className={embedded ? 'space-y-2.5' : 'space-y-4 sm:space-y-6'}>
-      <Box title="Powiadomienia na tym urządzeniu" subtitle="Zgoda systemu i włącznik wszystkich powiadomień FinTrack" icon={Smartphone}>
+    <div className="space-y-3 sm:space-y-4">
+      <Card title="Powiadomienia na tym urządzeniu" subtitle="Zgoda systemu i włącznik wszystkich powiadomień FinTrack" icon={Smartphone}>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <button
             type="button"
@@ -196,9 +175,9 @@ export default function NotificationsView({ embedded = false }) {
             Zgoda: {permission === 'granted' ? 'udzielona' : permission === 'denied' ? 'zablokowana – zmień w ustawieniach telefonu / przeglądarki' : 'jeszcze nie udzielona (pojawi się prośba systemu)'}
           </span>
         </div>
-      </Box>
+      </Card>
 
-      <Box title="Wieczorne przypomnienie o zadaniach" subtitle="Gdy dzisiejsze zadania dzienne nie są jeszcze wykonane" icon={CalendarCheck2}>
+      <Card title="Wieczorne przypomnienie o zadaniach" subtitle="Gdy dzisiejsze zadania dzienne nie są jeszcze wykonane" icon={CalendarCheck2}>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">
             <span className="text-stone-700 dark:text-stone-200">Przypominaj o niewykonanych zadaniach</span>
@@ -216,12 +195,12 @@ export default function NotificationsView({ embedded = false }) {
           </label>
           <p className="text-[11px] text-stone-500 dark:text-stone-400">Np. „FinTrack 📊 – ⏳ Zostały Ci 2 zadania na dziś: Sprawdzenie portfela, Zapisanie wydatków. ✅ Odhacz je przed końcem dnia!” Raz dziennie; bez powiadomienia, gdy wszystko jest odhaczone.</p>
         </div>
-      </Box>
+      </Card>
 
-      <Box title="Krytyczne zmiany notowań" subtitle="Nagły ruch ceny spółki lub ETF-u z portfela w ciągu dnia" icon={Activity}>
+      <Card title="Zmiany notowań" subtitle="Duży ruch ceny spółki lub ETF-u z portfela w ciągu dnia" icon={Activity}>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-stone-700 dark:text-stone-200">Powiadamiaj o krytycznych zmianach cen</span>
+            <span className="text-stone-700 dark:text-stone-200">Powiadamiaj o dużych zmianach cen</span>
             <Switch on={prefs.prices.on} onChange={(v) => save({ prices: { on: v } })} label="Krytyczne zmiany notowań" disabled={!ready} />
           </div>
           <label className="flex flex-wrap items-center gap-2 text-stone-600 dark:text-stone-300">
@@ -258,9 +237,9 @@ export default function NotificationsView({ embedded = false }) {
             </div>
           )}
         </div>
-      </Box>
+      </Card>
 
-      <Box title="Raport o spółkach z portfela" subtitle="Podsumowanie wiadomości z poprzedniego dnia" icon={Newspaper}>
+      <Card title="Raport o spółkach z portfela" subtitle="Podsumowanie wiadomości z poprzedniego dnia" icon={Newspaper}>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">
             <span className="text-stone-700 dark:text-stone-200">Wysyłaj podsumowanie wiadomości</span>
@@ -319,9 +298,9 @@ export default function NotificationsView({ embedded = false }) {
             </div>
           )}
         </div>
-      </Box>
+      </Card>
 
-      <Box title="Powiadomienia z serwera (Web Push)" subtitle="Także przy całkowicie zamkniętej aplikacji" icon={Cloud}>
+      <Card title="Powiadomienia z serwera (Web Push)" subtitle="Także przy całkowicie zamkniętej aplikacji" icon={Cloud}>
         <div className="space-y-3 text-sm">
           {!vapidPublicKey() ? (
             <p className="text-stone-600 dark:text-stone-300">
@@ -344,7 +323,7 @@ export default function NotificationsView({ embedded = false }) {
             </>
           )}
         </div>
-      </Box>
+      </Card>
     </div>
   );
 }

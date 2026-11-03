@@ -385,7 +385,7 @@ export default function PortfolioView({ onNavigate }) {
                                 onHistory={r.ops?.length ? () => setOpsFor(r) : null}
                                 onDividends={isSecurity ? () => setDivFor(r) : null}
                                 onChart={isSecurity ? () => setChartFor(r) : null}
-                                onEdit={isSecurity ? () => setEditInst(r.instrumentId) : r.account && onNavigate ? () => onNavigate('settings') : null}
+                                onEdit={isSecurity ? () => setEditInst(r.instrumentId) : r.account && onNavigate ? () => onNavigate('settings/accounts') : null}
                               />
                             </td>
                             <td className={cell}>

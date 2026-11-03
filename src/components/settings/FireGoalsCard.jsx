@@ -21,7 +21,6 @@ export default function FireGoalsCard({ defaultOpen = false }) {
         title="Cele FIRE"
         subtitle={`Kwoty w dzisiejszej sile nabywczej · obecnie ${formatPLN(fire.targetMonthlyIncome)} / mies. i ${formatPLN(fire.targetNetWorth, { compact: true })} do ${fire.targetYear}`}
         icon={Target}
-        collapsible
         defaultOpen={defaultOpen}
       >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

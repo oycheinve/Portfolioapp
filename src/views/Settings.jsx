@@ -1,81 +1,102 @@
 import { useEffect, useState } from 'react';
-import { Building2, ChevronDown, Landmark, Pencil, Plus, Radio, Scale, Trash2, Wallet } from 'lucide-react';
+import { Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Landmark, Pencil, Plus, Radio, Scale, Target, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
 import { formatDateTime, formatPLN, todayISO } from '../lib/format.js';
-import { Badge, Button, Card, CardCollapseContext, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
+import { Badge, Button, Card, Field, IconButton, Input, Modal, Select, Toggle } from '../components/ui.jsx';
 import LimitsCard from '../components/settings/LimitsCard.jsx';
 import BackupCard from '../components/settings/BackupCard.jsx';
 import CloudCard from '../components/settings/CloudCard.jsx';
-import NotificationsCard from '../components/settings/NotificationsCard.jsx';
+import NotificationsView from './NotificationsView.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
-// Trzy główne grupy (akordeony, domyślnie zwinięte); w środku dotychczasowe sekcje jako zwijane belki.
-// #/settings/fire otwiera Cele FIRE, #/settings/notifications (także dawny #/notifications) – Powiadomienia.
+// Konta i ustawienia: trzy kategorie (akordeon – otwarta najwyżej jedna), w środku płaskie kafelki podkategorii.
+// Kafelek otwiera osobny widok sekcji (#/settings/<id>) z przyciskiem powrotu; dawne #/settings/fire
+// i #/settings/notifications (także #/notifications) prowadzą wprost do sekcji.
+const SECTIONS = {
+  accounts: { title: 'Konta inwestycyjne', hint: 'IKE, IKZE, konta maklerskie', icon: Wallet, render: () => <AccountsSection /> },
+  'other-assets': { title: 'Nieruchomości i inne aktywa', hint: 'Wliczane do Majątku Całkowitego', icon: Building2, render: () => <OtherAssetsSection /> },
+  limits: { title: 'Limity wpłat IKE / IKZE', hint: 'Roczne limity i wykorzystanie', icon: CalendarClock, render: () => <LimitsCard /> },
+  fire: { title: 'Cele FIRE', hint: 'Rok, majątek i dochód docelowy', icon: Target, render: () => <FireGoalsCard /> },
+  tax: { title: 'Podatki', hint: 'Parametry kalkulatora ulgi IKZE', icon: Scale, render: () => <TaxSection /> },
+  prices: { title: 'Notowania', hint: 'Źródła cen i odświeżanie', icon: Radio, render: () => <PricesSection /> },
+  cloud: { title: 'Konto i synchronizacja w chmurze', hint: 'Logowanie i zapis w Supabase', icon: Cloud, render: () => <CloudCard /> },
+  notifications: { title: 'Powiadomienia', hint: 'Zadania, zmiany notowań, raport, Web Push', icon: Bell, render: () => <NotificationsView /> },
+  backup: { title: 'Kopia zapasowa danych', hint: 'Eksport i wczytanie pliku JSON', icon: Database, render: () => <BackupCard /> },
+};
 const GROUPS = [
-  { id: 'assets', emoji: '💼', title: 'Portfel i Aktywa', subtitle: 'Konta inwestycyjne · nieruchomości i inne aktywa · limity IKE / IKZE' },
-  { id: 'strategy', emoji: '📈', title: 'Strategie, Cele i Giełda', subtitle: 'Cele FIRE · podatki · notowania' },
-  { id: 'system', emoji: '⚙️', title: 'System i Konto', subtitle: 'Konto i chmura · powiadomienia · kopia zapasowa' },
+  { id: 'assets', emoji: '💼', title: 'Portfel i Aktywa', subtitle: 'Konta inwestycyjne · nieruchomości i inne aktywa · limity IKE / IKZE', items: ['accounts', 'other-assets', 'limits'] },
+  { id: 'strategy', emoji: '📈', title: 'Strategie, Cele i Giełda', subtitle: 'Cele FIRE · podatki · notowania', items: ['fire', 'tax', 'prices'] },
+  { id: 'system', emoji: '⚙️', title: 'System i Konto', subtitle: 'Konto i chmura · powiadomienia · kopia zapasowa', items: ['cloud', 'notifications', 'backup'] },
 ];
-const PARAM_GROUP = { fire: 'strategy', notifications: 'system' };
+const groupOf = (sectionId) => GROUPS.find((g) => g.items.includes(sectionId))?.id || null;
+// Kategoria otwarta przy powrocie z sekcji (do końca sesji karty)
+let lastOpenGroup = null;
 
-export default function SettingsView({ param }) {
-  const openGroup = PARAM_GROUP[param];
-  const body = {
-    assets: (
-      <>
-        <AccountsSection />
-        <OtherAssetsSection />
-        <LimitsCard />
-      </>
-    ),
-    strategy: (
-      <>
-        <FireGoalsCard defaultOpen={param === 'fire'} />
-        <TaxSection />
-        <PricesSection />
-      </>
-    ),
-    system: (
-      <>
-        <CloudCard />
-        <NotificationsCard defaultOpen={param === 'notifications'} />
-        <BackupCard />
-      </>
-    ),
-  };
+export default function SettingsView({ param, onNavigate }) {
+  const section = SECTIONS[param];
+  if (section) {
+    lastOpenGroup = groupOf(param);
+    return (
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => onNavigate?.('settings')}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg pr-3 pl-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5"
+        >
+          <ChevronLeft size={18} /> Konta i ustawienia
+        </button>
+        {section.render()}
+      </div>
+    );
+  }
+  return <SettingsHome onOpen={(id) => onNavigate?.(`settings/${id}`)} />;
+}
+
+function SettingsHome({ onOpen }) {
+  const [open, setOpen] = useState(lastOpenGroup); // jedna otwarta kategoria naraz
   return (
     <div className="space-y-3">
       {GROUPS.map((g) => (
-        <SettingsGroup key={g.id} group={g} defaultOpen={openGroup === g.id}>
-          {body[g.id]}
+        <SettingsGroup key={g.id} group={g} open={open === g.id} onToggle={() => setOpen((o) => (o === g.id ? null : g.id))}>
+          {g.items.map((id) => {
+            const it = SECTIONS[id];
+            const Icon = it.icon;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onOpen(id)}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-stone-50 active:bg-stone-100 dark:hover:bg-white/[0.04] dark:active:bg-white/[0.07]"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-white/5 dark:text-stone-300">
+                  <Icon size={17} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{it.title}</span>
+                  <span className="block truncate text-xs text-stone-500 dark:text-stone-400">{it.hint}</span>
+                </span>
+                <ChevronRight size={16} className="shrink-0 text-stone-400 dark:text-stone-500" />
+              </button>
+            );
+          })}
         </SettingsGroup>
       ))}
     </div>
   );
 }
 
-// Akordeon grupy: płynne rozwijanie (grid-template-rows), zwinięta treść nieaktywna (inert); sekcje w środku
-// pozostają zwijanymi belkami (CardCollapseContext)
-function SettingsGroup({ group, defaultOpen = false, children }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const [settled, setSettled] = useState(defaultOpen);
-  // Przejście na #/settings/fire lub #/settings/notifications bez przeładowania – otwarcie właściwej kategorii
+// Akordeon kategorii (stan w SettingsHome): płynne rozwijanie (grid-template-rows), zwinięta treść nieaktywna (inert)
+function SettingsGroup({ group, open, onToggle, children }) {
+  const [settled, setSettled] = useState(open);
   useEffect(() => {
-    if (defaultOpen) {
-      setOpen(true);
-      setSettled(true);
-    }
-  }, [defaultOpen]);
-  const toggle = () => {
-    setSettled(false);
-    setOpen((o) => !o);
-  };
+    if (!open) setSettled(false);
+  }, [open]);
   return (
     <section className="min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900" aria-label={group.title}>
-      <button type="button" onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors hover:bg-stone-50 sm:px-5 dark:hover:bg-white/[0.03]">
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors hover:bg-stone-50 sm:px-5 dark:hover:bg-white/[0.03]">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-lg dark:bg-white/5" aria-hidden="true">
           {group.emoji}
         </span>
@@ -93,9 +114,7 @@ function SettingsGroup({ group, defaultOpen = false, children }) {
         }}
       >
         <div className={`min-h-0 ${open && settled ? '' : 'overflow-hidden'}`} inert={open ? undefined : ''} aria-hidden={open ? undefined : true}>
-          <div className="space-y-2.5 border-t border-stone-100 p-2.5 sm:p-3 dark:border-white/5">
-            <CardCollapseContext.Provider value>{children}</CardCollapseContext.Provider>
-          </div>
+          <div className="space-y-0.5 border-t border-stone-100 p-1.5 sm:p-2 dark:border-white/5">{children}</div>
         </div>
       </div>
     </section>
@@ -217,7 +236,7 @@ function TaxSection() {
   const s = state.settings;
 
   return (
-    <Card title="Podatki" subtitle="Parametry kalkulatora ulgi IKZE · limity wpłat znajdziesz w karcie poniżej" icon={Scale}>
+    <Card title="Podatki" subtitle="Parametry kalkulatora ulgi IKZE · limity wpłat znajdziesz w „Limity wpłat IKE / IKZE”" icon={Scale}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Próg podatkowy (IKZE)">
           <Select value={s.taxBracket} onChange={(e) => actions.updateSettings({ taxBracket: e.target.value })}>

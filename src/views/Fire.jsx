@@ -83,7 +83,7 @@ export default function FireView({ onNavigate }) {
         icon={SlidersHorizontal}
         actions={
           onNavigate && (
-            <Button size="sm" icon={Settings2} onClick={() => onNavigate('settings')} title="Cele FIRE ustawisz w zakładce Ustawienia">
+            <Button size="sm" icon={Settings2} onClick={() => onNavigate('settings/fire')} title="Cele FIRE ustawisz w zakładce Ustawienia">
               Cele w ustawieniach
             </Button>
           )
