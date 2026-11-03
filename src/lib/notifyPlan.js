@@ -101,12 +101,12 @@ export function newsDigest(items, topics, day, timeZone) {
 
 export function newsDigestMessage(digest, min) {
   if (!digest || digest.total < Math.max(1, min)) return null;
-  const top = digest.byCompany.slice(0, 4).map((c) => `${c.label} (${c.count})`).join(', ');
   const n = digest.total;
   const count = plural(n, 'pojawił się 1 nowy artykuł', `pojawiły się ${n} nowe artykuły`, `pojawiło się ${n} nowych artykułów`);
   return {
     title: NOTIFY_TITLE,
-    body: `📰 Świeże wieści z rynków! Wczoraj ${count} o Twoich spółkach: ${top}${digest.byCompany.length > 4 ? '…' : ''}. Zobacz, co nowego słychać u Twoich gigantów! 🚀`,
+    // Krótko, bez listy spółek (szczegóły po kliknięciu w zakładce Newsy)
+    body: `📰 Wczoraj ${count} o Twoich spółkach. Sprawdź, co słychać na rynkach! 🚀`,
     url: '/#/news',
     tag: 'news-digest',
   };
