@@ -39,7 +39,7 @@ const VIEWS = {
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc
 // Dawna zakładka Statystyki – podsumowania są teraz w Wykresach
-// Dawny panel #/notifications – teraz sekcja „Powiadomienia” w Ustawieniach
+// Dawny panel #/notifications – teraz w Ustawieniach (System i Konto → Powiadomienia)
 const ALIASES = { notifications: 'settings/notifications', stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes' };
 
 function readHash() {
