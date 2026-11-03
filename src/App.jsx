@@ -18,7 +18,6 @@ import FireGoalView from './views/FireGoal.jsx';
 import BudgetView from './views/Budget.jsx';
 import NewsView from './views/News.jsx';
 import WeeklyTasksView from './views/WeeklyTasks.jsx';
-import NotificationsView from './views/NotificationsView.jsx';
 
 const VIEWS = {
   dashboard: Dashboard,
@@ -36,12 +35,12 @@ const VIEWS = {
   budget: BudgetView,
   news: NewsView,
   tasks: WeeklyTasksView,
-  notifications: NotificationsView,
 };
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc
 // Dawna zakładka Statystyki – podsumowania są teraz w Wykresach
-const ALIASES = { stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes' };
+// Dawny panel #/notifications – teraz w Ustawieniach (Konto, Powiadomienia i System)
+const ALIASES = { notifications: 'settings/notifications', stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes' };
 
 function readHash() {
   let h = window.location.hash.replace('#/', '').replace('#', '');

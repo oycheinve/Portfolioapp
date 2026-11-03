@@ -3,7 +3,7 @@
 // Ustawienia: localStorage `wealth-app-notify` – { enabled, tasks: { on, hour }, news: { on, min, slot } }
 // (starszy zapis { enabled, taskHour } jest odczytywany zgodnie). Po włączeniu Web Push te same ustawienia trafiają
 // do tabeli Supabase `push_subscriptions` (supabase/push_subscriptions.sql), z której korzysta /api/push-cron.
-import { normalizePrefs } from './notifyPlan.js';
+import { NOTIFY_TITLE, normalizePrefs } from './notifyPlan.js';
 import { getClient } from './cloud.js';
 
 export const NOTIFY_KEY = 'wealth-app-notify';
@@ -42,8 +42,10 @@ export async function requestNotificationPermission() {
 }
 
 // Wysyłka: najpierw przez service worker (wymagane na Androidzie w aplikacji zainstalowanej), potem bezpośrednio
-export async function showNotification(title, { body = '', url = '/', tag, renotify = false } = {}) {
+// Tytuł zawsze „FinTrack 📊” (pierwszy argument pozostaje dla zgodności wywołań – nie jest wyświetlany)
+export async function showNotification(_title, { body = '', url = '/', tag, renotify = false } = {}) {
   if (notificationPermission() !== 'granted') return false;
+  const title = NOTIFY_TITLE;
   const options = { body, tag, renotify: !!(renotify && tag), icon: '/icons/icon-192.png', badge: '/icons/icon-monochrome-512.png', data: { url }, lang: 'pl' };
   try {
     const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;

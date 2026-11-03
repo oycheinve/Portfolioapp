@@ -5,6 +5,12 @@
 // Bez zależności od przeglądarki i Reacta.
 import { GENERAL_ID, classifyArticle } from './newsSubject.js';
 
+// Stały tytuł wszystkich powiadomień (zamiast adresu domeny); treść niesie cała wiadomość
+export const NOTIFY_TITLE = 'FinTrack 📊';
+
+// Odmiana: 1 zadanie, 2–4 zadania, 5+ zadań
+export const plural = (n, one, few, many) => (n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many);
+
 export const NEWS_SLOTS = { MORNING: { hour: 8, label: 'rano (8:00)' }, NOON: { hour: 12, label: 'w południe (12:00)' } };
 
 export const DEFAULT_PREFS = {
@@ -64,10 +70,11 @@ export function unfinishedDailyTasks({ tasks = [], logs = [] }, day) {
 
 export function tasksReminderMessage(left) {
   if (!left.length) return null;
+  const n = left.length;
   const names = left.slice(0, 3).map((t) => t.title).join(', ');
   return {
-    title: `Zadania na dziś: zostało ${left.length}`,
-    body: `${names}${left.length > 3 ? '…' : ''} – uzupełnij przed końcem dnia.`,
+    title: NOTIFY_TITLE,
+    body: `⏳ ${plural(n, 'Zostało Ci 1 zadanie', `Zostały Ci ${n} zadania`, `Zostało Ci ${n} zadań`)} na dziś: ${names}${n > 3 ? ` i ${n - 3} więcej` : ''}. ✅ Odhacz je przed końcem dnia!`,
     url: '/#/tasks',
     tag: 'tasks-daily',
   };
@@ -96,9 +103,10 @@ export function newsDigestMessage(digest, min) {
   if (!digest || digest.total < Math.max(1, min)) return null;
   const top = digest.byCompany.slice(0, 4).map((c) => `${c.label} (${c.count})`).join(', ');
   const n = digest.total;
+  const count = plural(n, 'pojawił się 1 nowy artykuł', `pojawiły się ${n} nowe artykuły`, `pojawiło się ${n} nowych artykułów`);
   return {
-    title: `Wczoraj: ${n} ${n === 1 ? 'artykuł' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'artykuły' : 'artykułów'} o Twoich spółkach`,
-    body: `${top}${digest.byCompany.length > 4 ? '…' : ''}`,
+    title: NOTIFY_TITLE,
+    body: `📰 Świeże wieści z rynków! Wczoraj ${count} o Twoich spółkach: ${top}${digest.byCompany.length > 4 ? '…' : ''}. Zobacz, co nowego słychać u Twoich gigantów! 🚀`,
     url: '/#/news',
     tag: 'news-digest',
   };
@@ -138,6 +146,7 @@ export function priceAlerts(changes, threshold, state = {}, day) {
   return { alerts, state: { day, levels } };
 }
 
+const arrow = (pct) => (pct < 0 ? '📉' : '📈');
 const fmtPct = (pct) => `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct * 100).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 
 export function priceAlertMessage(alerts, threshold) {
@@ -145,11 +154,11 @@ export function priceAlertMessage(alerts, threshold) {
   const name = (a) => a.title || a.label;
   if (alerts.length === 1) {
     const a = alerts[0];
-    return { title: `Krytyczna zmiana notowań: ${a.label}`, body: `${name(a)} zanotowała zmianę o ${fmtPct(a.pct)}! (próg ±${threshold}%)`, url: '/#/portfolio', tag: 'price-alert', renotify: true };
+    return { title: NOTIFY_TITLE, body: `🚨 Krytyczna zmiana notowań: ${name(a)} zanotowała zmianę o ${fmtPct(a.pct)}! ${arrow(a.pct)} (próg ±${threshold}%)`, url: '/#/portfolio', tag: 'price-alert', renotify: true };
   }
   return {
-    title: `Krytyczne zmiany notowań (${alerts.length})`,
-    body: `${alerts.slice(0, 5).map((a) => `${a.label} ${fmtPct(a.pct)}`).join(' · ')}${alerts.length > 5 ? '…' : ''} (próg ±${threshold}%)`,
+    title: NOTIFY_TITLE,
+    body: `🚨 Krytyczne zmiany notowań (${alerts.length}): ${alerts.slice(0, 5).map((a) => `${arrow(a.pct)} ${a.label} ${fmtPct(a.pct)}`).join(' · ')}${alerts.length > 5 ? '…' : ''} (próg ±${threshold}%)`,
     url: '/#/portfolio',
     tag: 'price-alert',
     renotify: true,

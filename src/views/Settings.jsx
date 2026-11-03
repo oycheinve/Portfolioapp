@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Landmark, Pencil, Plus, Radio, Scale, Trash2, Wallet } from 'lucide-react';
+import { Building2, ChevronDown, Landmark, Pencil, Plus, Radio, Scale, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
@@ -12,22 +12,86 @@ import NotificationsCard from '../components/settings/NotificationsCard.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
+// Trzy główne grupy (akordeony, domyślnie zwinięte); w środku dotychczasowe sekcje jako zwijane belki.
+// #/settings/fire otwiera Cele FIRE, #/settings/notifications (także dawny #/notifications) – Powiadomienia.
+const GROUPS = [
+  { id: 'assets', emoji: '💼', title: 'Portfel i Aktywa', subtitle: 'Konta inwestycyjne · nieruchomości i inne aktywa · limity IKE / IKZE' },
+  { id: 'strategy', emoji: '📈', title: 'Strategie, Cele i Giełda', subtitle: 'Cele FIRE · podatki · notowania' },
+  { id: 'system', emoji: '⚙️', title: 'Konto, Powiadomienia i System', subtitle: 'Konto i chmura · powiadomienia · kopia zapasowa' },
+];
+const PARAM_GROUP = { fire: 'strategy', notifications: 'system' };
+
 export default function SettingsView({ param }) {
-  // Wszystkie sekcje jako zwijane belki (domyślnie zwinięte); #/settings/fire otwiera Cele FIRE
-  return (
-    <CardCollapseContext.Provider value>
-      <div className="space-y-3">
+  const openGroup = PARAM_GROUP[param];
+  const body = {
+    assets: (
+      <>
         <AccountsSection />
+        <OtherAssetsSection />
+        <LimitsCard />
+      </>
+    ),
+    strategy: (
+      <>
+        <FireGoalsCard defaultOpen={param === 'fire'} />
         <TaxSection />
         <PricesSection />
-        <LimitsCard />
-        <FireGoalsCard defaultOpen={param === 'fire'} />
-        <OtherAssetsSection />
+      </>
+    ),
+    system: (
+      <>
         <CloudCard />
-        <NotificationsCard />
+        <NotificationsCard defaultOpen={param === 'notifications'} />
         <BackupCard />
+      </>
+    ),
+  };
+  return (
+    <div className="space-y-3">
+      {GROUPS.map((g) => (
+        <SettingsGroup key={g.id} group={g} defaultOpen={openGroup === g.id}>
+          {body[g.id]}
+        </SettingsGroup>
+      ))}
+    </div>
+  );
+}
+
+// Akordeon grupy: płynne rozwijanie (grid-template-rows), zwinięta treść nieaktywna (inert); sekcje w środku
+// pozostają zwijanymi belkami (CardCollapseContext)
+function SettingsGroup({ group, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [settled, setSettled] = useState(defaultOpen);
+  const toggle = () => {
+    setSettled(false);
+    setOpen((o) => !o);
+  };
+  return (
+    <section className="min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900" aria-label={group.title}>
+      <button type="button" onClick={toggle} aria-expanded={open} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors hover:bg-stone-50 sm:px-5 dark:hover:bg-white/[0.03]">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-lg dark:bg-white/5" aria-hidden="true">
+          {group.emoji}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold">{group.title}</span>
+          <span className="block truncate text-xs text-stone-500 dark:text-stone-400">{group.subtitle}</span>
+        </span>
+        <ChevronDown size={18} className={`shrink-0 text-stone-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <div
+        className="grid grid-cols-[minmax(0,1fr)] transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+        onTransitionEnd={(e) => {
+          if (e.target === e.currentTarget && open) setSettled(true);
+        }}
+      >
+        <div className={`min-h-0 ${open && settled ? '' : 'overflow-hidden'}`} inert={open ? undefined : ''} aria-hidden={open ? undefined : true}>
+          <div className="space-y-2.5 border-t border-stone-100 p-2.5 sm:p-3 dark:border-white/5">
+            <CardCollapseContext.Provider value>{children}</CardCollapseContext.Provider>
+          </div>
+        </div>
       </div>
-    </CardCollapseContext.Provider>
+    </section>
   );
 }
 

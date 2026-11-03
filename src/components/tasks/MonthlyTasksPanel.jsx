@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarCheck2, CalendarRange, Check, ChevronLeft, ChevronRight, Cloud, Flame, HardDrive, History, Minus, Pencil, Plus, Repeat, Target, Trash2 } from 'lucide-react';
+import { CalendarCheck2, CalendarRange, Check, ChevronLeft, ChevronRight, Flame, Minus, Pencil, Plus, Repeat, Target, Trash2 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { MissingTablesError } from '../../lib/weeklyTasks.js';
 import { daysLeftInMonth, hasTarget, historyMonths, makeMonthlyTask, monthDoneSet, monthId, monthKey, monthLabel, monthProgress, monthProgressMap, monthlyCloudStore, monthlyLocalStore, shiftMonthId, tasksForMonth } from '../../lib/monthlyTasks.js';
 import { Card, Segmented } from '../ui.jsx';
+import TaskAccordion from './TaskAccordion.jsx';
 import ScheduledCard, { PlanInput } from './ScheduledCard.jsx';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -164,7 +165,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
   const navBtn = 'inline-flex h-9 w-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 disabled:opacity-40 dark:text-stone-400 dark:hover:bg-white/5';
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-3 sm:space-y-4">
       {missingTables && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
           W bazie Supabase brakuje tabel zadań miesięcznych – uruchom raz skrypt <code className="font-mono text-xs">supabase/monthly_tasks.sql</code> (SQL Editor → Run). Do tego czasu zadania miesięczne zapisują się tylko w tej przeglądarce.
@@ -195,17 +196,13 @@ export default function MonthlyTasksPanel({ onDataChange }) {
             {progress.done} / {progress.total} · {pct(progress.pct)}
           </span>
         </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500 dark:text-stone-400">
-          <span className="inline-flex items-center gap-1">
-            {store.kind === 'cloud' ? <Cloud size={12} /> : <HardDrive size={12} />}
-            {store.kind === 'cloud' ? 'Zapis w chmurze (Supabase)' : 'Zapis w tej przeglądarce'}
-          </span>
-          {!isCurrent && (
+        {!isCurrent && (
+          <div className="mt-2 flex justify-end text-[11px]">
             <button type="button" onClick={() => setMonth(current)} className="font-semibold text-blue-600 hover:underline dark:text-blue-400">
               Wróć do bieżącego miesiąca
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       {canEdit && (
@@ -274,7 +271,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
       {loading ? (
         <div className="h-32 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />
       ) : (
-        <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
           {groups.map((g) => (
             <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(monthKey(t.id, month))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
               {g.items.length === 0 ? (
@@ -391,7 +388,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }} unitLabel="miesiące" />
 
-      <Card title="Historia miesięcy" subtitle="Wykonanie zadań w minionych miesiącach – kliknij, aby zobaczyć szczegóły" icon={History} bodyClassName="p-2 sm:p-3">
+      <TaskAccordion title="Historia miesięcy" hint="Wykonanie zadań w minionych miesiącach – kliknij, aby zobaczyć szczegóły">
         {history.length === 0 ? (
           <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">Historia pojawi się po zakończeniu pierwszego miesiąca z zadaniami.</p>
         ) : (
@@ -419,7 +416,7 @@ export default function MonthlyTasksPanel({ onDataChange }) {
             ))}
           </ul>
         )}
-      </Card>
+      </TaskAccordion>
     </div>
   );
 }

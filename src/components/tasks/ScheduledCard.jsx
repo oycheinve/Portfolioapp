@@ -1,11 +1,11 @@
 import { CalendarClock, ChevronRight, Repeat } from 'lucide-react';
-import { Card } from '../ui.jsx';
+import TaskAccordion from './TaskAccordion.jsx';
 
 // Zadania zaplanowane na przyszłe okresy (start po bieżącym dniu / tygodniu / miesiącu) – pojawią się na liście
-// dopiero w swoim okresie; kliknięcie przenosi do tego okresu. items: [{ id, title, isRecurring, period, label }]
+// dopiero w swoim okresie; kliknięcie przenosi do tego okresu. Zwijana sekcja (domyślnie zwinięta). items: [{ id, title, isRecurring, period, label }]
 export default function ScheduledCard({ items, onOpen, unitLabel }) {
   return (
-    <Card title={`Zaplanowane (${items.length})`} subtitle={`Zadania na przyszłe ${unitLabel} – pojawią się na liście w swoim terminie`} icon={CalendarClock} bodyClassName="p-2 sm:p-3">
+    <TaskAccordion title="Zaplanowane" count={items.length} hint={`Zadania na przyszłe ${unitLabel} – pojawią się na liście w swoim terminie`}>
       {items.length === 0 ? (
         <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">Brak zaplanowanych zadań. Przejdź strzałką → do przyszłego okresu albo wybierz datę w polu „Zaplanuj na”.</p>
       ) : (
@@ -27,7 +27,7 @@ export default function ScheduledCard({ items, onOpen, unitLabel }) {
           ))}
         </ul>
       )}
-    </Card>
+    </TaskAccordion>
   );
 }
 

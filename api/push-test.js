@@ -1,6 +1,7 @@
 // /api/push-test (POST) – powiadomienie testowe z serwera na wszystkie urządzenia zalogowanego użytkownika.
 // Autoryzacja: „Authorization: Bearer <token sesji Supabase>” (wysyła aplikacja z Ustawień powiadomień).
 import { bearer, json, pushConfig, sendPush, serviceClient } from './_push.js';
+import { NOTIFY_TITLE } from '../src/lib/notifyPlan.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'Użyj POST' });
@@ -17,7 +18,7 @@ export default async function handler(req, res) {
     if (!subs?.length) return json(res, 404, { error: 'Brak subskrypcji – włącz powiadomienia z serwera na tym urządzeniu' });
     let sent = 0;
     for (const s of subs) {
-      const r = await sendPush(cfg, s, { title: 'FinTrack', body: 'Powiadomienia z serwera działają ✓', url: '/#/notifications', tag: 'push-test' });
+      const r = await sendPush(cfg, s, { title: NOTIFY_TITLE, body: '✅ Powiadomienia z serwera działają! Będziesz na bieżąco z zadaniami i rynkiem. 📊', url: '/#/settings/notifications', tag: 'push-test' });
       if (r.ok) sent += 1;
       else if (r.gone) await sb.from('push_subscriptions').delete().eq('id', s.id);
     }

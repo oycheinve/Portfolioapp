@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, CalendarCheck2, Check, ChevronLeft, ChevronRight, Cloud, Gauge, HardDrive, ListChecks, Plus, Repeat, Target, Trash2 } from 'lucide-react';
+import { CalendarCheck2, Check, ChevronLeft, ChevronRight, Gauge, ListChecks, Plus, Repeat, Target, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, archiveWeeks, cloudStore, localStore, logKey, makeTask, shiftWeek, tasksForWeek, weekId, weekLabel, weekNumber, weekProgress, weekStart } from '../lib/weeklyTasks.js';
+import TaskAccordion from '../components/tasks/TaskAccordion.jsx';
 import ScheduledCard, { PlanInput } from '../components/tasks/ScheduledCard.jsx';
 import { dayId } from '../lib/dailyTasks.js';
 import { Card, Segmented } from '../components/ui.jsx';
@@ -49,7 +50,7 @@ export default function TasksView() {
   const onMonthly = useMemo(() => report('monthly'), [report]);
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-3 sm:space-y-4">
       <ConsistencyCard data={all} />
       <div className="flex justify-center">
         <Segmented
@@ -214,7 +215,7 @@ function WeeklyTasksPanel({ onDataChange }) {
   const navBtn = 'inline-flex h-9 w-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 disabled:opacity-40 dark:text-stone-400 dark:hover:bg-white/5';
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-3 sm:space-y-4">
       {missingTables && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
           W bazie Supabase brakuje tabel zadań – uruchom raz skrypt <code className="font-mono text-xs">supabase/weekly_tasks.sql</code> (SQL Editor → Run). Do tego czasu zadania zapisują się tylko w tej przeglądarce.
@@ -244,17 +245,13 @@ function WeeklyTasksPanel({ onDataChange }) {
             {progress.done} / {progress.total} · {pct(progress.pct)}
           </span>
         </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500 dark:text-stone-400">
-          <span className="inline-flex items-center gap-1">
-            {store.kind === 'cloud' ? <Cloud size={12} /> : <HardDrive size={12} />}
-            {store.kind === 'cloud' ? 'Zapis w chmurze (Supabase)' : 'Zapis w tej przeglądarce'}
-          </span>
-          {!isCurrent && (
+        {!isCurrent && (
+          <div className="mt-2 flex justify-end text-[11px]">
             <button type="button" onClick={() => setWeek(current)} className="font-semibold text-blue-600 hover:underline dark:text-blue-400">
               Wróć do bieżącego tygodnia
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       {canEdit && (
@@ -291,50 +288,63 @@ function WeeklyTasksPanel({ onDataChange }) {
       {loading ? (
         <div className="h-32 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />
       ) : (
-        <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-          {groups.map((g) => (
-            <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(logKey(t.id, week))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+          {groups.map((g) => {
+            const count = `${g.items.filter((t) => doneSet.has(logKey(t.id, week))).length}/${g.items.length}`;
+            const items = (
+              <>
               {g.items.length === 0 ? (
-                <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'R' ? 'Dodaj zadanie „Co tydzień” – np. nawyk lub stały przegląd.' : 'Brak zadań jednorazowych w tym tygodniu.') : isFuture ? 'Brak zadań zaplanowanych na ten tydzień.' : 'Brak zadań.'}</p>
-              ) : (
-                <ul className="space-y-1">
-                  {g.items.map((t) => {
-                    const done = doneSet.has(logKey(t.id, week));
-                    return (
-                      <li key={t.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
-                        <button
-                          type="button"
-                          role="checkbox"
-                          aria-checked={done}
-                          onClick={() => toggle(t)}
-                          disabled={isFuture}
-                          title={isFuture ? 'Odhaczysz w tym tygodniu' : undefined}
-                          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default"
-                        >
-                          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>
-                            {done && <Check size={15} strokeWidth={3} />}
-                          </span>
-                          <span className={`min-w-0 flex-1 text-sm break-words ${done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{t.title}</span>
-                          {t.isRecurring && <Repeat size={13} className="shrink-0 text-stone-300 dark:text-stone-600" aria-label="cykliczne" />}
-                        </button>
-                        {canEdit && (
+                  <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'R' ? 'Dodaj zadanie „Co tydzień” – np. nawyk lub stały przegląd.' : 'Brak zadań jednorazowych w tym tygodniu.') : isFuture ? 'Brak zadań zaplanowanych na ten tydzień.' : 'Brak zadań.'}</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {g.items.map((t) => {
+                      const done = doneSet.has(logKey(t.id, week));
+                      return (
+                        <li key={t.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
                           <button
                             type="button"
-                            onClick={() => remove(t)}
-                            aria-label={`Usuń zadanie ${t.title}`}
-                            title={t.isRecurring && t.weekId < week ? 'Zakończ zadanie (zostanie w archiwum)' : 'Usuń zadanie'}
-                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10"
+                            role="checkbox"
+                            aria-checked={done}
+                            onClick={() => toggle(t)}
+                            disabled={isFuture}
+                            title={isFuture ? 'Odhaczysz w tym tygodniu' : undefined}
+                            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default"
                           >
-                            <Trash2 size={15} />
+                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>
+                              {done && <Check size={15} strokeWidth={3} />}
+                            </span>
+                            <span className={`min-w-0 flex-1 text-sm break-words ${done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{t.title}</span>
+                            {t.isRecurring && <Repeat size={13} className="shrink-0 text-stone-300 dark:text-stone-600" aria-label="cykliczne" />}
                           </button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Card>
-          ))}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => remove(t)}
+                              aria-label={`Usuń zadanie ${t.title}`}
+                              title={t.isRecurring && t.weekId < week ? 'Zakończ zadanie (zostanie w archiwum)' : 'Usuń zadanie'}
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </>
+            );
+            // Jednorazowe – minimalistyczny akordeon (domyślnie zwinięty), cykliczne – stała karta
+            return g.key === 'O' ? (
+              <TaskAccordion key={g.key} title={g.title} count={count} hint={g.hint}>
+                {items}
+              </TaskAccordion>
+            ) : (
+              <Card key={g.key} title={`${g.title} (${count})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
+                {items}
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -343,7 +353,7 @@ function WeeklyTasksPanel({ onDataChange }) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }} unitLabel="tygodnie" />
 
-      <Card title="Archiwum tygodni" subtitle="Wykonanie zadań w minionych tygodniach – kliknij, aby zobaczyć szczegóły" icon={Archive} bodyClassName="p-2 sm:p-3">
+      <TaskAccordion title="Archiwum tygodni" count={archive.length || null} hint="Wykonanie zadań w minionych tygodniach – kliknij, aby zobaczyć szczegóły">
         {archive.length === 0 ? (
           <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">Archiwum pojawi się po zakończeniu pierwszego tygodnia z zadaniami.</p>
         ) : (
@@ -374,7 +384,7 @@ function WeeklyTasksPanel({ onDataChange }) {
             ))}
           </ul>
         )}
-      </Card>
+      </TaskAccordion>
       <p className="flex items-center justify-center gap-1.5 text-[11px] text-stone-400">
         <ListChecks size={12} /> Zadania nie wpływają na wyliczenia portfela ani budżetu.
       </p>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Bell, BellOff, CalendarCheck2, Cloud, Eye, Newspaper, Send, Smartphone } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { NEWS_SLOTS, localClock, newsDigest, newsDigestMessage, previousDay, priceAlertMessage } from '../lib/notifyPlan.js';
+import { NEWS_SLOTS, NOTIFY_TITLE, localClock, newsDigest, newsDigestMessage, previousDay, priceAlertMessage } from '../lib/notifyPlan.js';
 import { heldDayChanges } from '../lib/priceAlerts.js';
 import {
   currentPushSubscription,
@@ -47,7 +47,29 @@ const btnCls = 'inline-flex h-9 items-center gap-2 rounded-lg border border-ston
 
 // Ustawienia powiadomień: zgoda na urządzeniu, wieczorne przypomnienie o zadaniach, raport o spółkach z portfela,
 // powiadomienia z serwera (Web Push – także przy zamkniętej aplikacji)
-export default function NotificationsView() {
+// Lekka podsekcja wewnątrz karty „Powiadomienia” w Ustawieniach (zamiast zagnieżdżonych kart)
+function SubSection({ title, subtitle, icon: Icon, children }) {
+  return (
+    <section className="min-w-0 rounded-xl border border-stone-100 bg-stone-50/60 dark:border-white/5 dark:bg-white/[0.03]">
+      <header className="flex items-center gap-2.5 px-3.5 pt-3">
+        {Icon && (
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-stone-600 dark:bg-white/5 dark:text-stone-300">
+            <Icon size={15} />
+          </span>
+        )}
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold">{title}</h3>
+          {subtitle && <p className="truncate text-xs text-stone-500 dark:text-stone-400">{subtitle}</p>}
+        </div>
+      </header>
+      <div className="p-3.5">{children}</div>
+    </section>
+  );
+}
+
+// embedded – w Ustawieniach (karta „Powiadomienia”): podsekcje bez zagnieżdżonych kart
+export default function NotificationsView({ embedded = false }) {
+  const Box = embedded ? SubSection : Card;
   const { state, actions, cloud } = useApp();
   const userId = cloud?.enabled ? cloud.user?.id : null;
   const [prefs, setPrefs] = useState(readNotifySettings);
@@ -81,7 +103,7 @@ export default function NotificationsView() {
   };
 
   const testLocal = async () => {
-    const ok = await showNotification('FinTrack', { body: 'Powiadomienia działają ✓', url: '/#/notifications', tag: 'test' });
+    const ok = await showNotification(NOTIFY_TITLE, { body: '✅ Powiadomienia działają! Będziesz na bieżąco z zadaniami i rynkiem. 📊', url: '/#/settings/notifications', tag: 'test' });
     if (!ok) actions.notify('Nie udało się wyświetlić powiadomienia – sprawdź zgodę w ustawieniach telefonu', 'warn');
   };
 
@@ -149,15 +171,15 @@ export default function NotificationsView() {
 
   if (!supported) {
     return (
-      <Card title="Powiadomienia" icon={BellOff}>
+      <Box title="Powiadomienia" icon={BellOff}>
         <p className="text-sm text-stone-500 dark:text-stone-400">Ta przeglądarka nie obsługuje powiadomień. Na iPhonie działają po dodaniu aplikacji do ekranu początkowego (iOS 16.4+), na Androidzie w Chrome.</p>
-      </Card>
+      </Box>
     );
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <Card title="Powiadomienia na tym urządzeniu" subtitle="Zgoda systemu i włącznik wszystkich powiadomień FinTrack" icon={Smartphone}>
+    <div className={embedded ? 'space-y-2.5' : 'space-y-4 sm:space-y-6'}>
+      <Box title="Powiadomienia na tym urządzeniu" subtitle="Zgoda systemu i włącznik wszystkich powiadomień FinTrack" icon={Smartphone}>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <button
             type="button"
@@ -174,9 +196,9 @@ export default function NotificationsView() {
             Zgoda: {permission === 'granted' ? 'udzielona' : permission === 'denied' ? 'zablokowana – zmień w ustawieniach telefonu / przeglądarki' : 'jeszcze nie udzielona (pojawi się prośba systemu)'}
           </span>
         </div>
-      </Card>
+      </Box>
 
-      <Card title="Wieczorne przypomnienie o zadaniach" subtitle="Gdy dzisiejsze zadania dzienne nie są jeszcze wykonane" icon={CalendarCheck2}>
+      <Box title="Wieczorne przypomnienie o zadaniach" subtitle="Gdy dzisiejsze zadania dzienne nie są jeszcze wykonane" icon={CalendarCheck2}>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">
             <span className="text-stone-700 dark:text-stone-200">Przypominaj o niewykonanych zadaniach</span>
@@ -192,11 +214,11 @@ export default function NotificationsView() {
               ))}
             </select>
           </label>
-          <p className="text-[11px] text-stone-500 dark:text-stone-400">Np. „Zadania na dziś: zostało 2 – Sprawdzenie portfela, Zapisanie wydatków – uzupełnij przed końcem dnia.” Raz dziennie; bez powiadomienia, gdy wszystko jest odhaczone.</p>
+          <p className="text-[11px] text-stone-500 dark:text-stone-400">Np. „FinTrack 📊 – ⏳ Zostały Ci 2 zadania na dziś: Sprawdzenie portfela, Zapisanie wydatków. ✅ Odhacz je przed końcem dnia!” Raz dziennie; bez powiadomienia, gdy wszystko jest odhaczone.</p>
         </div>
-      </Card>
+      </Box>
 
-      <Card title="Krytyczne zmiany notowań" subtitle="Nagły ruch ceny spółki lub ETF-u z portfela w ciągu dnia" icon={Activity}>
+      <Box title="Krytyczne zmiany notowań" subtitle="Nagły ruch ceny spółki lub ETF-u z portfela w ciągu dnia" icon={Activity}>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">
             <span className="text-stone-700 dark:text-stone-200">Powiadamiaj o krytycznych zmianach cen</span>
@@ -213,7 +235,7 @@ export default function NotificationsView() {
             </select>
           </label>
           <p className="text-[11px] text-stone-500 dark:text-stone-400">
-            Np. „Krytyczna zmiana notowań: PKO – PKO Bank Polski zanotowała zmianę o −4,6%!”. Sprawdzane po każdym pobraniu kursów w aplikacji, a przy Web Push także przez serwer co godzinę w dni robocze 9–22. Jedno powiadomienie na spółkę dziennie – kolejne, gdy ruch pogłębi się o następną wielokrotność progu (np. ±8%).
+            Np. „FinTrack 📊 – 🚨 Krytyczna zmiana notowań: PKO Bank Polski zanotowała zmianę o −4,6%! 📉”. Sprawdzane po każdym pobraniu kursów w aplikacji, a przy Web Push także przez serwer co godzinę w dni robocze 9–22. Jedno powiadomienie na spółkę dziennie – kolejne, gdy ruch pogłębi się o następną wielokrotność progu (np. ±8%).
           </p>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => checkPrices(false)} className={btnCls}>
@@ -236,9 +258,9 @@ export default function NotificationsView() {
             </div>
           )}
         </div>
-      </Card>
+      </Box>
 
-      <Card title="Raport o spółkach z portfela" subtitle="Podsumowanie wiadomości z poprzedniego dnia" icon={Newspaper}>
+      <Box title="Raport o spółkach z portfela" subtitle="Podsumowanie wiadomości z poprzedniego dnia" icon={Newspaper}>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">
             <span className="text-stone-700 dark:text-stone-200">Wysyłaj podsumowanie wiadomości</span>
@@ -291,15 +313,15 @@ export default function NotificationsView() {
                     {preview.day}: {preview.digest.total} {preview.digest.total === 1 ? 'artykuł' : 'artykułów'} o spółkach z portfela
                     {preview.digest.byCompany.length > 0 && ` – ${preview.digest.byCompany.map((c) => `${c.label} (${c.count})`).join(', ')}`}
                   </p>
-                  <p className="mt-1 text-stone-500 dark:text-stone-400">{preview.msg ? `Powiadomienie: „${preview.msg.title} – ${preview.msg.body}”` : `Poniżej progu (${prefs.news.min}) – powiadomienie nie zostanie wysłane.`}</p>
+                  <p className="mt-1 text-stone-500 dark:text-stone-400">{preview.msg ? `Powiadomienie: „${preview.msg.body}”` : `Poniżej progu (${prefs.news.min}) – powiadomienie nie zostanie wysłane.`}</p>
                 </>
               )}
             </div>
           )}
         </div>
-      </Card>
+      </Box>
 
-      <Card title="Powiadomienia z serwera (Web Push)" subtitle="Także przy całkowicie zamkniętej aplikacji" icon={Cloud}>
+      <Box title="Powiadomienia z serwera (Web Push)" subtitle="Także przy całkowicie zamkniętej aplikacji" icon={Cloud}>
         <div className="space-y-3 text-sm">
           {!vapidPublicKey() ? (
             <p className="text-stone-600 dark:text-stone-300">
@@ -322,7 +344,7 @@ export default function NotificationsView() {
             </>
           )}
         </div>
-      </Card>
+      </Box>
     </div>
   );
 }
