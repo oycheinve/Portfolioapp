@@ -7,6 +7,7 @@ import { useNotificationScheduler } from '../state/useNotificationScheduler.js';
 
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 // hidden: true = tymczasowo ukryta we wszystkich menu (widok i adres #/… nadal działają, kod bez zmian)
+// topbar: true = dostępna tylko z przycisku na górnym pasku (obok motywu), nie w menu bocznym / „Więcej”
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard, mobile: true },
   { id: 'portfolio', label: 'Portfel', longLabel: 'Portfel', icon: Table2, mobile: true },
@@ -24,17 +25,17 @@ export const NAV_ITEMS = [
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
   { id: 'notifications', label: 'Powiadomienia', longLabel: 'Powiadomienia', icon: Bell },
-  { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings },
+  { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings, topbar: true },
 ];
 
 // Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
 const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'tasks'];
-// Pozycje widoczne w menu (bez tymczasowo ukrytych)
-const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden);
+// Pozycje widoczne w menu (bez tymczasowo ukrytych i dostępnych z górnego paska)
+const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden && !n.topbar);
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
-// Kolejność kafelków w arkuszu „Więcej” (telefon); Ustawienia na końcu, pod nimi przełącznik motywu
-const MORE_ORDER = ['news', 'goals', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'notifications', 'settings'];
+// Kolejność kafelków w arkuszu „Więcej” (telefon), pod nimi przełącznik motywu; Ustawienia – przycisk na górnym pasku
+const MORE_ORDER = ['news', 'goals', 'safe', 'simulations', 'allocation', 'fire', 'reports', 'cash', 'dividends', 'notifications'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !n.mobile && !MORE_ORDER.includes(n.id))].filter(Boolean);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
@@ -201,6 +202,21 @@ export function Layout({ view, onNavigate, children }) {
             >
               <ThemeIcon size={18} />
             </button>
+            {/* Konta i ustawienia (logowanie, chmura, kopie, powiadomienia) – obok przełącznika motywu */}
+            <button
+              type="button"
+              onClick={() => onNavigate('settings')}
+              aria-current={view === 'settings' ? 'page' : undefined}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                view === 'settings'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'
+                  : 'text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5'
+              }`}
+              aria-label="Konta i ustawienia"
+              title="Konta i ustawienia"
+            >
+              <Settings size={18} />
+            </button>
           </div>
         </header>
 
@@ -217,7 +233,7 @@ export function Layout({ view, onNavigate, children }) {
         ))}
         <BottomTab
           item={{ id: 'more', label: 'Więcej', icon: Menu }}
-          active={!NAV_ITEMS.find((n) => n.id === view)?.mobile}
+          active={!!current && !current.mobile && !current.topbar}
           badge={MENU_ITEMS.filter((n) => !n.mobile).reduce((s2, n) => s2 + (badges[n.id] || 0), 0) || null}
           onClick={() => setMoreOpen(true)}
         />
