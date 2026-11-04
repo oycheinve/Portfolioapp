@@ -5,11 +5,11 @@
 // nadpisać zmienną GUS_CPI_CSV_URL), 2) zapasowo Eurostat HICP dla Polski (uzupełnia tylko brakujące miesiące).
 // Zmienne: SUPABASE_URL (albo VITE_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET; opcjonalnie GUS_CPI_CSV_URL.
 import { createClient } from '@supabase/supabase-js';
+import { env, missingSupabaseMessage, supabaseEnvReport, supabaseServiceKey, supabaseUrl } from './_env.js';
 import { mergeRows, monthKeyOf, parseEurostat, parseGusCsv } from '../src/lib/inflation.js';
 
 export const config = { maxDuration: 60 };
 
-const env = (...names) => names.map((n) => process.env[n]).find((v) => v && String(v).trim()) || '';
 const GUS_CSV = [
   'https://stat.gov.pl/download/gfx/portalinformacyjny/pl/defaultstronaopisowa/4741/1/1/miesieczne_wskazniki_cen_towarow_i_uslug_konsumpcyjnych_od_1982_roku.csv',
 ];
@@ -105,13 +105,34 @@ export async function syncInflation({ sb, dry = false, fetchers = {} }) {
   return { ok: true, source: fetched[0].source, months: fetched.length, latest: monthKeyOf(last.year, last.month), latestYoy: last.yoy, written: dry ? 0 : upserts.length, pending: upserts.length, dry, log };
 }
 
+async function checkConfig(res) {
+  const report = supabaseEnvReport();
+  const out = { ok: false, ...report, cronSecret: !!env('CRON_SECRET'), table: null };
+  if (report.url && report.serviceKey) {
+    try {
+      const sb = createClient(supabaseUrl(), supabaseServiceKey(), { auth: { persistSession: false, autoRefreshToken: false } });
+      const { count, error } = await sb.from('inflation_rates').select('year', { count: 'exact', head: true });
+      out.table = error ? `błąd: ${error.message}` : `${count ?? 0} wierszy`;
+      out.ok = !error;
+    } catch (e) {
+      out.table = `błąd połączenia: ${e.message}`;
+    }
+  } else {
+    out.error = missingSupabaseMessage(true);
+  }
+  return send(res, 200, out);
+}
+
 export default async function handler(req, res) {
-  const url = env('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const key = env('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !key) return send(res, 503, { error: 'Brak konfiguracji serwera (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)' });
+  const params = new URL(req.url || '/', 'http://x').searchParams;
+  // GET /api/inflation-sync?check=1 – diagnoza konfiguracji (bez wartości zmiennych i bez pobierania danych)
+  if (params.get('check') === '1') return checkConfig(res);
+  const url = supabaseUrl();
+  const key = supabaseServiceKey();
+  if (!url || !key) return send(res, 503, { error: missingSupabaseMessage(true) });
   try {
     if (!(await authorized(req, url, key))) return send(res, 401, { error: 'Brak uprawnień (CRON_SECRET albo zalogowany użytkownik)' });
-    const dry = new URL(req.url || '/', 'http://x').searchParams.get('dry') === '1';
+    const dry = params.get('dry') === '1';
     const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
     const out = await syncInflation({ sb, dry });
     return send(res, out.ok ? 200 : 502, out);

@@ -2,8 +2,8 @@
 // obligacje COI/EDO). Dane publiczne; odpowiedź buforowana przez CDN (godzina, z odświeżaniem w tle).
 // Zmienne: SUPABASE_URL (albo VITE_SUPABASE_URL) i SUPABASE_SERVICE_ROLE_KEY albo klucz anon (odczyt dozwolony RLS).
 import { createClient } from '@supabase/supabase-js';
+import { missingSupabaseMessage, supabaseAnyKey, supabaseUrl } from './_env.js';
 
-const env = (...names) => names.map((n) => process.env[n]).find((v) => v && String(v).trim()) || '';
 
 export default async function handler(req, res) {
   const send = (status, body, cache = 'no-store') => {
@@ -13,9 +13,9 @@ export default async function handler(req, res) {
     res.end(JSON.stringify(body));
   };
   if (req.method !== 'GET') return send(405, { error: 'Użyj GET' });
-  const url = env('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const key = env('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
-  if (!url || !key) return send(503, { error: 'Brak konfiguracji Supabase na serwerze' });
+  const url = supabaseUrl();
+  const key = supabaseAnyKey();
+  if (!url || !key) return send(503, { error: missingSupabaseMessage(false) });
   try {
     const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data, error } = await sb.from('inflation_rates').select('year, month, yoy, mom, source, updated_at').gte('year', 2000).order('year').order('month').limit(2000);

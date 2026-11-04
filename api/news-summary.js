@@ -9,6 +9,7 @@
 //   z podsumowań korzystają tylko zalogowani użytkownicy (koszt API); AI_ALLOW_ANON=1 – bez logowania (np. lokalnie).
 import { ApiError, GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
+import { env, supabaseAnyKey, supabaseUrl } from './_env.js';
 
 export const config = { maxDuration: 60 };
 
@@ -16,7 +17,6 @@ export const config = { maxDuration: 60 };
 // gemini-1.5 / 2.0 / 2.5-flash, Google wycofuje – alias przechodzi na aktualną wersję automatycznie)
 const DEFAULT_MODEL = 'gemini-flash-latest';
 const apiKey = () => env('GEMINI_API_KEY', 'GOOGLE_API_KEY');
-const env = (...names) => names.map((n) => process.env[n]).find((v) => v && String(v).trim()) || '';
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
   Accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
@@ -160,8 +160,8 @@ async function articleText(link) {
 // ── Autoryzacja ──
 async function authorize(req) {
   if (env('AI_ALLOW_ANON') === '1') return { ok: true };
-  const url = env('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const key = env('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
+  const url = supabaseUrl();
+  const key = supabaseAnyKey();
   if (!url || !key) return { ok: false, status: 503, error: 'Podsumowania AI wymagają logowania – brak konfiguracji Supabase na serwerze (SUPABASE_URL i klucz) albo ustaw AI_ALLOW_ANON=1' };
   const token = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!token) return { ok: false, status: 401, error: 'Zaloguj się, aby korzystać z podsumowań AI' };

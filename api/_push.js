@@ -5,19 +5,19 @@
 //   CRON_SECRET – sekret wywołań /api/push-cron (harmonogram w Supabase: pg_cron, supabase/push_subscriptions.sql).
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
+import { env, supabaseServiceKey, supabaseUrl } from './_env.js';
 import { fetchNews } from './news.js';
 import { proxyYahoo } from './yahoo.js';
 import { parseYahooChart } from '../src/lib/prices.js';
 import { quoteDayChangePct } from '../src/lib/engine.js';
 import { dueKinds, localClock, newsDigest, newsDigestMessage, normalizePrefs, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../src/lib/notifyPlan.js';
 
-const env = (...names) => names.map((n) => process.env[n]).find((v) => v && String(v).trim()) || '';
 const MAX_TOPICS = 15;
 
 export function pushConfig() {
   const cfg = {
-    supabaseUrl: env('SUPABASE_URL', 'VITE_SUPABASE_URL'),
-    serviceKey: env('SUPABASE_SERVICE_ROLE_KEY'),
+    supabaseUrl: supabaseUrl(),
+    serviceKey: supabaseServiceKey(),
     vapidPublic: env('VAPID_PUBLIC_KEY', 'VITE_VAPID_PUBLIC_KEY'),
     vapidPrivate: env('VAPID_PRIVATE_KEY'),
     vapidSubject: env('VAPID_SUBJECT') || 'mailto:admin@example.com',
