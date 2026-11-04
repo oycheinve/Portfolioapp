@@ -208,11 +208,17 @@ async function discoverFlash(client) {
   return names.sort((x, y) => y.localeCompare(x, 'en', { numeric: true }));
 }
 
-export const lastRoute = { backend: null, model: null };
+export const lastRoute = { backend: null, model: null, attempts: [] };
+const keyRejected = (e) => e instanceof ApiError && (e.status === 401 || e.status === 403 || (e.status === 400 && /api key|api_key|credential|auth/i.test(e.message || '')));
+
 export async function summarize(userContent) {
   const key = apiKey();
-  let lastError;
+  lastRoute.attempts = [];
+  let firstError; // błąd pierwszej usługi (Gemini API) – ważniejszy niż błąd usługi zapasowej
   for (const backend of backends(key)) {
+    // Vertex AI tylko wtedy, gdy Gemini API odrzuciło sam klucz (nie przy przeciążeniu, limicie czy braku modelu)
+    if (firstError && !keyRejected(firstError)) break;
+    let lastError;
     const client = clientFor(backend, key);
     const tried = new Set();
     let chain = modelChain();
@@ -232,18 +238,21 @@ export async function summarize(userContent) {
           Object.assign(lastRoute, { backend, model });
           return parseResponse(response, model);
         } catch (e) {
+          // ostatni „ważny” błąd: przeciążenie/limit nie przykrywa wcześniejszego braku modelu i odwrotnie
           lastError = e;
+          lastRoute.attempts.push(`${backend}:${model} → ${e.status ?? 'błąd'}`);
           if (overloaded(e)) continue; // przeciążony / limit – następny model
           if (!retryable(e)) throw e;
           if (e.status !== 404) break; // klucz odrzucony przez tę usługę – następna usługa
         }
       }
       if (!(lastError instanceof ApiError && lastError.status === 404) || backend !== 'studio') break;
-      chain = (await discoverFlash(client)).slice(0, 3); // żaden z modeli nie istnieje – spróbuj wykrytych
+      chain = (await discoverFlash(client)).filter((m) => !tried.has(m)).slice(0, 3); // żaden model nie istnieje – wykryte
       if (!chain.length) break;
     }
+    firstError ||= lastError;
   }
-  throw lastError;
+  throw firstError;
 }
 
 function generate(client, model, userContent) {
@@ -324,9 +333,9 @@ async function checkConfig(req, res) {
   if (!auth.ok) return send(res, auth.status, { ok: false, ...info, error: auth.error });
   try {
     const out = await summarize('Tytuł: Test konfiguracji\n<artykul>\nSpółka ABC podała, że przychody w III kwartale wyniosły 10 mln zł (+5% r/r).\n</artykul>');
-    return send(res, 200, { ok: true, ...info, backend: lastRoute.backend, model: out.model, sample: out.summary.event });
+    return send(res, 200, { ok: true, ...info, backend: lastRoute.backend, model: out.model, attempts: lastRoute.attempts, sample: out.summary.event });
   } catch (e) {
-    return send(res, 200, { ok: false, ...info, status: e.status ?? null, error: e instanceof ApiError ? googleDetail(e) : e.message });
+    return send(res, 200, { ok: false, ...info, attempts: lastRoute.attempts, status: e.status ?? null, error: e instanceof ApiError ? googleDetail(e) : e.message });
   }
 }
 
