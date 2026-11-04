@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, ExternalLink, Newspaper, Plus, RefreshCw, X } from 'lucide-react';
+import { Check, ChevronDown, ExternalLink, Newspaper, Plus, RefreshCw, Sparkles, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { computeHoldings, isoDay } from '../lib/engine.js';
 import { GENERAL_KEY, fetchNewsMany, readOff, readTopics, timeAgo, writeOff, writeTopics } from '../lib/news.js';
 import { GENERAL_ID, classifyArticle } from '../lib/newsSubject.js';
 import { Card, EmptyState } from '../components/ui.jsx';
+import AiSummary from '../components/news/AiSummary.jsx';
+import { articleKey, digestKey } from '../lib/newsAi.js';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
 const LIST_LIMIT = 60;
@@ -139,6 +141,20 @@ export default function NewsView() {
   const generalCount = classified.filter((it) => it.mainId === GENERAL_ID).length;
   const items = classified.filter((it) => (it.mainId === GENERAL_ID ? generalOn : selectedIds.has(it.mainId))).slice(0, LIST_LIMIT);
   const allErrors = result.errors.length > 0 && result.items.length === 0;
+  // Podsumowanie dnia (AI): artykuły z ostatnich 24 godzin z widocznej listy
+  const dayItems = useMemo(() => {
+    const from = Date.now() - 24 * 3600 * 1000;
+    return items.filter((it) => it.pubDate && new Date(it.pubDate).getTime() >= from).slice(0, 40);
+  }, [items]);
+  const today = isoDay(new Date());
+  const [aiOpen, setAiOpen] = useState(() => new Set());
+  const toggleAi = (link) =>
+    setAiOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(link)) next.delete(link);
+      else next.add(link);
+      return next;
+    });
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -262,6 +278,26 @@ export default function NewsView() {
             />
           </Card>
         )}
+        {!loading && dayItems.length > 0 && (
+          <section aria-label="Podsumowanie dnia" className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900">
+            <div className="mb-2.5 flex items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+                <Sparkles size={16} />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold">Podsumowanie dnia (AI)</h2>
+                <p className="truncate text-xs text-stone-500 dark:text-stone-400">
+                  {dayItems.length} {dayItems.length === 1 ? 'artykuł' : dayItems.length % 10 >= 2 && dayItems.length % 10 <= 4 && (dayItems.length % 100 < 12 || dayItems.length % 100 > 14) ? 'artykuły' : 'artykułów'} z ostatnich 24 godzin
+                </p>
+              </div>
+            </div>
+            <AiSummary
+              cacheKey={digestKey(today, dayItems)}
+              payload={{ mode: 'digest', label: `ostatnie 24 godziny, ${today}`, items: dayItems.map((it) => ({ title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag })) }}
+              loadingText="AI analizuje wiadomości dnia…"
+            />
+          </section>
+        )}
         {loading && !items.length && Array.from({ length: 4 }, (_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />)}
         {items.map((it) => (
           <article key={it.link} className="min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-neutral-900">
@@ -286,6 +322,23 @@ export default function NewsView() {
                 </time>
               )}
             </p>
+            <button
+              type="button"
+              onClick={() => toggleAi(it.link)}
+              aria-expanded={aiOpen.has(it.link)}
+              className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 px-2.5 text-xs font-semibold text-violet-700 hover:bg-violet-50 dark:border-violet-400/20 dark:text-violet-300 dark:hover:bg-violet-500/10"
+            >
+              <Sparkles size={13} /> Podsumowanie AI
+              <ChevronDown size={13} className={`transition-transform ${aiOpen.has(it.link) ? 'rotate-180' : ''}`} />
+            </button>
+            {aiOpen.has(it.link) && (
+              <AiSummary
+                className="mt-2"
+                autoLoad
+                cacheKey={articleKey(it.link)}
+                payload={{ mode: 'article', link: it.link, title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag }}
+              />
+            )}
           </article>
         ))}
         {result.errors.length > 0 && result.items.length > 0 && <p className="px-1 text-[11px] text-stone-400">Część źródeł nie odpowiedziała: {result.errors.slice(0, 2).join('; ')}</p>}

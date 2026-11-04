@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarCheck2, Check, ChevronLeft, ChevronRight, Gauge, ListChecks, Plus, Repeat, Target, Trash2 } from 'lucide-react';
+import { CalendarCheck2, CalendarClock, Check, ChevronLeft, ChevronRight, Gauge, ListChecks, Plus, RefreshCw, Repeat, Target, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { MissingTablesError, archiveWeeks, cloudStore, localStore, logKey, makeTask, shiftWeek, tasksForWeek, weekId, weekLabel, weekNumber, weekProgress, weekStart } from '../lib/weeklyTasks.js';
+import { MissingTablesError, archiveWeeks, cloudStore, localStore, logKey, makeTask, markCarryWeek, overdueOneOffs, readCarryWeek, shiftWeek, tasksForWeek, weekId, weekLabel, weekNumber, weekProgress, weekStart } from '../lib/weeklyTasks.js';
 import TaskAccordion from '../components/tasks/TaskAccordion.jsx';
 import ScheduledCard, { PlanInput } from '../components/tasks/ScheduledCard.jsx';
 import { dayId } from '../lib/dailyTasks.js';
 import { Card, Segmented } from '../components/ui.jsx';
 import DailyTasksPanel from '../components/tasks/DailyTasksPanel.jsx';
 import MonthlyTasksPanel from '../components/tasks/MonthlyTasksPanel.jsx';
-import { consistencyScore, loadAllTasks } from '../lib/taskStats.js';
+import { consistencyScore, loadAllTasks, moveWeeklyTasks } from '../lib/taskStats.js';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 
@@ -17,7 +17,7 @@ const TABS = ['DAILY', 'WEEKLY', 'MONTHLY'];
 
 // Zadania: wskaźnik konsekwencji na górze i przełącznik „Dzienne” / „Tygodniowe” / „Miesięczne” (wybór zapamiętany)
 export default function TasksView() {
-  const { cloud } = useApp();
+  const { cloud, actions } = useApp();
   const userId = cloud?.enabled ? cloud.user?.id : null;
   const [tab, setTabState] = useState(() => {
     try {
@@ -49,9 +49,36 @@ export default function TasksView() {
   const onWeekly = useMemo(() => report('weekly'), [report]);
   const onMonthly = useMemo(() => report('monthly'), [report]);
 
+  // Start nowego tygodnia: niewykonane zadania jednorazowe z poprzedniego – pytanie raz na tydzień
+  const current = weekId();
+  const [carryDone, setCarryDone] = useState(() => readCarryWeek() === current);
+  const [panelKey, setPanelKey] = useState(0); // ponowne wczytanie paneli po przeniesieniu
+  const [moving, setMoving] = useState(false);
+  const overdue = useMemo(() => (all?.weekly && !carryDone ? overdueOneOffs(all.weekly, current) : []), [all, carryDone, current]);
+  const closeCarry = () => {
+    markCarryWeek(current);
+    setCarryDone(true);
+  };
+  const carryOver = async () => {
+    setMoving(true);
+    try {
+      await moveWeeklyTasks(userId, overdue.map((t) => t.id), current);
+      const ids = new Set(overdue.map((t) => t.id));
+      setAll((prev) => ({ ...prev, weekly: { ...prev.weekly, tasks: prev.weekly.tasks.map((t) => (ids.has(t.id) ? { ...t, weekId: current } : t)) } }));
+      closeCarry();
+      setPanelKey((k) => k + 1);
+      actions.notify(`Przeniesiono do bieżącego tygodnia: ${overdue.length} ${overdue.length === 1 ? 'zadanie' : overdue.length % 10 >= 2 && overdue.length % 10 <= 4 && (overdue.length % 100 < 12 || overdue.length % 100 > 14) ? 'zadania' : 'zadań'}`, 'success');
+    } catch (e) {
+      actions.notify(`Nie udało się przenieść zadań: ${e.message}`, 'error');
+    } finally {
+      setMoving(false);
+    }
+  };
+
   return (
     <div className="space-y-3 sm:space-y-4">
       <ConsistencyCard data={all} />
+      {overdue.length > 0 && <CarryOverBanner tasks={overdue} busy={moving} onMove={carryOver} onIgnore={closeCarry} />}
       <div className="flex justify-center">
         <Segmented
           value={tab}
@@ -64,10 +91,39 @@ export default function TasksView() {
           ]}
         />
       </div>
-      {tab === 'DAILY' && <DailyTasksPanel onDataChange={onDaily} />}
-      {tab === 'WEEKLY' && <WeeklyTasksPanel onDataChange={onWeekly} />}
-      {tab === 'MONTHLY' && <MonthlyTasksPanel onDataChange={onMonthly} />}
+      {tab === 'DAILY' && <DailyTasksPanel key={`d${panelKey}`} onDataChange={onDaily} />}
+      {tab === 'WEEKLY' && <WeeklyTasksPanel key={`w${panelKey}`} onDataChange={onWeekly} />}
+      {tab === 'MONTHLY' && <MonthlyTasksPanel key={`m${panelKey}`} onDataChange={onMonthly} />}
     </div>
+  );
+}
+
+// Baner na start tygodnia: zaległe zadania jednorazowe z poprzedniego tygodnia – przenieść albo zostawić
+function CarryOverBanner({ tasks, busy, onMove, onIgnore }) {
+  const names = tasks.slice(0, 3).map((t) => t.title);
+  return (
+    <section role="alert" aria-label="Zaległe zadania jednorazowe" className="min-w-0 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-500/25 dark:bg-amber-500/[0.08]">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+          <CalendarClock size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">Masz niewykonane zadania jednorazowe z poprzedniego tygodnia. Czy chcesz przerzucić je do bieżącego tygodnia?</p>
+          <p className="mt-1 text-xs text-amber-800 dark:text-amber-200/80">
+            {names.join(' · ')}
+            {tasks.length > 3 ? ` · i ${tasks.length - 3} więcej` : ''}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <button type="button" onClick={onIgnore} disabled={busy} className="inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:text-amber-200 dark:hover:bg-amber-500/10">
+          Ignoruj / Zostaw
+        </button>
+        <button type="button" onClick={onMove} disabled={busy} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-amber-500 px-3.5 text-sm font-semibold text-neutral-950 hover:bg-amber-400 disabled:opacity-60">
+          {busy ? <RefreshCw size={15} className="animate-spin" /> : <ChevronRight size={15} />} Przerzuć zaległe ({tasks.length})
+        </button>
+      </div>
+    </section>
   );
 }
 

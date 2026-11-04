@@ -106,6 +106,10 @@ export const localStore = {
     const d = readLocal();
     writeLocal({ ...d, tasks: d.tasks.map((t) => (t.id === id ? { ...t, archivedWeek: week } : t)) });
   },
+  async moveTask(id, week) {
+    const d = readLocal();
+    writeLocal({ ...d, tasks: d.tasks.map((t) => (t.id === id ? { ...t, weekId: week } : t)) });
+  },
   async deleteTask(id) {
     const d = readLocal();
     writeLocal({ tasks: d.tasks.filter((t) => t.id !== id), logs: d.logs.filter((l) => l.taskId !== id) });
@@ -151,6 +155,11 @@ export function cloudStore(userId) {
       const { error } = await sb.from('weekly_tasks').update({ archived_week: week, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId);
       check(error);
     },
+    async moveTask(id, week) {
+      const sb = await getClient();
+      const { error } = await sb.from('weekly_tasks').update({ week_id: week, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId);
+      check(error);
+    },
     async deleteTask(id) {
       const sb = await getClient();
       const { error } = await sb.from('weekly_tasks').delete().eq('id', id).eq('user_id', userId);
@@ -164,4 +173,31 @@ export function cloudStore(userId) {
       check(error);
     },
   };
+}
+
+// ── Zaległe zadania jednorazowe z poprzedniego tygodnia (pytanie na start nowego tygodnia) ──
+// Znacznik obsłużonego tygodnia (przeniesiono albo „Zostaw”) – raz na tydzień; prefiks „wealth-app-” → kopia
+// zapasowa i synchronizacja ustawień w chmurze (pytanie nie wraca na innym urządzeniu)
+export const CARRY_KEY = 'wealth-app-weekly-carry-v1';
+export function readCarryWeek() {
+  try {
+    return localStorage.getItem(CARRY_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+export function markCarryWeek(week) {
+  try {
+    localStorage.setItem(CARRY_KEY, week);
+    window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key: CARRY_KEY } }));
+  } catch {
+    // brak localStorage – pytanie może wrócić po odświeżeniu
+  }
+}
+
+// Niewykonane zadania jednorazowe zaplanowane na tydzień poprzedzający `current` (bez zakończonych / archiwalnych)
+export function overdueOneOffs({ tasks = [], logs = [] } = {}, current = weekId()) {
+  const prev = shiftWeek(current, -1);
+  const done = new Set(logs.map((l) => logKey(l.taskId, l.weekId)));
+  return tasks.filter((t) => !t.isRecurring && t.weekId === prev && !t.archivedWeek && !done.has(logKey(t.id, prev)));
 }

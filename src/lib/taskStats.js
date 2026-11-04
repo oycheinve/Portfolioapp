@@ -28,6 +28,21 @@ export async function loadAllTasks(userId) {
   return { daily, weekly, monthly };
 }
 
+// Przeniesienie zadań tygodniowych do innego tygodnia w tym samym magazynie co loadAllTasks (chmura, a bez tabel
+// zadań w Supabase – pamięć przeglądarki)
+export async function moveWeeklyTasks(userId, ids, week) {
+  const run = async (store) => {
+    for (const id of ids) await store.moveTask(id, week);
+  };
+  if (!userId) return run(localStore);
+  try {
+    return await run(cloudStore(userId));
+  } catch (e) {
+    if (e instanceof MissingTablesError) return run(localStore);
+    throw e;
+  }
+}
+
 const sets = ({ daily = EMPTY, weekly = EMPTY, monthly = EMPTY }) => ({
   daily: new Set(daily.logs.map((l) => dayKey(l.taskId, l.day))),
   weekly: new Set(weekly.logs.map((l) => logKey(l.taskId, l.weekId))),

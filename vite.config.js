@@ -4,8 +4,9 @@ import tailwindcss from '@tailwindcss/vite';
 import { proxyYahoo } from './api/yahoo.js';
 import { fetchLogo, fetchLogoUrl } from './api/logo.js';
 import { fetchNews } from './api/news.js';
+import newsSummary from './api/news-summary.js';
 
-// /api/yahoo?path=…, /api/news?q=… i /api/logo?domain=… lokalnie (dev i preview) – ta sama logika co funkcje serwerowe Vercel w api/
+// /api/yahoo?path=…, /api/news?q=…, /api/news-summary (POST) i /api/logo?domain=… lokalnie (dev i preview) – ta sama logika co funkcje serwerowe Vercel w api/
 function yahooApi() {
   const middleware = async (req, res, next) => {
     if (req.url.startsWith('/api/logo')) {
@@ -14,6 +15,11 @@ function yahooApi() {
       res.statusCode = logo.status;
       res.setHeader('Content-Type', logo.type);
       res.end(logo.body);
+      return;
+    }
+    // Podsumowania AI (POST) – ta sama funkcja co na Vercel; klucz ANTHROPIC_API_KEY z otoczenia procesu
+    if (req.url.startsWith('/api/news-summary')) {
+      await newsSummary(req, res);
       return;
     }
     if (req.url.startsWith('/api/news')) {
