@@ -147,7 +147,7 @@ export function CushionGrowthCard() {
         {target > 0 ? (
           <span>
             Twardy limit: wartość poduszki rośnie najwyżej do <strong className="tabular">{formatPLN(proj.cap)}</strong>
-            {proj.cap > target ? ' (obecna wartość jest już powyżej celu – nie rośnie dalej)' : ' (cel z karty powyżej)'}. Po osiągnięciu progu kapitał stoi, odsetki – także w Cash Flow Forecast – liczone są od kwoty celu, a ich nadwyżka ponad próg trafia do akcji (kolumna „Do akcji”).
+            {proj.cap > target ? ' (obecna wartość jest już powyżej celu – nie rośnie dalej)' : ' (cel z karty powyżej)'}. Po osiągnięciu progu kapitał stoi, a odsetki – także w Cash Flow Forecast – liczone są od kwoty celu. Co zrobisz z odsetkami ponad próg, decydujesz sam (tylko symulator Kula śnieżna zakłada, że kupują akcje).
           </span>
         ) : (
           <span>Ustaw cel poduszki w karcie „Cel poduszki finansowej”, aby włączyć limit wzrostu.</span>
@@ -155,14 +155,13 @@ export function CushionGrowthCard() {
       </p>
 
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[30rem] text-sm tabular" aria-label="Prognoza wartości poduszki">
+        <table className="w-full min-w-[26rem] text-sm tabular" aria-label="Prognoza wartości poduszki">
           <thead>
             <tr className="text-left text-[11px] text-stone-500 dark:text-stone-400">
               <th className="py-1.5 font-medium">Rok</th>
               <th className="py-1.5 text-right font-medium">Wartość</th>
               <th className="py-1.5 text-right font-medium">Odsetki netto</th>
               <th className="py-1.5 text-right font-medium">Dopłaty</th>
-              {target > 0 && <th className="py-1.5 text-right font-medium">Do akcji</th>}
               {target > 0 && <th className="py-1.5 text-right font-medium">Cel</th>}
             </tr>
           </thead>
@@ -172,7 +171,6 @@ export function CushionGrowthCard() {
               <td className="py-1.5 text-right">{formatPLN(start)}</td>
               <td className="py-1.5 text-right">{formatPLN(base.bondsIncome + base.savingsIncome)}</td>
               <td className="py-1.5 text-right">—</td>
-              {target > 0 && <td className="py-1.5 text-right">—</td>}
               {target > 0 && <td className="py-1.5 text-right">{pct1(start / target)}</td>}
             </tr>
             {proj.rows.map((r) => (
@@ -184,7 +182,6 @@ export function CushionGrowthCard() {
                 </td>
                 <td className="py-1.5 text-right">{formatPLN(r.income)}</td>
                 <td className="py-1.5 text-right">{formatPLN(r.contributed)}</td>
-                {target > 0 && <td className="py-1.5 text-right">{r.overflow > 0.005 ? formatPLN(r.overflow) : '—'}</td>}
                 {target > 0 && <td className="py-1.5 text-right">{pct1(Math.min(1, r.value / target))}</td>}
               </tr>
             ))}

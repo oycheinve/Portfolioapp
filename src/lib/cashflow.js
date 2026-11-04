@@ -414,7 +414,8 @@ export function cushionProjection({ bonds = 0, savings = 0, bondsRate = 0, savin
       s += rs * k + growth * k * (1 - wB);
       contributed += growth * k;
       reinvested += (rb + rs) * k;
-      // Odsetki ponad próg celu (nie mieszczą się w poduszce) – nadwyżka do przeniesienia (np. do akcji)
+      // Odsetki ponad próg celu (nie mieszczą się w poduszce) – wyłącznie informacja; tylko symulator wieloletni
+      // (Kula śnieżna, multiYearForecast) zakłada, że kupują akcje – w pozostałych wyliczeniach decyduje użytkownik
       const over = (rb + rs) * (1 - k);
       overflow += over;
       overflowByMonth.push(over);
