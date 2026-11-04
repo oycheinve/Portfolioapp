@@ -3,7 +3,6 @@ import { AppProvider } from './state/AppContext.jsx';
 import AuthGate from './components/auth/AuthGate.jsx';
 import { Layout, NAV_ITEMS, Toast } from './components/Layout.jsx';
 import Dashboard from './views/Dashboard.jsx';
-import CashRegister from './views/CashRegister.jsx';
 import AllocationView from './views/Allocation.jsx';
 import ChartsBondsView from './views/ChartsBonds.jsx';
 import PortfolioView from './views/Portfolio.jsx';
@@ -30,7 +29,6 @@ const VIEWS = {
   simulations: SimulationsView,
   reports: ReportsView,
   goals: GoalsView,
-  cash: CashRegister,
   settings: SettingsView,
   fire: FireGoalView,
   budget: BudgetView,
@@ -42,7 +40,8 @@ const VIEWS = {
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc
 // Dawna zakładka Statystyki – podsumowania są teraz w Wykresach
 // Dawny panel #/notifications – teraz w Ustawieniach (System i Konto → Powiadomienia)
-const ALIASES = { notifications: 'settings/notifications', stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes' };
+// Rejestr wpłat i wypłat – teraz w Ustawieniach (Portfel i Aktywa)
+const ALIASES = { cash: 'settings/cash', notifications: 'settings/notifications', stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes' };
 
 function readHash() {
   let h = window.location.hash.replace('#/', '').replace('#', '');

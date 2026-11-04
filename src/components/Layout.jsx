@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, X } from 'lucide-react';
+import { ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -11,7 +11,7 @@ import { useNotificationScheduler } from '../state/useNotificationScheduler.js';
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Pulpit', longLabel: 'Pulpit (Majątek)', icon: LayoutDashboard, mobile: true },
   { id: 'portfolio', label: 'Portfel', longLabel: 'Portfel', icon: Table2, mobile: true },
-  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i notowania', icon: LineChart, mobile: true },
+  { id: 'charts', label: 'Wykresy', longLabel: 'Wykresy i notowania', icon: LineChart },
   { id: 'dividends', label: 'Dywidendy', longLabel: 'Dywidendy', icon: Coins },
   { id: 'simulations', label: 'Symulacje', longLabel: 'Symulacje i kalkulator', icon: FlaskConical },
   { id: 'safe', label: 'Poduszka', longLabel: 'Poduszka finansowa', icon: Shield },
@@ -20,23 +20,22 @@ export const NAV_ITEMS = [
   // Nazwa z rokiem docelowym z ustawień FIRE (np. „FIRE 2055”) – navLabel()
   { id: 'fire', label: 'FIRE', longLabel: 'FIRE', icon: Flame },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText, hidden: true },
-  { id: 'cash', label: 'Wpłaty', longLabel: 'Rejestr Wpłat/Wypłat', icon: ArrowLeftRight },
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper, mobile: true },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
-  { id: 'shopping', label: 'Zakupy', longLabel: 'Listy zakupów', icon: ShoppingCart },
+  { id: 'shopping', label: 'Zakupy', longLabel: 'Listy zakupów', icon: ShoppingCart, mobile: true },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings, topbar: true },
 ];
 
 // Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
-const MOBILE_ORDER = ['dashboard', 'portfolio', 'charts', 'budget', 'tasks', 'news'];
+const MOBILE_ORDER = ['dashboard', 'portfolio', 'budget', 'tasks', 'shopping', 'news'];
 // Pozycje widoczne w menu (bez tymczasowo ukrytych i dostępnych z górnego paska)
 const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden && !n.topbar);
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon) – płaska siatka 2 kolumn; pod nią przełącznik motywu i Ustawienia.
 // Pozycje z dolnego paska (np. Newsy) i ukryte nie trafiają do arkusza.
-const MORE_ORDER = ['goals', 'fire', 'safe', 'simulations', 'allocation', 'reports', 'dividends', 'cash', 'shopping'];
+const MORE_ORDER = ['charts', 'goals', 'fire', 'safe', 'simulations', 'allocation', 'reports', 'dividends'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !MORE_ORDER.includes(n.id))].filter((n) => n && !n.mobile);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
