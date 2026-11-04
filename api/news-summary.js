@@ -170,11 +170,44 @@ async function authorize(req) {
 }
 
 // ── Wywołanie modelu (Gemini: instrukcja systemowa + odpowiedź JSON zgodna ze schematem) ──
+// Rodzaj klucza: „AIza…” – Google AI Studio (Gemini API), „AQ.…” – Vertex AI w trybie express (Google Cloud).
+// GEMINI_VERTEX=1 / 0 wymusza wybór. Ten sam model i prompt w obu usługach.
+export const keyKind = (key = apiKey()) => {
+  const force = env('GEMINI_VERTEX');
+  if (force === '1') return 'vertex';
+  if (force === '0') return 'studio';
+  return /^AQ\./.test(key) ? 'vertex' : 'studio';
+};
+// Modele po kolei: wybrany (GEMINI_MODEL), potem zapasowe – gdy dany model jest niedostępny dla klucza (404)
+const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-latest', 'gemini-2.0-flash'].filter(Boolean))];
+
 let client = null;
+let clientKey = '';
 export async function summarize(userContent) {
-  client ||= new GoogleGenAI({ apiKey: apiKey() });
-  const model = env('GEMINI_MODEL') || DEFAULT_MODEL;
-  const response = await client.models.generateContent({
+  const key = apiKey();
+  if (!client || clientKey !== key) {
+    client = keyKind(key) === 'vertex' ? new GoogleGenAI({ vertexai: true, apiKey: key }) : new GoogleGenAI({ apiKey: key });
+    clientKey = key;
+  }
+  let response;
+  let model;
+  let lastError;
+  for (const m of modelChain()) {
+    try {
+      model = m;
+      response = await generate(m, userContent);
+      break;
+    } catch (e) {
+      lastError = e;
+      if (!(e instanceof ApiError && e.status === 404)) throw e;
+    }
+  }
+  if (!response) throw lastError;
+  return parseResponse(response, model);
+}
+
+function generate(model, userContent) {
+  return client.models.generateContent({
     model,
     contents: [{ role: 'user', parts: [{ text: userContent }] }],
     config: {
@@ -185,6 +218,9 @@ export async function summarize(userContent) {
       maxOutputTokens: 4096,
     },
   });
+}
+
+function parseResponse(response, model) {
   const finish = response.candidates?.[0]?.finishReason;
   if (response.promptFeedback?.blockReason || finish === 'SAFETY' || finish === 'PROHIBITED_CONTENT' || finish === 'BLOCKLIST') {
     throw Object.assign(new Error('Model odmówił podsumowania tego tekstu'), { status: 422 });
@@ -222,6 +258,17 @@ async function readBody(req) {
   return JSON.parse(raw || '{}');
 }
 
+// Krótki opis błędu od Google (bez klucza) – do diagnozy konfiguracji
+function googleDetail(e) {
+  let msg = String(e.message || '');
+  try {
+    msg = JSON.parse(msg.slice(msg.indexOf('{')))?.error?.message || msg;
+  } catch {
+    // komunikat nie jest JSON-em
+  }
+  return msg.replace(/key=[^&\s]+/gi, 'key=…').replace(/(AIza|AQ\.)[\w.-]+/g, '$1…').slice(0, 240);
+}
+
 function send(res, status, body) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -229,7 +276,23 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+async function checkConfig(req, res) {
+  const key = apiKey();
+  const info = { keySet: !!key, keyKind: key ? keyKind(key) : null, models: modelChain(), anon: env('AI_ALLOW_ANON') === '1' };
+  if (!key) return send(res, 503, { ok: false, ...info, error: 'Brak GEMINI_API_KEY na serwerze (po dodaniu zmiennej potrzebne jest ponowne wdrożenie)' });
+  const auth = await authorize(req);
+  if (!auth.ok) return send(res, auth.status, { ok: false, ...info, error: auth.error });
+  try {
+    const out = await summarize('Tytuł: Test konfiguracji\n<artykul>\nSpółka ABC podała, że przychody w III kwartale wyniosły 10 mln zł (+5% r/r).\n</artykul>');
+    return send(res, 200, { ok: true, ...info, model: out.model, sample: out.summary.event });
+  } catch (e) {
+    return send(res, 200, { ok: false, ...info, status: e.status ?? null, error: e instanceof ApiError ? googleDetail(e) : e.message });
+  }
+}
+
 export default async function handler(req, res) {
+  // GET /api/news-summary?check=1 – test konfiguracji (rodzaj klucza, model) krótkim zapytaniem do Gemini
+  if (req.method === 'GET' && new URL(req.url || '/', 'http://x').searchParams.get('check') === '1') return checkConfig(req, res);
   if (req.method !== 'POST') return send(res, 405, { error: 'Użyj POST' });
   if (!apiKey()) return send(res, 503, { error: 'Podsumowania AI nie są skonfigurowane (brak GEMINI_API_KEY na serwerze)' });
   try {
@@ -276,11 +339,13 @@ ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.t
     return send(res, 200, { ...out, cached: false });
   } catch (e) {
     if (e instanceof ApiError) {
-      if (e.status === 429) return send(res, 429, { error: 'Limit darmowych zapytań Gemini – spróbuj za chwilę' });
-      if (e.status === 400 && /api key/i.test(e.message || '')) return send(res, 503, { error: 'Nieprawidłowy klucz GEMINI_API_KEY' });
-      if (e.status === 401 || e.status === 403) return send(res, 503, { error: 'Nieprawidłowy klucz GEMINI_API_KEY albo brak dostępu do modelu' });
-      if (e.status === 404) return send(res, 503, { error: 'Niedostępny model Gemini – sprawdź GEMINI_MODEL' });
-      return send(res, 502, { error: `Błąd usługi AI (${e.status ?? 'sieć'})` });
+      const detail = googleDetail(e);
+      const kind = keyKind() === 'vertex' ? 'klucz Vertex AI (AQ.…)' : 'klucz Google AI Studio (AIza…)';
+      if (e.status === 429) return send(res, 429, { error: 'Limit darmowych zapytań Gemini – spróbuj za chwilę', detail });
+      if (e.status === 400 && /api key|api_key|credential/i.test(e.message || '')) return send(res, 503, { error: `Nieprawidłowy klucz GEMINI_API_KEY (${kind})`, detail });
+      if (e.status === 401 || e.status === 403) return send(res, 503, { error: `Klucz odrzucony przez Google (${kind}) – utwórz klucz w Google AI Studio`, detail });
+      if (e.status === 404) return send(res, 503, { error: `Żaden model Gemini nie jest dostępny dla tego klucza (${kind}; próbowane: ${modelChain().join(', ')})`, detail });
+      return send(res, 502, { error: `Błąd usługi AI (${e.status ?? 'sieć'})`, detail });
     }
     return send(res, e.status || 500, { error: e.message || 'Błąd podsumowania' });
   }
