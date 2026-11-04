@@ -2,6 +2,7 @@
 import { ACCOUNT_TYPES, XTB_FX_FEE_PCT } from './constants.js';
 import { getCpiTable, valueBond } from './bonds.js';
 import { bondBelkaRate, computeIncomeTax, limitForAccount } from './tax.js';
+import { alternativesValue } from './alternatives.js';
 
 const DAY = 86400000;
 
@@ -487,14 +488,19 @@ export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
 
 // Nieruchomości i ruchomości zawsze wliczają się do Majątku Całkowitego (wartość − zobowiązania).
 // Przełączniki decydują tylko o widoczności w zakładce Portfel (showInPortfolio + ustawienie globalne).
+// Surowce i Krypto (BETA) – doliczane do Majątku Całkowitego, o ile nie wyłączono tego w module (altValue).
 export function otherAssetsValue(state) {
   const items = state.otherAssets || [];
   const sum = (arr) => arr.reduce((s, a) => s + (Number(a.value) || 0) - (Number(a.liabilities) || 0), 0);
   const total = sum(items);
+  const alt = alternativesValue(state);
+  const altValue = alt.inNetWorth ? alt.value : 0;
   return {
     items,
-    includedValue: total,
-    totalValue: total,
+    includedValue: total + altValue,
+    totalValue: total + altValue,
+    realValue: total,
+    altValue,
     portfolioItems: state.settings.includeOtherAssets === false ? [] : items.filter((a) => a.showInPortfolio !== false),
   };
 }

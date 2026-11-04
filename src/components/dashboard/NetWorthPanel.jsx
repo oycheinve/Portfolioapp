@@ -28,7 +28,8 @@ export default function NetWorthPanel({ valuation, compact = false }) {
     // Wolne środki IKE/IKZE/maklerskie – część kont inwestycyjnych; oszczędności – poduszka
     { key: 'FREE_CASH', label: 'Wolne środki (IKE, IKZE, makl.)', value: t.brokerCash, risk: 'Inwestycyjne' },
     { key: 'CASH', label: 'Oszczędności', value: t.savingsCash, risk: 'Bezpieczne' },
-    { key: 'OTHER', label: 'Nieruchomości / inne (netto)', value: other.includedValue, risk: 'Inne' },
+    { key: 'OTHER', label: 'Nieruchomości / inne (netto)', value: other.realValue, risk: 'Inne' },
+    { key: 'ALT', label: 'Surowce i krypto', value: other.altValue, risk: 'Inne' },
   ].filter((s) => s.value > 0.005);
 
   const safeShare = netWorth > 0 ? t.safe / netWorth : 0;
@@ -117,10 +118,16 @@ export default function NetWorthPanel({ valuation, compact = false }) {
             <div className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">{formatPLN(netWorth)}</div>
             <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">
               Inwestycje i gotówka: <span className="font-medium tabular text-stone-700 dark:text-stone-300">{formatPLN(t.total)}</span>
-              {other.includedValue !== 0 && (
+              {other.realValue !== 0 && (
                 <>
                   {' '}· Nieruchomości/inne netto:{' '}
-                  <span className="font-medium tabular text-stone-700 dark:text-stone-300">{formatPLN(other.includedValue)}</span>
+                  <span className="font-medium tabular text-stone-700 dark:text-stone-300">{formatPLN(other.realValue)}</span>
+                </>
+              )}
+              {other.altValue > 0 && (
+                <>
+                  {' '}· Surowce i krypto:{' '}
+                  <span className="font-medium tabular text-stone-700 dark:text-stone-300">{formatPLN(other.altValue)}</span>
                 </>
               )}
             </div>
@@ -136,7 +143,7 @@ export default function NetWorthPanel({ valuation, compact = false }) {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <RiskTile icon={TrendingUp} color={seriesColor(0, isDark)} label="Rynkowe" sub="Akcje + ETF" value={t.market} share={marketShare} />
               <RiskTile icon={ShieldCheck} color={seriesColor(2, isDark)} label="Bezpieczne" sub="Obligacje + gotówka" value={t.safe} share={safeShare} />
-              <RiskTile icon={Building2} color={seriesColor(4, isDark)} label="Inne" sub="Nieruchomości itp." value={other.includedValue} share={otherShare} muted={!other.globallyEnabled} />
+              <RiskTile icon={Building2} color={seriesColor(4, isDark)} label="Inne" sub={other.altValue > 0 ? 'Nieruchomości, surowce, krypto' : 'Nieruchomości itp.'} value={other.includedValue} share={otherShare} muted={!other.globallyEnabled} />
             </div>
           </div>
 
@@ -144,7 +151,7 @@ export default function NetWorthPanel({ valuation, compact = false }) {
 
           {other.items.length > 0 && (
             <p className="text-xs text-stone-500 dark:text-stone-400">
-              Nieruchomości i ruchomości ({other.items.length}) zawsze w majątku: {formatPLN(other.totalValue)} netto po zobowiązaniach. Widoczność w zakładce Portfel – w ustawieniach.
+              Nieruchomości i ruchomości ({other.items.length}) zawsze w majątku: {formatPLN(other.realValue)} netto po zobowiązaniach. Widoczność w zakładce Portfel – w ustawieniach.
             </p>
           )}
         </div>

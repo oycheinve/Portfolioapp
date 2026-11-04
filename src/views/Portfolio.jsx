@@ -38,6 +38,8 @@ function readPrefs() {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
     // Wolne środki kont inwestycyjnych były dawniej w kategorii „Konta gotówkowe” – zapisany filtr przenosi się na obie
     if (Array.isArray(p?.categories) && p.categories.includes('CASH') && !p.categories.includes('FREE_CASH') && !p.freeCashV2) p.categories = [...p.categories, 'FREE_CASH'];
+    // Nowa kategoria „Surowce i krypto” (BETA) – w zapisanym filtrze domyślnie widoczna
+    if (Array.isArray(p?.categories) && !p.altV1 && !p.categories.includes('ALT')) p.categories = [...p.categories, 'ALT'];
     return p;
   } catch {
     return null;
@@ -170,7 +172,7 @@ export default function PortfolioView({ onNavigate }) {
 
   const persist = (patch) => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ categories, hiddenAccounts, collapsed, freeCashV2: true, ...patch }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ categories, hiddenAccounts, collapsed, freeCashV2: true, altV1: true, ...patch }));
     } catch {
       // brak localStorage – filtr nie zostanie zapamiętany
     }

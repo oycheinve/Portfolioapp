@@ -3,6 +3,7 @@ import { getCpiTable, valueBond } from './bonds.js';
 import { bondIncomeEvents, fxToPLN, positionDayChange, incomeEventsWithTax, isoDay, livePriceLookup, netFlows, tradeAmounts, valuePortfolio } from './engine.js';
 import { belkaRateForAccount, bondBelkaRate } from './tax.js';
 import { OTHER_ASSET_CATEGORIES } from './constants.js';
+import { alternativesValue } from './alternatives.js';
 
 export const PORTFOLIO_CATEGORIES = [
   // Kolejność sekcji w Portfelu: Akcje → ETF → Wolne środki kont inwestycyjnych → Obligacje → Konta oszczędnościowe → Nieruchomości
@@ -15,6 +16,7 @@ export const PORTFOLIO_CATEGORIES = [
   { id: 'BONDS', label: 'Obligacje skarbowe', short: 'Obligacje' },
   { id: 'CASH', label: 'Konta oszczędnościowe', short: 'Oszczędności' },
   { id: 'OTHER', label: 'Nieruchomości i inne', short: 'Nieruchomości' },
+  { id: 'ALT', label: 'Surowce i krypto', short: 'Surowce i krypto' },
 ];
 
 function sortOps(ops) {
@@ -160,6 +162,26 @@ export function buildPortfolioRows(state) {
         dayChange: 0,
       });
     }
+  }
+  // Surowce i Krypto (BETA) – posiadane pozycje; ukrywane filtrem kategorii „Surowce i krypto”
+  for (const p of alternativesValue(state).held) {
+    rows.push({
+      id: `alt_${p.id}`,
+      ops: [],
+      since: null,
+      category: 'ALT',
+      name: p.label,
+      sub: `${p.short} · ${p.qty.toLocaleString('pl-PL', { maximumFractionDigits: p.digits })} ${p.unit}${p.hasPrice ? '' : ' · brak notowania'}`,
+      accountId: null,
+      quantity: p.qty,
+      price: p.unitPricePLN || null,
+      currentPricePLN: p.unitPricePLN || null,
+      currency: 'PLN',
+      value: p.value,
+      cost: null,
+      gain: null,
+      dayChange: p.dayChange,
+    });
   }
   return rows;
 }

@@ -1,0 +1,111 @@
+// Surowce i Krypto (BETA): złoto, srebro, Bitcoin i Ethereum z cenami z Yahoo Finance.
+// Dane w state.settings.alternatives (synchronizacja z Supabase razem z portfelem + localStorage):
+//   holdings: { gold: { qty, unit: 'g' | 'oz' }, silver: {…}, btc: { qty }, eth: { qty } }
+//   quotes:   { gold: { price, prevClose, currency }, …, fx: { USD: { price, prevClose } }, at, source }
+//   includeInNetWorth (domyślnie tak) – doliczanie do Majątku Całkowitego; Portfel – filtr kategorii „Surowce i krypto”.
+// Złoto i srebro: kontrakty COMEX (GC=F, SI=F) w USD za uncję trojańską; krypto: BTC-USD, ETH-USD; kurs USDPLN=X.
+export const TROY_OZ_G = 31.1034768;
+
+export const ALT_ASSETS = [
+  { id: 'gold', label: 'Złoto', short: 'XAU', symbol: 'GC=F', metal: true, digits: 2 },
+  { id: 'silver', label: 'Srebro', short: 'XAG', symbol: 'SI=F', metal: true, digits: 2 },
+  { id: 'btc', label: 'Bitcoin', short: 'BTC', symbol: 'BTC-USD', metal: false, digits: 8 },
+  { id: 'eth', label: 'Ethereum', short: 'ETH', symbol: 'ETH-USD', metal: false, digits: 6 },
+];
+export const ALT_FX_SYMBOL = 'USDPLN=X';
+export const ALT_QUOTES_TTL = 15 * 60 * 1000;
+
+export function altSettings(state) {
+  const a = state?.settings?.alternatives;
+  return a && typeof a === 'object' ? a : {};
+}
+
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const fxOf = (quotes, ccy, field) => {
+  if (!ccy || ccy === 'PLN') return 1;
+  const q = quotes?.fx?.[ccy];
+  return num(q?.[field]) || num(q?.price) || 0;
+};
+
+// Wycena jednej pozycji: cena za jednostkę użytkownika (gram / uncja / sztuka) w walucie i w PLN, wartość, zmiana 1D
+export function valueAltPosition(asset, holding, quotes) {
+  const qty = Math.max(0, num(holding?.qty));
+  const q = quotes?.[asset.id];
+  const unitFactor = asset.metal && (holding?.unit || 'g') === 'g' ? 1 / TROY_OZ_G : 1; // notowanie za uncję → za gram
+  const price = num(q?.price);
+  const prev = num(q?.prevClose) || price;
+  const ccy = q?.currency || 'USD';
+  const fx = fxOf(quotes, ccy, 'price');
+  const fxPrev = fxOf(quotes, ccy, 'prevClose') || fx;
+  const unitPrice = price * unitFactor;
+  const unitPricePLN = unitPrice * fx;
+  const value = qty * unitPricePLN;
+  const prevValue = qty * prev * unitFactor * fxPrev;
+  const hasPrice = price > 0 && fx > 0;
+  return {
+    ...asset,
+    qty,
+    unit: asset.metal ? holding?.unit || 'g' : 'szt.',
+    currency: ccy,
+    unitPrice,
+    unitPricePLN,
+    value: hasPrice ? value : 0,
+    hasPrice,
+    dayChange: hasPrice && prevValue > 0 ? value - prevValue : 0,
+    dayPct: hasPrice && prevValue > 0 ? value / prevValue - 1 : null,
+    priceDayPct: price > 0 && prev > 0 ? price / prev - 1 : null,
+  };
+}
+
+// Wszystkie pozycje + suma (wartość w PLN, zmiana dzienna); inNetWorth – czy doliczać do Majątku Całkowitego
+export function alternativesValue(state) {
+  const s = altSettings(state);
+  const holdings = s.holdings || {};
+  const positions = ALT_ASSETS.map((a) => valueAltPosition(a, holdings[a.id], s.quotes));
+  const held = positions.filter((p) => p.qty > 0);
+  const value = held.reduce((sum, p) => sum + p.value, 0);
+  const dayChange = held.reduce((sum, p) => sum + p.dayChange, 0);
+  return {
+    positions,
+    held,
+    value,
+    dayChange,
+    dayPct: value - dayChange > 0 ? dayChange / (value - dayChange) : null,
+    inNetWorth: s.includeInNetWorth !== false,
+    missingPrices: held.filter((p) => !p.hasPrice).map((p) => p.label),
+    quotesAt: s.quotes?.at || null,
+  };
+}
+
+// Pobranie notowań (Yahoo): aktywa z posiadanymi jednostkami (all – wszystkie) i kurs USD/PLN
+export async function fetchAltQuotes(state, { all = true, fresh = false } = {}) {
+  const { fetchYahooQuote } = await import('./prices.js');
+  const s = altSettings(state);
+  const list = ALT_ASSETS.filter((a) => all || num(s.holdings?.[a.id]?.qty) > 0);
+  const prevQuotes = s.quotes || {};
+  const next = { ...prevQuotes, fx: { ...(prevQuotes.fx || {}) } };
+  const errors = [];
+  let source = '';
+  const results = await Promise.allSettled([fetchYahooQuote(ALT_FX_SYMBOL, undefined, { fresh }), ...list.map((a) => fetchYahooQuote(a.symbol, undefined, { fresh }))]);
+  const [fxRes, ...assetRes] = results;
+  if (fxRes.status === 'fulfilled') next.fx.USD = { price: fxRes.value.price, prevClose: fxRes.value.prevClose || fxRes.value.price };
+  else errors.push(`USD/PLN: ${fxRes.reason?.message || 'błąd'}`);
+  assetRes.forEach((r, i) => {
+    const a = list[i];
+    if (r.status === 'fulfilled' && r.value.price > 0) {
+      next[a.id] = { price: r.value.price, prevClose: r.value.prevClose || r.value.price, currency: r.value.currency || 'USD', marketTime: r.value.marketTime || null };
+      source = source || r.value.source;
+    } else errors.push(`${a.label}: ${r.reason?.message || 'brak notowania'}`);
+  });
+  const ok = assetRes.some((r) => r.status === 'fulfilled') || fxRes.status === 'fulfilled';
+  if (ok) {
+    next.at = new Date().toISOString();
+    next.source = source || prevQuotes.source || 'Yahoo';
+  }
+  return { quotes: next, errors, ok };
+}
+
+export const altQuotesStale = (state) => {
+  const at = altSettings(state).quotes?.at;
+  return !at || Date.now() - new Date(at).getTime() > ALT_QUOTES_TTL;
+};

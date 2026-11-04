@@ -19,6 +19,7 @@ import NewsView from './views/News.jsx';
 import WeeklyTasksView from './views/WeeklyTasks.jsx';
 import ShoppingView from './views/Shopping.jsx';
 import CashFlowView from './views/CashFlow.jsx';
+import AlternativesView from './views/Alternatives.jsx';
 
 const VIEWS = {
   dashboard: Dashboard,
@@ -37,6 +38,7 @@ const VIEWS = {
   tasks: WeeklyTasksView,
   shopping: ShoppingView,
   cashflow: CashFlowView,
+  alternatives: AlternativesView,
 };
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc

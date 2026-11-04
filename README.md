@@ -466,3 +466,12 @@ Ustawienia → Portfel i Aktywa → **IKE - Julka**. Systematyczny zakup ETF-u *
 - **Dividend Yield portfela** (`portfolioDividendYield`): dywidendy brutto otrzymane na IKE w 12 mies. / wartość IKE (bez wypłat – prognoza stawek DPS; IKE bez dywidend – cały portfel inwestycyjny). Stosowany do obecnego IKE, nowych wpłat i DRIP.
 - **Poduszka – wagi:** docelowy udział obligacji (reszta KO), obecny udział, pasek proporcji, odchylenie w pp i w zł (`cushionWeights`).
 - **Poduszka – wzrost i twardy limit:** dopłata zł / mies. albo % rocznie ponad odsetki; wartość rośnie najwyżej do celu (`cushionProjection`, cap = max(cel, obecna wartość)), potem kapitał stoi, a odsetki – także w Cash Flow Forecast – liczone są od kwoty celu. Ustawienia w `settings.safeGoal` (`weightBonds`, `growthMode`, `growthPct`, `monthlyContribution`, `target`).
+
+## Surowce i Krypto (BETA)
+
+Więcej → **Surowce i Krypto**: złoto, srebro (gramy lub uncje trojańskie), Bitcoin i Ethereum (ułamkowe ilości).
+
+- Ceny na żywo z Yahoo Finance (`src/lib/alternatives.js`): `GC=F`, `SI=F` (COMEX, USD / oz trojańską = 31,1034768 g), `BTC-USD`, `ETH-USD`, przeliczenie po `USDPLN=X`. Odświeżanie po otwarciu modułu, przyciskiem i przy starcie aplikacji (gdy notowania starsze niż 15 min).
+- Karta aktywa (zwijana, z podsumowaniem w belce): cena rynkowa (PLN i USD), ilość, wartość w PLN, zmiana dzienna 1D w PLN (ruch ceny i kursu).
+- Majątek Całkowity: wartość doliczana do Net Worth (Pulpit – osobny segment „Surowce i krypto”, cele majątku, udział poduszki); przełącznik w „Ustawieniach modułu”. W Portfelu kategoria „Surowce i krypto” z filtrem.
+- Zapis: `settings.alternatives` (`holdings`, `quotes`, `includeInNetWorth`) – localStorage i Supabase razem z portfelem.
