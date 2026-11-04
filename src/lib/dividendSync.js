@@ -1,7 +1,7 @@
 // Automatyczne dane dywidend: historia z Yahoo Finance (dni dywidendy i kwoty na akcję) albo – bez dostępu
 // do Yahoo – prognoza na podstawie wypłat z rejestru. Tworzy wpisy harmonogramu i (opcjonalnie) księguje wypłaty.
 import { computeHoldings, isoDay } from './engine.js';
-import { bookingEntries, canAutoBook, dividendHistory, scheduleStatus, sharesAt } from './dividends.js';
+import { bookingEntries, canAutoBook, dividendHistory, eligibleShares, scheduleStatus, sharesAt } from './dividends.js';
 import { fetchYahooDividends } from './prices.js';
 import { factsFor } from './dividendFacts.js';
 import { mapLimited, yahooSymbolFor } from './yahooFetch.js';
@@ -96,9 +96,9 @@ export function planDividendSync(state, histories, { autoBook = false, today = i
   const updates = [];
   for (const inst of state.instruments) {
     for (const f of factsFor(inst)) {
-      const held = Object.values(sharesAt(state, inst.id, addDays(f.exDate, -1))).reduce((sum, q) => sum + q, 0);
+      const held = Object.values(eligibleShares(state, inst.id, addDays(f.exDate, -1), f.shares)).reduce((sum, q) => sum + q, 0);
       if (held <= 0) continue;
-      const fields = { dps: f.dps, currency: f.currency, exDate: f.exDate, payDate: f.payDate, payDateEstimated: false, estimated: false, source: 'VERIFIED', note: f.note, verified: true };
+      const fields = { dps: f.dps, currency: f.currency, exDate: f.exDate, payDate: f.payDate, payDateEstimated: false, estimated: false, source: 'VERIFIED', note: f.note, verified: true, ...(f.shares ? { fallbackShares: f.shares } : {}) };
       const near = (list) => list.filter((it) => it.instrumentId === inst.id && it.exDate && daysApart(it.exDate, f.exDate) <= 10);
       const inNew = near(newItems);
       const inSchedule = near(schedule);

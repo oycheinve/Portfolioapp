@@ -25,6 +25,22 @@ export function sharesAt(state, instrumentId, date) {
   return out;
 }
 
+// Akcje uprawnione do zweryfikowanej dywidendy (dividendFacts.js) z twardym stanem posiadania (`fallbackShares`):
+// gdy historii transakcji nie da się odtworzyć na dzień ustalenia prawa (np. import samych otwartych pozycji
+// z późniejszą datą – pierwsza transakcja po dniu ustalenia prawa) – podany stan na koncie, na którym są akcje
+// (albo z ostatniej transakcji). Gdy transakcje sięgają tego dnia, liczy się wyłącznie stan z historii.
+export function eligibleShares(state, instrumentId, refDate, fallback) {
+  const shares = sharesAt(state, instrumentId, refDate);
+  const qty = Number(fallback) || 0;
+  if (Object.keys(shares).length || !(qty > 0)) return shares;
+  const trades = state.trades.filter((t) => t.instrumentId === instrumentId).sort((a, b) => (a.date < b.date ? 1 : -1));
+  // Historia sięga dnia ustalenia prawa (np. sprzedaż przed dniem dywidendy) – stan z transakcji jest wiarygodny
+  if (!trades.length || trades.some((t) => t.date <= refDate)) return shares;
+  const now = sharesAt(state, instrumentId, isoDay(new Date()));
+  const accountId = Object.keys(now)[0] || trades[0]?.accountId;
+  return accountId ? { [accountId]: qty } : {};
+}
+
 // Historia DPS instrumentu: każda wypłata liczona dla konta, na które wpłynęła – liczba akcji na tym koncie
 // dzień przed wypłatą (stan historyczny, nie obecny). Gdy akcji nie da się odtworzyć (np. sprzedane po dniu
 // dywidendy, import samych otwartych pozycji) – stawka na akcję zapisana przy wypłacie (np. „5.0/ SHR” z XTB).
@@ -129,7 +145,7 @@ export const STATUS_META = {
 export function evaluateScheduleItem(state, item, today = isoDay(new Date())) {
   const inst = state.instruments.find((i) => i.id === item.instrumentId);
   const refDate = item.exDate && item.exDate <= today ? addDays(item.exDate, -1) : today;
-  const shares = inst ? sharesAt(state, inst.id, refDate) : {};
+  const shares = inst ? eligibleShares(state, inst.id, refDate, item.fallbackShares) : {};
   const fx = fxToPLN(state.prices?.fx, item.currency || inst?.currency || 'PLN');
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const perAccount = Object.entries(shares).map(([accountId, qty]) => {
