@@ -31,7 +31,7 @@ const hash = (text) => {
   for (let i = 0; i < text.length; i += 1) h = (h * 33 + text.charCodeAt(i)) >>> 0;
   return h.toString(36);
 };
-export const digestKey = (day, items) => `d|${day}|${hash(items.map((it) => it.link).sort().join(' '))}`;
+export const digestKey = (day, items) => `d2|${day}|${hash(items.map((it) => it.link).sort().join(' '))}`;
 export const cachedSummary = (key) => readCache()[key] || null;
 
 async function sessionToken() {

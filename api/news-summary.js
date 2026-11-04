@@ -46,7 +46,7 @@ const SCHEMA = {
   properties: {
     event: { type: 'string', description: 'Główne wydarzenie – 1–2 zdania' },
     numbers: { type: 'array', items: { type: 'string' }, description: 'Kluczowe liczby i dane – punkty „Nazwa: wartość (kontekst)”' },
-    impact: { type: 'array', items: { type: 'string' }, description: 'Wpływ na spółkę / inwestora – 2–4 punkty' },
+    impact: { type: 'array', items: { type: 'string' }, description: 'Wpływ na spółkę / inwestora – 2–4 punkty (w podsumowaniu dnia 3–6)' },
     sentiment: { type: 'string', enum: ['pozytywny', 'negatywny', 'neutralny', 'mieszany'] },
   },
   required: ['event', 'numbers', 'impact', 'sentiment'],
@@ -297,7 +297,7 @@ function parseResponse(response, model) {
     summary: {
       event: String(s.event || '').trim(),
       numbers: (s.numbers || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 15),
-      impact: (s.impact || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 5),
+      impact: (s.impact || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 6),
       sentiment: ['pozytywny', 'negatywny', 'neutralny', 'mieszany'].includes(s.sentiment) ? s.sentiment : 'neutralny',
     },
     model: response.modelVersion || model,
@@ -388,7 +388,11 @@ ${fetched.text}
       key = `d|${items.map((it) => it.title).join('|')}`;
       if (cache.has(key)) return send(res, 200, { ...cache.get(key), cached: true });
       basis = 'headlines';
-      content = `Podsumowanie dnia (${String(body.label || 'dzisiejsze wiadomości').slice(0, 80)}) na podstawie nagłówków wiadomości o spółkach z portfela inwestora. W „event” opisz najważniejsze wydarzenia dnia (do 2 zdań), w „numbers” liczby obecne w nagłówkach z nazwą spółki, w „impact” wnioski dla posiadacza tych spółek – wyłącznie z nagłówków.
+      content = `Podsumowanie dnia (${String(body.label || 'dzisiejsze wiadomości').slice(0, 80)}) na podstawie nagłówków wiadomości o spółkach z portfela inwestora. To podsumowanie dnia – bardziej szczegółowe niż dla pojedynczego artykułu:
+- „event”: 3–5 zdań – najważniejsze wydarzenia dnia pogrupowane według spółek (nazwa spółki na początku zdania), od najistotniejszych dla akcjonariuszy; wspomnij każdą spółkę z nagłówków, o której jest konkretna informacja.
+- „numbers”: wszystkie liczby z nagłówków (kursy, zmiany %, kwoty, wyniki, dywidendy, ceny docelowe, daty) – każdy punkt zaczynaj od nazwy spółki, np. „LPP – kurs: −3,2% na sesji 3.11”.
+- „impact”: 3–6 punktów – po jednym dla każdej spółki, której dotyczą istotne wiadomości (nazwa spółki na początku), plus ewentualnie jeden punkt o nastroju rynku, gdy wynika z nagłówków.
+Opieraj się wyłącznie na nagłówkach – bez domysłów co do treści artykułów.
 <naglowki>
 ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.title).slice(0, 300)} (${String(it.source || '').slice(0, 60)}, ${fmtDate(it.pubDate)})`).join('\n')}
 </naglowki>`;
