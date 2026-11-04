@@ -78,9 +78,24 @@ export function publicUrl(url) {
   }
 }
 
-async function getHtml(url) {
+// Nagłówki przeglądarki mobilnej (druga próba – część portali inaczej filtruje ruch z telefonów)
+const MOBILE_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'pl-PL,pl;q=0.9,en;q=0.8',
+  Referer: 'https://www.google.com/',
+};
+// Publiczne proxy CORS (jak przy kursach) – zapas, gdy portal odrzuca zapytania serwera; treść = niezaufane dane
+const PROXIES = [
+  { id: 'corsproxy.io', wrap: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}` },
+  { id: 'allorigins', wrap: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
+  { id: 'codetabs', wrap: (u) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}` },
+];
+const FETCH_BUDGET_MS = 18000; // łączny czas zdobywania treści (potem jeszcze model)
+
+async function getHtml(url, headers = HEADERS, timeout = 8000) {
   if (!publicUrl(url)) throw new Error('niedozwolony adres');
-  const res = await fetch(url, { headers: HEADERS, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+  const res = await fetch(url, { headers, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   if (res.url && !publicUrl(res.url)) throw new Error('niedozwolone przekierowanie');
   const type = res.headers.get('content-type') || '';
@@ -144,17 +159,112 @@ const meta = (html, name) => {
   return m ? clean(m[1]) : '';
 };
 
-async function articleText(link) {
+// Kanał RSS portalu: link rel="alternate" ze strony albo typowe adresy; pozycja dopasowana po adresie lub tytule
+const normUrl = (u) => {
+  try {
+    const x = new URL(u);
+    return `${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}`.toLowerCase();
+  } catch {
+    return '';
+  }
+};
+const normTitle = (t) => clean(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const rssTag = (xml, name) => {
+  const m = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, 'i'));
+  return m ? m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1') : '';
+};
+export function rssItemFor(xml, articleUrl, title) {
+  const want = normUrl(articleUrl);
+  const wantTitle = normTitle(title || '');
+  for (const m of String(xml).matchAll(/<(item|entry)\b[\s\S]*?<\/\1>/gi)) {
+    const it = m[0];
+    const link = clean(rssTag(it, 'link')) || (it.match(/<link[^>]+href=["']([^"']+)["']/i) || [])[1] || '';
+    const t = normTitle(rssTag(it, 'title'));
+    if ((want && normUrl(link) === want) || (wantTitle.length > 20 && t && (t === wantTitle || t.includes(wantTitle) || wantTitle.includes(t)))) {
+      const body = rssTag(it, 'content:encoded') || rssTag(it, 'content') || rssTag(it, 'description') || rssTag(it, 'summary');
+      const text = extractText(`<article>${body.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&')}</article>`) || clean(body);
+      return text || null;
+    }
+  }
+  return null;
+}
+async function fromRss(pageUrl, title, html, deadline) {
+  let feeds = [];
+  if (html) for (const m of html.matchAll(/<link[^>]+type=["']application\/(?:rss|atom)\+xml["'][^>]*>/gi)) {
+    const href = (m[0].match(/href=["']([^"']+)["']/i) || [])[1];
+    if (href) feeds.push(new URL(decode(href), pageUrl).href);
+  }
+  const origin = new URL(pageUrl).origin;
+  feeds.push(...['/feed', '/rss', '/rss.xml', '/feed.xml', '/feed/rss', '/rss/news'].map((p) => origin + p));
+  feeds = [...new Set(feeds)].filter(publicUrl).slice(0, 7);
+  const left = deadline - Date.now();
+  if (left < 2500) return null;
+  const results = await Promise.allSettled(
+    feeds.map(async (f) => {
+      const { html: xml } = await getHtml(f, { ...HEADERS, Accept: 'application/rss+xml,application/xml,text/xml,*/*' }, Math.min(6000, left));
+      const text = rssItemFor(xml, pageUrl, title);
+      if (!text) throw new Error('brak pozycji');
+      return text;
+    }),
+  );
+  const ok = results.filter((r) => r.status === 'fulfilled').map((r) => r.value).sort((x, y) => y.length - x.length);
+  return ok[0] || null;
+}
+async function viaProxies(url, deadline) {
+  const left = deadline - Date.now();
+  if (left < 2500) return null;
+  const results = await Promise.allSettled(
+    PROXIES.map(async (p) => {
+      const res = await fetch(p.wrap(url), { headers: HEADERS, signal: AbortSignal.timeout(Math.min(8000, left)) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = (await res.text()).slice(0, 2_000_000);
+      if (!/<html|<body|<article|<p[\s>]/i.test(html)) throw new Error('brak HTML');
+      return { html, via: p.id };
+    }),
+  );
+  const pages = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+  // najwięcej treści albo przynajmniej zajawka
+  return pages.map((pg) => ({ ...pg, text: extractText(pg.html), lead: leadOf(pg.html) })).sort((x, y) => y.text.length - x.text.length || y.lead.length - x.lead.length)[0] || null;
+}
+const leadOf = (html) => [meta(html, 'og:description'), meta(html, 'twitter:description'), meta(html, 'description')].find((t) => t.length > 60) || '';
+
+// Treść artykułu: strona (nagłówki desktopowe, potem mobilne) → kanał RSS portalu → publiczne proxy; pełny tekst
+// albo przynajmniej zajawka z meta tagów (og:description / description). via – skąd pochodzi treść.
+async function articleText(link, title = '') {
   let source = link;
   if (googleArticleId(link)) {
     source = await googleResolve(link).catch(() => null);
     if (!source) throw new Error('nie udało się ustalić adresu artykułu źródłowego');
   }
-  const { html, url } = await getHtml(source);
-  const text = extractText(html);
-  if (text.length >= MIN_TEXT) return { text, url, basis: 'article' };
-  const lead = [meta(html, 'og:description'), meta(html, 'description')].find((t) => t.length > 60) || '';
-  return { text: [text, lead].filter(Boolean).join('\n'), url, basis: 'lead' };
+  if (!publicUrl(source)) throw new Error('niedozwolony adres');
+  const deadline = Date.now() + FETCH_BUDGET_MS;
+  const errors = [];
+  let page = null;
+  for (const [headers, via] of [[HEADERS, 'strona'], [MOBILE_HEADERS, 'strona (mobilna)']]) {
+    try {
+      page = { ...(await getHtml(source, headers, 7000)), via };
+      break;
+    } catch (e) {
+      errors.push(e.message);
+      if (!/HTTP 4(01|03|06|29)|HTTP 5\d\d|abort|timeout/i.test(e.message)) break; // inne błędy nie zależą od nagłówków
+    }
+  }
+  let lead = '';
+  if (page) {
+    const text = extractText(page.html);
+    if (text.length >= MIN_TEXT) return { text, url: page.url, basis: 'article', via: page.via };
+    lead = leadOf(page.html);
+  }
+  const rss = await fromRss(page?.url || source, title, page?.html, deadline).catch(() => null);
+  if (rss && rss.length >= MIN_TEXT) return { text: rss, url: source, basis: 'article', via: 'kanał RSS portalu' };
+  if (!page || (!lead && !rss)) {
+    const px = await viaProxies(source, deadline).catch(() => null);
+    if (px?.text.length >= MIN_TEXT) return { text: px.text, url: source, basis: 'article', via: `proxy ${px.via}` };
+    if (px?.lead) lead ||= px.lead;
+  }
+  const best = [rss, lead].filter(Boolean).sort((x, y) => y.length - x.length)[0] || '';
+  if (best) return { text: best, url: source, basis: 'lead', via: best === rss ? 'kanał RSS portalu (zajawka)' : 'opis strony (meta)' };
+  throw new Error(errors[0] || 'brak treści');
 }
 
 // ── Autoryzacja ──
@@ -383,6 +493,7 @@ export default async function handler(req, res) {
     let basis;
     let period = null;
     let note = '';
+    let fetchedVia = '';
     if (mode === 'article') {
       if (!/^https?:\/\//.test(body.link || '')) return send(res, 400, { error: 'Brak adresu artykułu' });
       key = `a|${body.link}`;
@@ -390,10 +501,14 @@ export default async function handler(req, res) {
       let fetched = null;
       let blocked = '';
       try {
-        fetched = await articleText(body.link);
+        fetched = await articleText(body.link, body.title);
         if (fetched.text.length < 80) blocked = 'portal nie udostępnia treści (płatna treść lub blokada)';
       } catch (e) {
-        blocked = /HTTP 40[13]/.test(e.message) ? `portal blokuje automatyczne pobieranie treści (${e.message})` : `nie udało się pobrać treści (${e.message})`;
+        blocked = /HTTP 40[13]/.test(e.message)
+          ? `portal blokuje automatyczne pobieranie treści (${e.message})`
+          : e.message === 'brak treści'
+            ? 'portal nie udostępnia treści (płatna treść lub blokada)'
+            : `nie udało się pobrać treści (${e.message})`;
       }
       const head = `Spółka / temat w aplikacji: ${String(body.topic || '—').slice(0, 80)}
 Tytuł: ${String(body.title || '').slice(0, 300)}
@@ -410,6 +525,7 @@ ${String(body.title || '').slice(0, 300)}
 </artykul>`;
       } else {
         basis = fetched.basis;
+        if (fetched.via && fetched.via !== 'strona') fetchedVia = fetched.via;
         content = `${head}
 ${basis === 'lead' ? 'Uwaga: dostępna jest tylko zajawka artykułu.\n' : ''}
 <artykul>
@@ -433,7 +549,7 @@ Opieraj się wyłącznie na nagłówkach – bez domysłów co do treści artyku
 ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.title).slice(0, 300)} (${String(it.source || '').slice(0, 60)}, ${fmtDate(it.pubDate)})`).join('\n')}
 </naglowki>`;
     }
-    const out = { ...(await summarize(content)), basis, ...(period ? { period } : {}), ...(note ? { note } : {}) };
+    const out = { ...(await summarize(content)), basis, ...(period ? { period } : {}), ...(note ? { note } : {}), ...(fetchedVia ? { via: fetchedVia } : {}) };
     if (cache.size > 300) cache.delete(cache.keys().next().value);
     cache.set(key, out);
     return send(res, 200, { ...out, cached: false });

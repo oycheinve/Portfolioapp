@@ -32,7 +32,7 @@ function Section({ title, children }) {
 }
 
 export function SummaryBody({ value }) {
-  const { summary, basis, period, note } = value;
+  const { summary, basis, period, note, via } = value;
   return (
     <div className="space-y-3 text-[13px] leading-relaxed text-stone-700 dark:text-stone-300">
       {basis === 'title' && (
@@ -76,7 +76,7 @@ export function SummaryBody({ value }) {
       )}
       <p className="flex flex-wrap items-center gap-2 text-[11px] text-stone-400 dark:text-stone-500">
         {summary.sentiment && <span className={`rounded-md px-1.5 py-0.5 font-semibold ${SENTIMENT[summary.sentiment] || SENTIMENT.neutralny}`}>wydźwięk: {summary.sentiment}</span>}
-        <span>Podsumowanie AI{BASIS[basis] ? ` ${BASIS[basis]}` : ''} – sprawdź szczegóły w źródle</span>
+        <span>Podsumowanie AI{BASIS[basis] ? ` ${BASIS[basis]}` : ''}{via ? ` · treść: ${via}` : ''} – sprawdź szczegóły w źródle</span>
       </p>
     </div>
   );

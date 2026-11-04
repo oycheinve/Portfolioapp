@@ -32,7 +32,13 @@ const hash = (text) => {
   return h.toString(36);
 };
 export const digestKey = (day, items) => `d3|${day}|${hash(items.map((it) => it.link).sort().join(' '))}`;
-export const cachedSummary = (key) => readCache()[key] || null;
+// Skrót z samego tytułu (portal blokował treść) – ważny 30 min, potem ponowna próba pobrania pełnej treści
+const TITLE_ONLY_TTL = 30 * 60 * 1000;
+export const cachedSummary = (key) => {
+  const hit = readCache()[key] || null;
+  if (hit?.basis === 'title' && Date.now() - (hit.at || 0) > TITLE_ONLY_TTL) return null;
+  return hit;
+};
 
 async function sessionToken() {
   try {
@@ -67,7 +73,7 @@ async function fetchSummary(key, payload) {
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.summary) throw new Error(body.error ? `${body.error}${body.detail ? ` – Google: ${body.detail}` : ''}` : (res.status === 404 ? 'Podsumowania AI są dostępne po wdrożeniu na serwerze (Vercel)' : res.status === 504 ? 'Serwer AI nie odpowiedział na czas – spróbuj ponownie za chwilę' : `HTTP ${res.status}`));
-  const value = { summary: body.summary, basis: body.basis, ...(body.period ? { period: body.period } : {}), ...(body.note ? { note: body.note } : {}) };
+  const value = { summary: body.summary, basis: body.basis, ...(body.period ? { period: body.period } : {}), ...(body.note ? { note: body.note } : {}), ...(body.via ? { via: body.via } : {}) };
   writeCache(key, value);
   return value;
 }
