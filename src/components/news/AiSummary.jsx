@@ -73,8 +73,9 @@ export function SummaryBody({ value }) {
 }
 
 // Blok podsumowania: od razu z pamięci (jeśli było), inaczej po kliknięciu; wyraźny stan ładowania i błędu.
-// autoLoad – zapytanie od razu po wyświetleniu (rozwinięty artykuł).
-export default function AiSummary({ cacheKey, payload, loadingText = 'AI analizuje artykuł…', autoLoad = false, className = '' }) {
+// autoLoad – zapytanie od razu po wyświetleniu (rozwinięty artykuł); allowRefresh – przycisk „Odśwież podsumowanie”
+// (tylko podsumowanie dnia – treść pojedynczego artykułu się nie zmienia).
+export default function AiSummary({ cacheKey, payload, loadingText = 'AI analizuje artykuł…', autoLoad = false, allowRefresh = false, className = '' }) {
   const [state, setState] = useState(() => {
     const hit = cachedSummary(cacheKey);
     return hit ? { status: 'done', value: hit } : { status: 'idle' };
@@ -121,9 +122,9 @@ export default function AiSummary({ cacheKey, payload, loadingText = 'AI analizu
       {state.status === 'done' && (
         <>
           <SummaryBody value={state.value} />
-          <button type="button" onClick={() => run(true)} className="mt-2 inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-stone-500 hover:bg-white/60 dark:text-stone-400 dark:hover:bg-white/5">
+          {allowRefresh && <button type="button" onClick={() => run(true)} className="mt-2 inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-stone-500 hover:bg-white/60 dark:text-stone-400 dark:hover:bg-white/5">
             <RefreshCw size={12} /> Odśwież podsumowanie
-          </button>
+          </button>}
         </>
       )}
     </div>

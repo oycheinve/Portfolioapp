@@ -10,6 +10,7 @@ import { articleKey, digestKey } from '../lib/newsAi.js';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
 const LIST_LIMIT = 60;
+const DIGEST_COLLAPSED_KEY = 'fintrack-news-digest-collapsed';
 
 // Nazwa do wyszukiwania: pełna nazwa spółki bez dopisków typu „S.A.” (trafniejsze wyniki niż sam ticker)
 const searchName = (inst) =>
@@ -148,6 +149,23 @@ export default function NewsView() {
   }, [items]);
   const today = isoDay(new Date());
   const [aiOpen, setAiOpen] = useState(() => new Set());
+  // Zwinięte podsumowanie dnia – wybór zapamiętany w przeglądarce
+  const [digestCollapsed, setDigestCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(DIGEST_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleDigest = () =>
+    setDigestCollapsed((v) => {
+      try {
+        localStorage.setItem(DIGEST_COLLAPSED_KEY, v ? '0' : '1');
+      } catch {
+        // brak localStorage – tylko do końca sesji
+      }
+      return !v;
+    });
   const toggleAi = (link) =>
     setAiOpen((prev) => {
       const next = new Set(prev);
@@ -280,34 +298,63 @@ export default function NewsView() {
         )}
         {!loading && dayItems.length > 0 && (
           <section aria-label="Podsumowanie dnia" className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900">
-            <div className="mb-2.5 flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={toggleDigest}
+              aria-expanded={!digestCollapsed}
+              aria-controls="news-digest-body"
+              className={`-m-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2.5 rounded-xl p-1.5 text-left transition-colors hover:bg-stone-50 dark:hover:bg-white/[0.03] ${digestCollapsed ? '' : 'mb-1'}`}
+            >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
                 <Sparkles size={16} />
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h2 className="text-sm font-semibold">Podsumowanie dnia (AI)</h2>
                 <p className="truncate text-xs text-stone-500 dark:text-stone-400">
                   {dayItems.length} {dayItems.length === 1 ? 'artykuł' : dayItems.length % 10 >= 2 && dayItems.length % 10 <= 4 && (dayItems.length % 100 < 12 || dayItems.length % 100 > 14) ? 'artykuły' : 'artykułów'} z ostatnich 24 godzin
                 </p>
               </div>
+              <span className="shrink-0 text-[11px] font-medium text-stone-400 dark:text-stone-500">{digestCollapsed ? 'Pokaż' : 'Zwiń'}</span>
+              <ChevronDown size={18} className={`shrink-0 text-stone-400 transition-transform duration-300 ${digestCollapsed ? '' : 'rotate-180'}`} aria-hidden="true" />
+            </button>
+            {/* Zwinięte – ukryte, ale zamontowane: wynik i trwające zapytanie zostają */}
+            <div id="news-digest-body" hidden={digestCollapsed} className="mt-1.5">
+              <AiSummary
+                allowRefresh
+                cacheKey={digestKey(today, dayItems)}
+                payload={{ mode: 'digest', label: `ostatnie 24 godziny, ${today}`, items: dayItems.map((it) => ({ title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag })) }}
+                loadingText="AI analizuje wiadomości dnia…"
+              />
             </div>
-            <AiSummary
-              cacheKey={digestKey(today, dayItems)}
-              payload={{ mode: 'digest', label: `ostatnie 24 godziny, ${today}`, items: dayItems.map((it) => ({ title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag })) }}
-              loadingText="AI analizuje wiadomości dnia…"
-            />
           </section>
         )}
         {loading && !items.length && Array.from({ length: 4 }, (_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />)}
         {items.map((it) => (
           <article key={it.link} className="min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-neutral-900">
-            <div className="mb-1.5 flex flex-wrap items-center gap-1">
-              <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${it.mainId === GENERAL_ID ? 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'}`}>{it.tag}</span>
-              {it.also.map((l) => (
-                <span key={l} className="inline-block rounded-md border border-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:border-blue-500/20 dark:text-blue-300">
-                  {l}
-                </span>
-              ))}
+            <div className="mb-1.5 flex items-start gap-2">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${it.mainId === GENERAL_ID ? 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'}`}>{it.tag}</span>
+                {it.also.map((l) => (
+                  <span key={l} className="inline-block rounded-md border border-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:border-blue-500/20 dark:text-blue-300">
+                    {l}
+                  </span>
+                ))}
+              </div>
+              {/* Dyskretny znaczek AI w prawym górnym rogu karty – rozwija / generuje podsumowanie artykułu */}
+              <button
+                type="button"
+                onClick={() => toggleAi(it.link)}
+                aria-expanded={aiOpen.has(it.link)}
+                aria-label={aiOpen.has(it.link) ? 'Ukryj podsumowanie AI' : 'Podsumowanie AI'}
+                title={aiOpen.has(it.link) ? 'Ukryj podsumowanie AI' : 'Podsumowanie AI'}
+                className={`-mt-0.5 -mr-1 inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-bold transition-colors ${
+                  aiOpen.has(it.link)
+                    ? 'bg-violet-600 text-white dark:bg-violet-500 dark:text-neutral-950'
+                    : 'bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20'
+                }`}
+              >
+                <Sparkles size={12} aria-hidden="true" /> AI
+              </button>
             </div>
             <a href={it.link} target="_blank" rel="noopener noreferrer" className="group flex items-start gap-2">
               <span className="min-w-0 flex-1 text-sm leading-snug font-semibold break-words text-stone-800 group-hover:text-blue-700 group-hover:underline dark:text-stone-100 dark:group-hover:text-blue-300">{it.title}</span>
@@ -322,15 +369,6 @@ export default function NewsView() {
                 </time>
               )}
             </p>
-            <button
-              type="button"
-              onClick={() => toggleAi(it.link)}
-              aria-expanded={aiOpen.has(it.link)}
-              className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 px-2.5 text-xs font-semibold text-violet-700 hover:bg-violet-50 dark:border-violet-400/20 dark:text-violet-300 dark:hover:bg-violet-500/10"
-            >
-              <Sparkles size={13} /> Podsumowanie AI
-              <ChevronDown size={13} className={`transition-transform ${aiOpen.has(it.link) ? 'rotate-180' : ''}`} />
-            </button>
             {aiOpen.has(it.link) && (
               <AiSummary
                 className="mt-2"
