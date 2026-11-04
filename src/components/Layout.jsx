@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, Sun, Table2, Target, Wallet, X } from 'lucide-react';
+import { ArrowLeftRight, ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -24,6 +24,7 @@ export const NAV_ITEMS = [
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper, mobile: true },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
+  { id: 'shopping', label: 'Zakupy', longLabel: 'Listy zakupów', icon: ShoppingCart },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings, topbar: true },
 ];
 
@@ -35,7 +36,7 @@ const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon) – płaska siatka 2 kolumn; pod nią przełącznik motywu i Ustawienia.
 // Pozycje z dolnego paska (np. Newsy) i ukryte nie trafiają do arkusza.
-const MORE_ORDER = ['goals', 'fire', 'safe', 'simulations', 'allocation', 'reports', 'dividends', 'cash'];
+const MORE_ORDER = ['goals', 'fire', 'safe', 'simulations', 'allocation', 'reports', 'dividends', 'cash', 'shopping'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !MORE_ORDER.includes(n.id))].filter((n) => n && !n.mobile);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym

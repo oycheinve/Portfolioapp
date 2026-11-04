@@ -18,6 +18,7 @@ import FireGoalView from './views/FireGoal.jsx';
 import BudgetView from './views/Budget.jsx';
 import NewsView from './views/News.jsx';
 import WeeklyTasksView from './views/WeeklyTasks.jsx';
+import ShoppingView from './views/Shopping.jsx';
 
 const VIEWS = {
   dashboard: Dashboard,
@@ -35,6 +36,7 @@ const VIEWS = {
   budget: BudgetView,
   news: NewsView,
   tasks: WeeklyTasksView,
+  shopping: ShoppingView,
 };
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc

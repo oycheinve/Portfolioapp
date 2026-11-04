@@ -398,6 +398,11 @@ Zakładka „Zadania” (`#/tasks`, w dolnym pasku w miejscu „Cele” i w menu
 - **Benchmark „Inflacja CPI”** w Wykresach: indeks cen łańcuchowany z miesięcznych odczytów GUS m/m (przybliżenie z r/r tylko dla miesięcy bez m/m); źródło w liście benchmarków („GUS · odczyty miesięczne do RRRR-MM”). Kafelek „vs benchmarki” pokazuje realną stopę zwrotu w okresie: (1 + TWR) / (1 + inflacja CPI) − 1. Te same odczyty r/r liczą oprocentowanie obligacji COI/EDO.
 - **Ustawienia → System i Konto → Inflacja CPI (GUS)**: ostatni odczyt r/r i m/m, źródło i zakres danych z bazy, „Odśwież z bazy”, „Pobierz z GUS teraz” oraz tabela korekt (r/r albo m/m, rok po roku).
 
+## Listy zakupów
+
+Zakładka „Listy zakupów” (`#/shopping`, kafelek „Zakupy” w „Więcej” i pozycja w menu bocznym; `src/views/Shopping.jsx`, `src/lib/shopping.js`): wiele list (pigułki z liczbą pozycji do kupienia, „Nowa lista”, zmiana nazwy, usunięcie listy z pozycjami), dodawanie produktów z opcjonalną ilością, odhaczanie (przekreślenie, sekcja „Kupione”), usuwanie pozycji i „Usuń kupione”. Wybrana lista zapamiętana w przeglądarce.
+- **Zapis**: po zalogowaniu – tabele Supabase `shopping_lists` i `shopping_items` (`supabase/shopping_lists.sql` – uruchom raz w SQL Editor; RLS: tylko własne dane; usunięcie listy usuwa pozycje), synchronizacja między urządzeniami. W trybie lokalnym albo do czasu utworzenia tabel – localStorage `wealth-app-shopping-v1` (z komunikatem o brakujących tabelach). Zmiany optymistyczne (od razu na ekranie, zapis w tle). Moduł nie wpływa na portfel, budżet ani zadania.
+
 ## Podsumowania AI w Newsach (Google Gemini)
 
 - **Artykuł**: mały znaczek „✨ AI” w prawym górnym rogu karty rozwija (i przy pierwszym otwarciu generuje) blok z sekcjami **Główne wydarzenie** (1–2 zdania), **Kluczowe liczby i dane** (punkty „Nazwa: wartość (kontekst)”, nazwa pogrubiona) i **Wpływ na spółkę / inwestora** (2–4 punkty) oraz wydźwięk (pozytywny / negatywny / neutralny / mieszany). Podczas pracy widać „AI analizuje artykuł…”, przy błędzie – komunikat i „Spróbuj ponownie”; bez przycisku odświeżania (treść artykułu się nie zmienia) (`src/components/news/AiSummary.jsx`).
