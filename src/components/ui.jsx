@@ -5,11 +5,11 @@ import { ChevronDown, X } from 'lucide-react';
 // pojedyncza karta – propsem collapsible. Karty zagnieżdżone w treści nie dziedziczą trybu.
 export const CardCollapseContext = createContext(false);
 
-export function Card({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '', collapsible, defaultOpen = false }) {
+export function Card({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '', collapsible, defaultOpen = false, summary, storageKey }) {
   const inherited = useContext(CardCollapseContext);
   if ((collapsible ?? inherited) && title) {
     return (
-      <CollapsibleCard title={title} subtitle={subtitle} icon={Icon} actions={actions} className={className} bodyClassName={bodyClassName} defaultOpen={defaultOpen}>
+      <CollapsibleCard title={title} subtitle={subtitle} icon={Icon} actions={actions} className={className} bodyClassName={bodyClassName} defaultOpen={defaultOpen} summary={summary} storageKey={storageKey}>
         {children}
       </CollapsibleCard>
     );
@@ -43,18 +43,38 @@ export function Card({ title, subtitle, icon: Icon, actions, children, className
 
 // Zwinięta: jednoliniowa belka (ikona, nazwa, strzałka). Rozwinięta: opis i akcje sekcji, potem treść.
 // Płynne rozwijanie (animacja wysokości przez grid-template-rows); treść zwiniętej karty jest nieaktywna (inert).
-function CollapsibleCard({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '', defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const [settled, setSettled] = useState(defaultOpen);
+// summary – krótkie podsumowanie pod nazwą w belce (widoczne także po zwinięciu); storageKey – zapamiętanie
+// rozwinięcia na tym urządzeniu (localStorage, bez synchronizacji).
+const readOpen = (key, fallback) => {
+  if (!key) return fallback;
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+};
+function CollapsibleCard({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '', defaultOpen = false, summary, storageKey }) {
+  const [open, setOpen] = useState(() => readOpen(storageKey, defaultOpen));
+  const [settled, setSettled] = useState(open);
   useEffect(() => {
-    if (defaultOpen) {
+    if (defaultOpen && !storageKey) {
       setOpen(true);
       setSettled(true);
     }
-  }, [defaultOpen]);
+  }, [defaultOpen, storageKey]);
   const toggle = () => {
     setSettled(false);
-    setOpen((o) => !o);
+    setOpen((o) => {
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, o ? '0' : '1');
+        } catch {
+          // brak localStorage – rozwinięcie tylko do końca sesji
+        }
+      }
+      return !o;
+    });
   };
   return (
     <section className={`min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900 ${className}`}>
@@ -64,7 +84,14 @@ function CollapsibleCard({ title, subtitle, icon: Icon, actions, children, class
             <Icon size={16} />
           </span>
         )}
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+        {summary ? (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{title}</span>
+            <span className="block truncate text-xs text-stone-500 tabular dark:text-stone-400">{summary}</span>
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+        )}
         <ChevronDown size={18} className={`shrink-0 text-stone-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
       </button>
       <div

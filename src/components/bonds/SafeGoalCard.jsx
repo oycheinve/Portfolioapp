@@ -34,13 +34,18 @@ export default function SafeGoalCard({ value, yearlyIncomeNet }) {
   const target = Number(goal.target) || 0;
   const budget = useMemo(() => plannedBudget(), [state.settings]); // eslint-disable-line react-hooks/exhaustive-deps
   const costs = Number(goal.monthlyCosts) > 0 ? Number(goal.monthlyCosts) : budget?.total || 0;
-  const contribution = Number(goal.monthlyContribution) || 0;
+  // Wzrost: kwota / mies. albo % rocznie ponad odsetki (karta „Wzrost poduszki”) – tu w przybliżeniu jako dopłata miesięczna
+  const contribution = goal.growthMode === 'pct' ? (value * ((Number(goal.growthPct) || 0) / 100)) / 12 : Number(goal.monthlyContribution) || 0;
   const s = safeGoalStats({ value, target, monthlyCosts: costs, yearlyIncomeNet, monthlyContribution: contribution });
   const bar = Math.min(1, s.progress || 0);
   const tile = 'min-w-0 rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-white/[0.03]';
 
   return (
     <Card
+      collapsible
+      defaultOpen
+      storageKey="fintrack-safe-open-goal"
+      summary={target > 0 ? `${pct(s.progress || 0)} · ${formatPLN(value)} z ${formatPLN(target)}${s.reached ? ' · cel osiągnięty' : ''}` : 'ustaw docelową kwotę'}
       title={
         <>
           Cel poduszki finansowej
@@ -57,9 +62,15 @@ export default function SafeGoalCard({ value, yearlyIncomeNet }) {
         <Field label="Koszty życia / mies. (zł)" hint={budget ? `puste = budżet ${formatPLN(budget.total)}` : 'puste = brak budżetu'}>
           <Input type="number" inputMode="decimal" min="0" step="100" placeholder={budget ? String(Math.round(budget.total)) : 'np. 3500'} value={num(goal.monthlyCosts)} onChange={(e) => set({ monthlyCosts: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) })} aria-label="Miesięczne koszty życia" />
         </Field>
-        <Field label="Dopłata / mies. (zł)">
-          <Input type="number" inputMode="decimal" min="0" step="100" placeholder="0" value={num(goal.monthlyContribution)} onChange={(e) => set({ monthlyContribution: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) })} aria-label="Miesięczna dopłata do poduszki" />
-        </Field>
+        {goal.growthMode === 'pct' ? (
+          <Field label="Wzrost (% rocznie)" hint="ustawienie z karty „Wzrost poduszki”">
+            <Input type="number" inputMode="decimal" min="0" max="100" step="0.5" placeholder="np. 5" value={num(goal.growthPct)} onChange={(e) => set({ growthPct: e.target.value === '' ? '' : Math.min(100, Math.max(0, Number(e.target.value))) })} aria-label="Roczny wzrost poduszki" />
+          </Field>
+        ) : (
+          <Field label="Dopłata / mies. (zł)">
+            <Input type="number" inputMode="decimal" min="0" step="100" placeholder="0" value={num(goal.monthlyContribution)} onChange={(e) => set({ monthlyContribution: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) })} aria-label="Miesięczna dopłata do poduszki" />
+          </Field>
+        )}
       </div>
 
       {target > 0 ? (
@@ -100,7 +111,7 @@ export default function SafeGoalCard({ value, yearlyIncomeNet }) {
               </div>
               <div className="text-base font-semibold tabular">{s.monthsToGoal === null ? 'brak wzrostu' : duration(s.monthsToGoal)}</div>
               <div className="text-[11px] text-stone-500 tabular dark:text-stone-400">
-                odsetki netto {formatPLN(yearlyIncomeNet / 12)} / mies.{contribution ? ` + dopłata ${formatPLN(contribution)}` : ''}
+                odsetki netto {formatPLN(yearlyIncomeNet / 12)} / mies.{contribution ? ` + dopłata ${formatPLN(contribution)}${goal.growthMode === 'pct' ? ' (≈ % rocznie)' : ''}` : ''}
               </div>
             </div>
           </div>

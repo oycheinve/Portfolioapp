@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CalendarClock, ChevronDown, Coins, Landmark, PiggyBank, Repeat, Scale, Snowflake, Wallet, Waves } from 'lucide-react';
+import { BarChart3, CalendarClock, Check, ChevronDown, Coins, Landmark, ListTree, PiggyBank, Repeat, Scale, Snowflake, TrendingUp, Wallet, Waves } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { isoDay, livePriceLookup, valuePortfolio } from '../lib/engine.js';
-import { dividendPositions } from '../lib/dividends.js';
-import { savingsProjection } from '../lib/savings.js';
-import { cashFlowForecast, passiveCoverage, snowball, upcomingCashEvents } from '../lib/cashflow.js';
+import { isoDay } from '../lib/engine.js';
+import { cashFlowForecast, multiYearForecast, normSources, passiveCoverage, upcomingCashEvents } from '../lib/cashflow.js';
 import { chartChrome, seriesColor } from '../lib/colors.js';
 import { formatAxisPLN, formatDate, formatPLN } from '../lib/format.js';
 import { BetaBadge, Card, ChartTooltip, Field, Input, Segmented, Toggle } from '../components/ui.jsx';
@@ -18,7 +16,16 @@ const KIND = {
   interest: { label: 'Odsetki z KO', icon: PiggyBank, slot: 3 },
   bonds: { label: 'Obligacje', icon: Landmark, slot: 2 },
 };
+const SOURCES = [
+  { key: 'dividends', label: 'Dywidendy (Akcje / ETF)' },
+  { key: 'bonds', label: 'Obligacje skarbowe' },
+  { key: 'interest', label: 'Konto oszczędnościowe' },
+];
+const HORIZONS = [1, 3, 5, 10, 20];
+const yearsLabel = (n) => `${n} ${n === 1 ? 'rok' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'lata' : 'lat'}`;
+const numOrEmpty = (v) => (v === '' ? '' : Math.max(0, Number(v)));
 const inDaysLabel = (n) => (n === 0 ? 'dziś' : n === 1 ? 'jutro' : `za ${n} dni`);
+const openKey = (id) => `fintrack-cf-open-${id}`; // rozwinięcie sekcji – tylko to urządzenie
 
 function Mini({ label, value, sub, tone = '' }) {
   return (
@@ -36,8 +43,9 @@ const beta = (text) => (
   </>
 );
 
-// Cash Flow Forecast (BETA): prognoza pasywnych przepływów na 12 miesięcy (dywidendy, odsetki z KO, obligacje),
-// pokrycie budżetu, wolna gotówka, nadchodzące wypłaty (90 dni), podatek Belki / oszczędność IKE i kula śnieżna.
+// Cash Flow Forecast (BETA): prognoza pasywnych przepływów na 12 miesięcy (dywidendy, odsetki z KO, obligacje) z wyborem
+// źródeł, pokrycie budżetu, wolna gotówka, nadchodzące wypłaty (90 dni), podatek Belki / oszczędność IKE oraz symulator
+// wieloletni (plan wpłat na IKE z granicznikiem, Dividend Yield portfela, poduszka rosnąca najwyżej do celu).
 export default function CashFlowView() {
   const { state, actions, isDark } = useApp();
   const chrome = chartChrome(isDark);
@@ -46,18 +54,14 @@ export default function CashFlowView() {
   const setPrefs = (patch) => actions.updateSettings({ cashflow: { ...prefs, ...patch } });
   const mode = prefs.mode === 'gross' ? 'gross' : 'net';
   const g = mode === 'gross';
+  const sources = normSources(prefs.sources);
+  const srcKey = `${sources.dividends}|${sources.bonds}|${sources.interest}`;
+  const setSource = (k) => setPrefs({ sources: { ...sources, [k]: !sources[k] } });
 
-  const f = useMemo(() => cashFlowForecast(state, { today, months: 12 }), [state, today]);
+  const f = useMemo(() => cashFlowForecast(state, { today, months: 12, sources }), [state, today, srcKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const budget = useMemo(() => plannedBudget(), [state.settings]); // eslint-disable-line react-hooks/exhaustive-deps
   const upcoming = useMemo(() => upcomingCashEvents(f, today, 90), [f, today]);
-  // Kapitał dochodowy: pozycje z dywidendą + salda kont oszczędnościowych + aktywne obligacje
-  const capital = useMemo(() => {
-    const divCap = dividendPositions(state, today).filter((p) => p.annualGross > 0).reduce((s, p) => s + (p.value || 0), 0);
-    const sav = state.accounts.filter((a) => a.type === 'SAVINGS').reduce((s, a) => s + Math.max(0, savingsProjection(state, a, today).balance), 0);
-    const v = valuePortfolio(state, { asOf: today, accountIds: null, priceLookup: livePriceLookup(state) });
-    const bonds = v.bonds.filter((b) => b.value > 0).reduce((s, b) => s + b.value, 0);
-    return divCap + sav + bonds;
-  }, [state, today]);
+  const kinds = ['dividends', 'interest', 'bonds'].filter((k) => sources[k]);
 
   const rows = f.rows.map((r) => ({
     ...r,
@@ -85,15 +89,34 @@ export default function CashFlowView() {
   const fcfAvg = inflow - (budget?.total || 0) + f.avgNet;
   const fcfNow = inflow - (budget?.total || 0) + f.currentNet;
 
-  // Kula śnieżna
-  const years = [1, 3, 5].includes(Number(prefs.years)) ? Number(prefs.years) : 3;
+  // Symulator wieloletni
+  const years = HORIZONS.includes(Number(prefs.years)) ? Number(prefs.years) : 3;
   const drip = prefs.drip !== false;
   const contribution = Number(prefs.contribution) || 0;
-  const sim = snowball({ annualIncome: f.totals.net, capital, years, monthlyContribution: contribution, drip });
+  const ike = {
+    mode: prefs.ikeMode === 'manual' ? 'manual' : 'auto',
+    amount: Number(prefs.ikeAmount) || 0,
+    period: prefs.ikePeriod === 'year' ? 'year' : 'month',
+    stepEnabled: !!prefs.ikeStepEnabled,
+    stepYears: Number(prefs.ikeStepYears) > 0 ? Math.round(Number(prefs.ikeStepYears)) : 3,
+    stepAmount: Number(prefs.ikeStepAmount) || 0,
+  };
+  const ikeKey = JSON.stringify(ike);
+  const goal = state.settings.safeGoal || {};
+  const sim = useMemo(
+    () => multiYearForecast(state, { today, years, sources, drip, otherContribution: contribution, ike, cushion: goal }),
+    [state, today, years, drip, contribution, ikeKey, srcKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const last = sim.rows.at(-1);
+  const cushionTarget = Number(goal.target) || 0;
+  const cushionCapYear = sim.rows.find((r) => r.cushionCapped)?.year;
+  const ikeSummary = `${formatPLN(sim.base)} / mies.${ike.stepEnabled ? ` → ${formatPLN(ike.stepAmount)} od ${ike.stepYears + 1}. roku` : ''} · ${ike.mode === 'manual' ? 'ręcznie' : 'z historii'}`;
+  const dyLabel = sim.dy.basis === 'history' ? `wypłaty z 12 mies. ${formatPLN(sim.dy.received)}` : sim.dy.basis === 'forecast' ? `prognoza stawek ${formatPLN(sim.dy.received)} / rok` : 'brak dywidend';
+  const nextUp = upcoming[0];
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      {/* Nagłówek i podsumowanie 12 miesięcy */}
+      {/* Nagłówek: źródła i podsumowanie 12 miesięcy */}
       <section className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900" aria-label="Cash Flow Forecast">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -107,32 +130,57 @@ export default function CashFlowView() {
           </div>
           <Segmented size="sm" value={mode} onChange={(v) => setPrefs({ mode: v })} ariaLabel="Brutto czy netto" options={[{ value: 'net', label: 'Netto' }, { value: 'gross', label: 'Brutto' }]} />
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Źródła w obliczeniach">
+          {SOURCES.map((s) => {
+            const on = sources[s.key];
+            return (
+              <button
+                key={s.key}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setSource(s.key)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                  on ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-stone-200 bg-white text-stone-400 line-through dark:border-white/10 dark:bg-transparent dark:text-stone-500'
+                }`}
+              >
+                <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${on ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/20'}`}>{on && <Check size={10} strokeWidth={3} />}</span>
+                {s.label}
+              </button>
+            );
+          })}
+          <BetaBadge />
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <Mini label={`Suma 12 mies. (${g ? 'brutto' : 'netto'})`} value={formatPLN(total)} tone="text-emerald-700 dark:text-emerald-400" />
           <Mini label="Średnio / mies." value={formatPLN(avg)} />
           <Mini label="Bieżący miesiąc" value={formatPLN(g ? rows[0]?.gross : rows[0]?.net)} sub={rows[0]?.long} />
           <Mini label="Podatek Belki (12 mies.)" value={formatPLN(f.totals.tax)} sub={f.totals.ikeSaved > 0 ? `IKE/IKZE: oszczędzone ${formatPLN(f.totals.ikeSaved)}` : 'brak oszczędności IKE'} tone="text-red-600 dark:text-red-400" />
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2.5">
-          {['dividends', 'interest', 'bonds'].map((k) => {
-            const Icon = KIND[k].icon;
-            const v = g ? rows.reduce((s, r) => s + r[`${k}Gross`], 0) : f.totals[k];
-            return (
-              <div key={k} className="min-w-0 rounded-xl border border-stone-100 px-2.5 py-2 dark:border-white/5">
-                <div className="flex items-center gap-1 text-[11px] text-stone-500 dark:text-stone-400">
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color(k) }} />
-                  <Icon size={12} className="shrink-0" /> <span className="truncate">{KIND[k].label}</span>
+        {kinds.length > 0 && (
+          <div className={`mt-3 grid gap-2.5 ${kinds.length === 3 ? 'grid-cols-3' : kinds.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {kinds.map((k) => {
+              const Icon = KIND[k].icon;
+              const v = g ? rows.reduce((s, r) => s + r[`${k}Gross`], 0) : f.totals[k];
+              return (
+                <div key={k} className="min-w-0 rounded-xl border border-stone-100 px-2.5 py-2 dark:border-white/5">
+                  <div className="flex items-center gap-1 text-[11px] text-stone-500 dark:text-stone-400">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color(k) }} />
+                    <Icon size={12} className="shrink-0" /> <span className="truncate">{KIND[k].label}</span>
+                  </div>
+                  <div className="truncate text-sm font-semibold tabular">{formatPLN(v)}</div>
                 </div>
-                <div className="truncate text-sm font-semibold tabular">{formatPLN(v)}</div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
+        {!kinds.length && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">Wszystkie źródła są wyłączone – zaznacz przynajmniej jedno.</p>}
+      </section>
 
-        {/* Wykres skumulowany 12 miesięcy z linią średniej */}
-        <div className="mt-4">
-          <Legend items={[...['dividends', 'interest', 'bonds'].map((k) => ({ key: k, label: KIND[k].label, color: color(k), bar: true })), { key: 'avg', label: 'Średnia / mies.', color: chrome.muted, dashed: true }]} />
-        </div>
+      {/* Wykres 12 miesięcy */}
+      <Card collapsible defaultOpen storageKey={openKey('chart')} title={beta('Wykres 12 miesięcy')} summary={`${formatPLN(total)} · średnio ${formatPLN(avg)} / mies.`} icon={BarChart3}>
+        <Legend items={[...kinds.map((k) => ({ key: k, label: KIND[k].label, color: color(k), bar: true })), { key: 'avg', label: 'Średnia / mies.', color: chrome.muted, dashed: true }]} />
         <div className="mt-2 h-60" aria-label="Wykres prognozy przepływów">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
@@ -140,16 +188,18 @@ export default function CashFlowView() {
               <XAxis dataKey="label" tick={{ fill: chrome.muted, fontSize: 10 }} tickLine={false} axisLine={{ stroke: chrome.axis }} interval={0} angle={-35} textAnchor="end" height={38} />
               <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={52} tickFormatter={formatAxisPLN} />
               <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v)} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
-              <Bar dataKey="vInterest" name="Odsetki z KO" stackId="cf" fill={color('interest')} stroke={chrome.surface} strokeWidth={1} maxBarSize={30} isAnimationActive={false} />
-              <Bar dataKey="vBonds" name="Obligacje" stackId="cf" fill={color('bonds')} stroke={chrome.surface} strokeWidth={1} maxBarSize={30} isAnimationActive={false} />
-              <Bar dataKey="vDividends" name="Dywidendy" stackId="cf" fill={color('dividends')} stroke={chrome.surface} strokeWidth={1} radius={[4, 4, 0, 0]} maxBarSize={30} isAnimationActive={false} />
+              {sources.interest && <Bar dataKey="vInterest" name="Odsetki z KO" stackId="cf" fill={color('interest')} stroke={chrome.surface} strokeWidth={1} maxBarSize={30} isAnimationActive={false} />}
+              {sources.bonds && <Bar dataKey="vBonds" name="Obligacje" stackId="cf" fill={color('bonds')} stroke={chrome.surface} strokeWidth={1} maxBarSize={30} isAnimationActive={false} />}
+              {sources.dividends && <Bar dataKey="vDividends" name="Dywidendy" stackId="cf" fill={color('dividends')} stroke={chrome.surface} strokeWidth={1} radius={[4, 4, 0, 0]} maxBarSize={30} isAnimationActive={false} />}
               <ReferenceLine y={avg} stroke={chrome.muted} strokeDasharray="5 4" ifOverflow="extendDomain" />
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </Card>
 
-        {/* Tabela miesiąc po miesiącu */}
-        <ul className="mt-3 divide-y divide-stone-100 rounded-xl border border-stone-100 dark:divide-white/5 dark:border-white/5" aria-label="Prognoza miesiąc po miesiącu">
+      {/* Tabela miesiąc po miesiącu */}
+      <Card collapsible storageKey={openKey('months')} title={beta('Miesiąc po miesiącu')} summary={`${rows.filter((r) => r.value > 0).length} z 12 mies. z wpływami · ${f.events.length} wypłat`} icon={ListTree}>
+        <ul className="divide-y divide-stone-100 rounded-xl border border-stone-100 dark:divide-white/5 dark:border-white/5" aria-label="Prognoza miesiąc po miesiącu">
           {rows.map((r) => {
             const isOpen = open.has(r.key);
             return (
@@ -185,10 +235,10 @@ export default function CashFlowView() {
           })}
         </ul>
         <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">Dywidendy: ogłoszone i w drodze z harmonogramu (np. transze Grupy Kęty) oraz prognoza z wypłat z ostatnich 12 miesięcy dla obecnej liczby akcji. KO: odsetki w dniach kapitalizacji przy obecnym saldzie. Obligacje: kupony i odsetki przy wykupie (inflacja CPI z GUS). Netto: Belka 19%, IKE/IKZE 0%.</p>
-      </section>
+      </Card>
 
       {/* Pokrycie wydatków */}
-      <Card title={beta('Pokrycie wydatków')} subtitle="Dochód pasywny netto vs plan z modułu Budżet" icon={Scale}>
+      <Card collapsible defaultOpen storageKey={openKey('coverage')} title={beta('Pokrycie wydatków')} summary={budget ? `${pct(cov.fixed)} stałych kosztów · ${pct(cov.total)} budżetu` : 'uzupełnij plan w Budżecie'} subtitle="Dochód pasywny netto vs plan z modułu Budżet" icon={Scale}>
         {budget ? (
           <>
             <p className="text-sm text-stone-700 dark:text-stone-200">
@@ -224,7 +274,7 @@ export default function CashFlowView() {
           </h3>
           <div className="mt-2 grid gap-3 sm:grid-cols-3">
             <Field label="Miesięczne wpływy (zł)" hint="np. wynagrodzenie netto">
-              <Input type="number" inputMode="decimal" min="0" step="100" placeholder="np. 7000" value={prefs.monthlyIncome ?? ''} onChange={(e) => setPrefs({ monthlyIncome: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) })} aria-label="Miesięczne wpływy" />
+              <Input type="number" inputMode="decimal" min="0" step="100" placeholder="np. 7000" value={prefs.monthlyIncome ?? ''} onChange={(e) => setPrefs({ monthlyIncome: numOrEmpty(e.target.value) })} aria-label="Miesięczne wpływy" />
             </Field>
             <Mini label="Do zainwestowania – średnio / mies." value={formatPLN(fcfAvg)} sub={`${formatPLN(inflow)} − budżet ${formatPLN(budget?.total || 0)} + pasywne ${formatPLN(f.avgNet)}`} tone={fcfAvg >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'} />
             <Mini label="Do zainwestowania – bieżący miesiąc" value={formatPLN(fcfNow)} sub={`pasywne w tym miesiącu ${formatPLN(f.currentNet)}`} tone={fcfNow >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'} />
@@ -233,7 +283,7 @@ export default function CashFlowView() {
       </Card>
 
       {/* Nadchodzące wypłaty – 90 dni */}
-      <Card title={beta('Nadchodzące wypłaty')} subtitle="Najbliższe 90 dni – kwoty netto" icon={CalendarClock}>
+      <Card collapsible storageKey={openKey('upcoming')} title={beta('Nadchodzące wypłaty')} summary={nextUp ? `${upcoming.length} w 90 dni · najbliższa ${formatDate(nextUp.date)} +${formatPLN(nextUp.net)}` : 'brak w 90 dni'} subtitle="Najbliższe 90 dni – kwoty netto" icon={CalendarClock}>
         {upcoming.length ? (
           <ol className="relative space-y-2 border-l border-stone-200 pl-4 dark:border-white/10" aria-label="Oś czasu wypłat">
             {upcoming.map((e, i) => (
@@ -256,26 +306,63 @@ export default function CashFlowView() {
         )}
       </Card>
 
-      {/* Kula śnieżna */}
-      <Card title={beta('Kula śnieżna')} subtitle="Wzrost dochodu pasywnego netto w kolejnych latach" icon={Snowflake}>
+      {/* Plan wpłat na IKE */}
+      <Card collapsible storageKey={openKey('ike')} title={beta('Wpłaty na IKE (XTB)')} summary={ikeSummary} subtitle="Tempo dopłat do IKE w symulatorze wieloletnim" icon={TrendingUp}>
+        <div className="mb-1 text-[11px] font-medium text-stone-500 dark:text-stone-400">Wpłaty bazowe</div>
+        <Segmented size="sm" value={ike.mode} onChange={(v) => setPrefs({ ikeMode: v })} ariaLabel="Metoda szacowania wpłat na IKE" options={[{ value: 'auto', label: 'Z historii wpłat' }, { value: 'manual', label: 'Wpisz ręcznie' }]} />
+        {ike.mode === 'auto' ? (
+          <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            <Mini label="Średnio / mies." value={formatPLN(sim.hist.monthly)} sub={sim.hist.first ? `od ${formatDate(sim.hist.first)} (${sim.hist.months} mies.)` : 'brak wpłat w rejestrze'} />
+            <Mini label="Średnio / rok" value={formatPLN(sim.hist.yearly)} />
+            <Mini label="Wpłacono łącznie" value={formatPLN(sim.hist.total)} sub={`${sim.hist.count} wpłat (rejestr / import XTB)`} />
+          </div>
+        ) : (
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <Field label="Kwota (zł)" className="w-36">
+              <Input type="number" inputMode="decimal" min="0" step="100" placeholder="np. 600" value={prefs.ikeAmount ?? ''} onChange={(e) => setPrefs({ ikeAmount: numOrEmpty(e.target.value) })} aria-label="Deklarowana wpłata na IKE" />
+            </Field>
+            <Segmented size="sm" value={ike.period} onChange={(v) => setPrefs({ ikePeriod: v })} ariaLabel="Okres wpłaty" options={[{ value: 'month', label: '/ mies.' }, { value: 'year', label: '/ rok' }]} />
+          </div>
+        )}
+        <div className="mt-4 border-t border-stone-100 pt-3 dark:border-white/5">
+          <Toggle checked={ike.stepEnabled} onChange={(v) => setPrefs({ ikeStepEnabled: v })} label={beta('Próg zmiany wpłat (Granicznik)')} description="Skokowa zmiana miesięcznej wpłaty po wskazanej liczbie lat (dwuetapowy plan)." />
+          {ike.stepEnabled && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="Etap 1: przez (lat)" hint={`wpłata ${formatPLN(sim.base)} / mies.`}>
+                <Input type="number" inputMode="numeric" min="1" max="40" step="1" value={prefs.ikeStepYears ?? 3} onChange={(e) => setPrefs({ ikeStepYears: e.target.value === '' ? '' : Math.min(40, Math.max(1, Math.round(Number(e.target.value)))) })} aria-label="Liczba lat do granicznika" />
+              </Field>
+              <Field label={`Etap 2: od ${ike.stepYears + 1}. roku (zł / mies.)`}>
+                <Input type="number" inputMode="decimal" min="0" step="100" placeholder="np. 2000" value={prefs.ikeStepAmount ?? ''} onChange={(e) => setPrefs({ ikeStepAmount: numOrEmpty(e.target.value) })} aria-label="Wpłata po graniczniku" />
+              </Field>
+            </div>
+          )}
+        </div>
+        <p className="mt-3 rounded-lg bg-stone-50 px-3 py-2 text-[11px] text-stone-500 dark:bg-white/[0.03] dark:text-stone-400">
+          Dywidendy z IKE (obecny portfel, nowe wpłaty i DRIP) liczone wg Dividend Yield portfela: <strong className="text-stone-700 tabular dark:text-stone-200">{pct(sim.dy.rate)}</strong> ({dyLabel} / wartość {sim.dy.scope === 'IKE' ? 'IKE' : 'portfela inwestycyjnego – IKE bez dywidend'} {formatPLN(sim.dy.value)}; kapitał IKE {formatPLN(sim.dy.ikeValue)}). Wpłaty od przyszłego miesiąca, w każdym roku najwyżej do limitu IKE.
+        </p>
+      </Card>
+
+      {/* Symulator wieloletni (kula śnieżna) */}
+      <Card collapsible defaultOpen storageKey={openKey('snowball')} title={beta('Kula śnieżna')} summary={last ? `za ${yearsLabel(years)}: ${formatPLN(last.monthly)} / mies. · kapitał ${formatPLN(last.capital)}` : ''} subtitle="Wieloletnia prognoza dochodu pasywnego netto" icon={Snowflake}>
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <div className="mb-1 text-[11px] font-medium text-stone-500 dark:text-stone-400">Horyzont</div>
-            <Segmented size="sm" value={String(years)} onChange={(v) => setPrefs({ years: Number(v) })} ariaLabel="Horyzont symulacji" options={[{ value: '1', label: '1 rok' }, { value: '3', label: '3 lata' }, { value: '5', label: '5 lat' }]} />
+            <Segmented size="sm" value={String(years)} onChange={(v) => setPrefs({ years: Number(v) })} ariaLabel="Horyzont symulacji" options={HORIZONS.map((n) => ({ value: String(n), label: n === 1 ? '1 rok' : `${n} l.` }))} />
           </div>
-          <Field label="Dopłata / mies. (zł)" className="w-36">
-            <Input type="number" inputMode="decimal" min="0" step="100" placeholder="0" value={prefs.contribution ?? ''} onChange={(e) => setPrefs({ contribution: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) })} aria-label="Miesięczna dopłata w symulacji" />
+          <Field label="Dopłata poza IKE / mies. (zł)" className="w-44">
+            <Input type="number" inputMode="decimal" min="0" step="100" placeholder="0" value={prefs.contribution ?? ''} onChange={(e) => setPrefs({ contribution: numOrEmpty(e.target.value) })} aria-label="Miesięczna dopłata w symulacji" />
           </Field>
         </div>
         <div className="mt-3">
-          <Toggle checked={drip} onChange={(v) => setPrefs({ drip: v })} label="Reinwestuj 100% przepływów (DRIP)" description={`Stopa dochodu kapitału: ${pct(sim.yieldRate)} rocznie netto (prognoza 12 mies. / kapitał dochodowy ${formatPLN(capital)}); bez wzrostu dywidend i cen.`} />
+          <Toggle checked={drip} onChange={(v) => setPrefs({ drip: v })} label="Reinwestuj 100% dywidend (DRIP)" description={`IKE: Dividend Yield ${pct(sim.dy.rate)}; pozostałe pozycje: ${pct(sim.otherRate)} netto. Bez wzrostu dywidend i cen.`} />
         </div>
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm tabular">
+          <table className="w-full min-w-[30rem] text-sm tabular" aria-label="Symulacja wieloletnia">
             <thead>
               <tr className="text-left text-[11px] text-stone-500 dark:text-stone-400">
                 <th className="py-1.5 font-medium">Rok</th>
                 <th className="py-1.5 text-right font-medium">Kapitał</th>
+                <th className="py-1.5 text-right font-medium">Wpłaty IKE</th>
                 <th className="py-1.5 text-right font-medium">Dochód / rok</th>
                 <th className="py-1.5 text-right font-medium">/ mies.</th>
               </tr>
@@ -283,17 +370,27 @@ export default function CashFlowView() {
             <tbody className="divide-y divide-stone-100 dark:divide-white/5">
               <tr className="text-stone-500 dark:text-stone-400">
                 <td className="py-1.5">Teraz</td>
-                <td className="py-1.5 text-right">{formatPLN(capital)}</td>
+                <td className="py-1.5 text-right">{formatPLN(sim.capital0)}</td>
+                <td className="py-1.5 text-right">—</td>
                 <td className="py-1.5 text-right">{formatPLN(f.totals.net)}</td>
                 <td className="py-1.5 text-right">{formatPLN(f.avgNet)}</td>
               </tr>
               {sim.rows.map((r) => (
-                <tr key={r.year}>
+                <tr key={r.year} className={ike.stepEnabled && r.year === ike.stepYears + 1 ? 'bg-blue-50/60 dark:bg-blue-500/10' : ''}>
                   <td className="py-1.5">
                     <Repeat size={11} className="mr-1 inline text-stone-400" />
                     {r.year}
+                    {r.cushionCapped && (sources.bonds || sources.interest) && cushionTarget > 0 && (
+                      <span className="ml-1 text-[10px] text-amber-600 dark:text-amber-400" title="Poduszka na progu celu">
+                        cel
+                      </span>
+                    )}
                   </td>
                   <td className="py-1.5 text-right">{formatPLN(r.capital)}</td>
+                  <td className="py-1.5 text-right">
+                    {formatPLN(r.ikeDeposits)}
+                    {r.limitCut > 0.5 && <span className="block text-[10px] text-amber-600 dark:text-amber-400">limit −{formatPLN(r.limitCut)}</span>}
+                  </td>
                   <td className="py-1.5 text-right font-semibold text-emerald-700 dark:text-emerald-400">{formatPLN(r.annual)}</td>
                   <td className="py-1.5 text-right">{formatPLN(r.monthly)}</td>
                 </tr>
@@ -301,6 +398,14 @@ export default function CashFlowView() {
             </tbody>
           </table>
         </div>
+        <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">
+          {ike.stepEnabled ? `Granicznik: od ${ike.stepYears + 1}. roku wpłata ${formatPLN(ike.stepAmount)} / mies. (wyróżniony wiersz). ` : ''}
+          {sources.bonds || sources.interest
+            ? cushionTarget > 0
+              ? `Poduszka rośnie najwyżej do celu ${formatPLN(sim.cushion.cap)}${cushionCapYear ? ` (osiągnięty w ${cushionCapYear}. roku)` : ''} – potem odsetki liczone od kwoty celu.`
+              : 'Poduszka bez celu – rośnie o odsetki i dopłatę z zakładki Poduszka finansowa.'
+            : 'Poduszka wyłączona z obliczeń.'}
+        </p>
       </Card>
     </div>
   );
