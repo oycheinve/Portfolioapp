@@ -1,5 +1,6 @@
 // Etap 4: dywidendy – DPS (TTM), stopa dywidendy portfela, harmonogram ogłoszonych wypłat,
 // kalendarz 12 miesięcy (wypłacona / w drodze / ogłoszona / prognoza), przypomnienia i prognoza z DGR i DRIP.
+import { forcedShares } from './dividendFacts.js';
 import { computeHoldings, fxToPLN, incomeEventsWithTax, isoDay, livePriceLookup, valuePortfolio } from './engine.js';
 import { belkaRateForAccount, computeIncomeTax } from './tax.js';
 
@@ -25,19 +26,17 @@ export function sharesAt(state, instrumentId, date) {
   return out;
 }
 
-// Akcje uprawnione do zweryfikowanej dywidendy (dividendFacts.js) z twardym stanem posiadania (`fallbackShares`):
-// gdy historii transakcji nie da się odtworzyć na dzień ustalenia prawa (np. import samych otwartych pozycji
-// z późniejszą datą – pierwsza transakcja po dniu ustalenia prawa) – podany stan na koncie, na którym są akcje
-// (albo z ostatniej transakcji). Gdy transakcje sięgają tego dnia, liczy się wyłącznie stan z historii.
-export function eligibleShares(state, instrumentId, refDate, fallback) {
+// Akcje uprawnione do dywidendy na dzień przed dniem ustalenia prawa (per konto). forced – jednorazowy wyjątek
+// z dividendFacts.js (forcedShares): stała liczba akcji na koncie, na którym były / są akcje (albo z ostatniej
+// transakcji); bez wyjątku – wyłącznie stan z historii transakcji.
+export function eligibleShares(state, instrumentId, refDate, forced = null) {
   const shares = sharesAt(state, instrumentId, refDate);
-  const qty = Number(fallback) || 0;
-  if (Object.keys(shares).length || !(qty > 0)) return shares;
-  const trades = state.trades.filter((t) => t.instrumentId === instrumentId).sort((a, b) => (a.date < b.date ? 1 : -1));
-  // Historia sięga dnia ustalenia prawa (np. sprzedaż przed dniem dywidendy) – stan z transakcji jest wiarygodny
-  if (!trades.length || trades.some((t) => t.date <= refDate)) return shares;
-  const now = sharesAt(state, instrumentId, isoDay(new Date()));
-  const accountId = Object.keys(now)[0] || trades[0]?.accountId;
+  const qty = Number(forced) || 0;
+  if (!(qty > 0)) return shares;
+  const byHistory = Object.entries(shares).sort((x, y) => y[1] - x[1])[0]?.[0];
+  const now = Object.keys(sharesAt(state, instrumentId, isoDay(new Date())))[0];
+  const lastTrade = state.trades.filter((t) => t.instrumentId === instrumentId).sort((x, y) => (x.date < y.date ? 1 : -1))[0]?.accountId;
+  const accountId = byHistory || now || lastTrade;
   return accountId ? { [accountId]: qty } : {};
 }
 
@@ -55,7 +54,8 @@ export function dividendHistory(state, instrumentId) {
     if (!Number.isFinite(gross)) continue;
     const day = addDays(i.date, -1);
     if (!sharesCache.has(day)) sharesCache.set(day, sharesAt(state, instrumentId, day));
-    const shares = sharesCache.get(day)[i.accountId] || 0;
+    // Wpis z jednorazowego wyjątku (forcedShares) – stawka zapisana przy księgowaniu, nie z liczby akcji w historii
+    const shares = Number(i.forcedShares) > 0 ? 0 : sharesCache.get(day)[i.accountId] || 0;
     const recorded = Number(i.dps) > 0 ? Number(i.dps) * fxToPLN(fx, i.dpsCurrency || 'PLN') : null;
     const row = byDate.get(i.date) || { date: i.date, gross: 0, shares: 0, tradeGross: 0, tradeShares: 0, recordedDpsPLN: null, accounts: new Set() };
     row.gross += gross;
@@ -145,7 +145,7 @@ export const STATUS_META = {
 export function evaluateScheduleItem(state, item, today = isoDay(new Date())) {
   const inst = state.instruments.find((i) => i.id === item.instrumentId);
   const refDate = item.exDate && item.exDate <= today ? addDays(item.exDate, -1) : today;
-  const shares = inst ? eligibleShares(state, inst.id, refDate, item.fallbackShares) : {};
+  const shares = inst ? eligibleShares(state, inst.id, refDate, forcedShares(inst, item)) : {};
   const fx = fxToPLN(state.prices?.fx, item.currency || inst?.currency || 'PLN');
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const perAccount = Object.entries(shares).map(([accountId, qty]) => {
@@ -198,6 +198,7 @@ export function canBookNow(item, today = isoDay(new Date())) {
 export function bookingEntries(state, item, today = isoDay(new Date())) {
   const date = item.payDate && !item.payDateEstimated && item.payDate <= today ? item.payDate : today;
   const ev = evaluateScheduleItem(state, item);
+  const forced = forcedShares(ev.instrument, item);
   return ev.perAccount
     .filter((a) => a.gross > 0)
     .map((a) => ({
@@ -210,6 +211,7 @@ export function bookingEntries(state, item, today = isoDay(new Date())) {
       foreignTax: Math.round(a.foreignTax * 100) / 100,
       note: `${a.shares} szt. × ${Number(item.dps).toFixed(4)} ${item.currency || ev.instrument?.currency || 'PLN'} (harmonogram)`,
       scheduleId: item.id,
+      ...(forced ? { forcedShares: forced, dps: Number(item.dps), dpsCurrency: item.currency || 'PLN' } : {}),
     }));
 }
 
@@ -388,6 +390,15 @@ export function projectDividends(positions, { years = 10, dgr = 0.06, drip = tru
 //    jeśli wcześniej zaksięgowano ją automatycznie z danych Yahoo – automatyczne wpisy zastępuje prawdziwa wypłata,
 // 2) przy włączonym autoksięgowaniu: pozycje po dniu wypłaty bez wpisu w rejestrze → wypłata wyliczona
 //    z liczby akcji na każdym koncie w dniu przed dniem dywidendy (stan historyczny).
+// Jednorazowy wyjątek (forcedShares): wcześniej zaksięgowana kwota inna niż z wyjątku (np. z innej liczby akcji)
+function forcedMismatch(state, item, own, today) {
+  const inst = state.instruments.find((i) => i.id === item.instrumentId);
+  if (!forcedShares(inst, item)) return false;
+  const expected = bookingEntries(state, item, today);
+  const key = (list) => list.map((e) => `${e.accountId}:${(Number(e.gross) || 0).toFixed(2)}`).sort().join('|');
+  return key(expected) !== key(own);
+}
+
 export function reconcileDividends(state, { autoBook = true, today = isoDay(new Date()) } = {}) {
   const removeIncome = [];
   const addIncome = [];
@@ -421,7 +432,7 @@ export function reconcileDividends(state, { autoBook = true, today = isoDay(new 
           removeIncome.push(...own.map((i) => i.id));
           // UPSERT scala pola – znaczniki księgowania zerowane jawnie
           updates.push({ ...item, bookedAt: null, incomeIds: [], autoBooked: false, pairedWith: null });
-        } else if (!item.payDateEstimated && item.payDate && own.some((i) => i.date !== item.payDate)) {
+        } else if (!item.payDateEstimated && item.payDate && (own.some((i) => i.date !== item.payDate) || forcedMismatch(state, item, own, today))) {
           const entries = bookingEntries(state, item, today);
           removeIncome.push(...own.map((i) => i.id));
           addIncome.push(...entries);

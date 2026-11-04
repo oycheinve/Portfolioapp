@@ -5,8 +5,9 @@
 // (także ułamkowych), o ile wypłaty nie ma już w rejestrze (np. z importu XTB).
 //
 // exDate – dzień dywidendy (ustalenia prawa), payDate – dzień wypłaty, dps – stawka brutto na akcję,
-// shares – stan posiadania na dzień ustalenia prawa podany ręcznie: zapas, gdy transakcji nie da się odtworzyć
-// na ten dzień (np. import samych otwartych pozycji z późniejszą datą); liczba akcji z historii ma pierwszeństwo.
+// shares + forceShares – JEDNORAZOWY WYJĄTEK: stała liczba akcji uprawnionych do tej jednej wypłaty (niezależnie od
+// historii transakcji). Obowiązuje wyłącznie pozycję o dokładnie tym samym instrumencie, dniu dywidendy, dniu wypłaty
+// i stawce (forcedShares) – inne spółki i kolejne dywidendy (także KTY) liczą się standardowo z posiadanych akcji.
 export const VERIFIED_DIVIDENDS = [
   {
     key: 'KTY-2026-II',
@@ -16,6 +17,7 @@ export const VERIFIED_DIVIDENDS = [
     payDate: '2026-11-04',
     dps: 32.64,
     shares: 0.2887,
+    forceShares: true,
     currency: 'PLN',
     note: 'Grupa Kęty – II transza dywidendy: dzień dywidendy 18.08.2026, wypłata 4.11.2026, 32,64 zł na akcję (0,2887 akcji × 32,64 zł = 9,42 zł brutto)',
   },
@@ -31,4 +33,11 @@ export function factsFor(inst) {
   const t = norm(inst?.ticker);
   const y = norm(inst?.yahooSymbol);
   return VERIFIED_DIVIDENDS.filter((f) => (t && f.tickers.includes(t)) || (y && f.symbols.includes(y)));
+}
+
+// Liczba akcji z jednorazowego wyjątku dla pozycji harmonogramu (null – brak wyjątku, liczenie standardowe)
+export function forcedShares(inst, item) {
+  if (!item?.exDate) return null;
+  const f = factsFor(inst).find((x) => x.forceShares && x.shares > 0 && x.exDate === item.exDate && x.payDate === item.payDate && Math.abs((Number(item.dps) || 0) - x.dps) < 1e-9 && (item.currency || 'PLN') === x.currency);
+  return f ? f.shares : null;
 }
