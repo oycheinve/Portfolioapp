@@ -178,8 +178,10 @@ export function buildPortfolioRows(state) {
       currentPricePLN: p.unitPricePLN || null,
       currency: 'PLN',
       value: p.value,
-      cost: null,
-      gain: null,
+      // Średnia cena zakupu podana w module – zysk / strata jak dla pozostałych pozycji
+      cost: p.costPLN,
+      gain: p.pl,
+      avgPricePLN: p.costPLN !== null && p.qty > 0 ? p.costPLN / p.qty : null,
       dayChange: p.dayChange,
     });
   }

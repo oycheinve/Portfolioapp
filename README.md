@@ -474,7 +474,8 @@ Więcej → **Surowce i Krypto**: złoto, srebro (gramy lub uncje trojańskie), 
 - Ceny na żywo z Yahoo Finance (`src/lib/alternatives.js`): `GC=F`, `SI=F` (COMEX, USD / oz trojańską = 31,1034768 g), `BTC-USD`, `ETH-USD`, przeliczenie po `USDPLN=X`. Odświeżanie po otwarciu modułu, przyciskiem i przy starcie aplikacji (gdy notowania starsze niż 15 min).
 - Karta aktywa (zwijana, z podsumowaniem w belce): cena rynkowa (PLN i USD), ilość, wartość w PLN, zmiana dzienna 1D w PLN (ruch ceny i kursu).
 - Majątek Całkowity: wartość doliczana do Net Worth (Pulpit – osobny segment „Surowce i krypto”, cele majątku, udział poduszki); przełącznik w „Ustawieniach modułu”. W Portfelu kategoria „Surowce i krypto” z filtrem.
-- Zapis: `settings.alternatives` (`holdings`, `quotes`, `includeInNetWorth`) – localStorage i Supabase razem z portfelem.
+- **Cena zakupu i wynik:** w karcie aktywa średnia cena zakupu za jednostkę (1 g / 1 oz / 1 szt.) w PLN albo USD (z opcjonalnym kursem USD/PLN zakupu; puste = bieżący kurs). Na żywo (po każdym odświeżeniu notowań): koszt = ilość × średnia cena (× kurs), wynik w PLN = wartość bieżąca − koszt, stopa zwrotu %; zielony – zysk, czerwony – strata; suma w nagłówku modułu. Zmiana jednostki gramy ↔ uncje przelicza ilość i cenę zakupu (ten sam koszt). Koszt i wynik trafiają też do wiersza w Portfelu.
+- Zapis: `settings.alternatives` (`holdings` z `avgPrice`, `avgCurrency`, `avgFx`; `quotes`, `includeInNetWorth`) – localStorage i Supabase razem z portfelem.
 
 ## Odsetki narosłe dziennie – konto oszczędnościowe i obligacje
 

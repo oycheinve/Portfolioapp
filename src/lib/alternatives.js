@@ -1,6 +1,8 @@
 // Surowce i Krypto (BETA): złoto, srebro, Bitcoin i Ethereum z cenami z Yahoo Finance.
 // Dane w state.settings.alternatives (synchronizacja z Supabase razem z portfelem + localStorage):
-//   holdings: { gold: { qty, unit: 'g' | 'oz' }, silver: {…}, btc: { qty }, eth: { qty } }
+//   holdings: { gold: { qty, unit: 'g' | 'oz', avgPrice, avgCurrency: 'PLN' | 'USD', avgFx }, silver: {…}, btc: { qty, avgPrice, … }, eth: {…} }
+//     avgPrice – średnia cena zakupu za jednostkę użytkownika (1 g / 1 oz / 1 szt.); avgFx – kurs USD/PLN zakupu (dla USD;
+//     puste = bieżący kurs)
 //   quotes:   { gold: { price, prevClose, currency }, …, fx: { USD: { price, prevClose } }, at, source }
 //   includeInNetWorth (domyślnie tak) – doliczanie do Majątku Całkowitego; Portfel – filtr kategorii „Surowce i krypto”.
 // Złoto i srebro: kontrakty COMEX (GC=F, SI=F) w USD za uncję trojańską; krypto: BTC-USD, ETH-USD; kurs USDPLN=X.
@@ -42,7 +44,21 @@ export function valueAltPosition(asset, holding, quotes) {
   const value = qty * unitPricePLN;
   const prevValue = qty * prev * unitFactor * fxPrev;
   const hasPrice = price > 0 && fx > 0;
+  // Koszt zakupu (średnia cena × ilość) w PLN i wynik na żywo: wartość bieżąca − koszt
+  const avg = num(holding?.avgPrice);
+  const avgCurrency = holding?.avgCurrency === 'USD' ? 'USD' : 'PLN';
+  const usdNow = fxOf(quotes, 'USD', 'price');
+  const avgFx = avgCurrency === 'USD' ? num(holding?.avgFx) || usdNow : 1;
+  const costPLN = avg > 0 && qty > 0 && avgFx > 0 ? qty * avg * avgFx : null;
+  const pl = costPLN !== null && hasPrice ? value - costPLN : null;
   return {
+    avgPrice: avg > 0 ? avg : null,
+    avgCurrency,
+    avgFx: avgCurrency === 'USD' ? avgFx : null,
+    avgFxIsCurrent: avgCurrency === 'USD' && !(num(holding?.avgFx) > 0),
+    costPLN,
+    pl,
+    plPct: pl !== null && costPLN > 0 ? pl / costPLN : null,
     ...asset,
     qty,
     unit: asset.metal ? holding?.unit || 'g' : 'szt.',
@@ -65,7 +81,14 @@ export function alternativesValue(state) {
   const held = positions.filter((p) => p.qty > 0);
   const value = held.reduce((sum, p) => sum + p.value, 0);
   const dayChange = held.reduce((sum, p) => sum + p.dayChange, 0);
+  const withCost = held.filter((p) => p.pl !== null);
+  const cost = withCost.reduce((sum, p) => sum + p.costPLN, 0);
+  const pl = withCost.reduce((sum, p) => sum + p.pl, 0);
   return {
+    cost: withCost.length ? cost : null,
+    pl: withCost.length ? pl : null,
+    plPct: withCost.length && cost > 0 ? pl / cost : null,
+    plCount: withCost.length,
     positions,
     held,
     value,

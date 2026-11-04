@@ -78,6 +78,19 @@ export default function AlternativesView() {
             <div className={`truncate text-xl font-semibold tabular ${tone(v.dayChange)}`}>{signPLN(v.dayChange)}</div>
             <div className={`truncate text-[11px] tabular ${tone(v.dayChange)}`}>{pctTxt(v.dayPct)}</div>
           </div>
+          <div className={`col-span-2 min-w-0 rounded-xl px-3 py-2.5 ${v.pl === null ? 'bg-stone-50 dark:bg-white/[0.03]' : v.pl >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-red-50 dark:bg-red-500/10'}`}>
+            <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">Zysk / strata od zakupu</div>
+            {v.pl === null ? (
+              <div className="text-sm text-stone-500 dark:text-stone-400">Wpisz średnią cenę zakupu w karcie aktywa</div>
+            ) : (
+              <>
+                <div className={`truncate text-xl font-semibold tabular ${tone(v.pl)}`}>
+                  {signPLN(v.pl)} <span className="text-base">({pctTxt(v.plPct)})</span>
+                </div>
+                <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">koszt zakupu {formatPLN(v.cost)}{v.plCount < v.held.length ? ` · ${v.plCount} z ${v.held.length} pozycji z ceną zakupu` : ''}</div>
+              </>
+            )}
+          </div>
         </div>
         <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">
           {v.quotesAt ? `Notowania: ${formatDateTime(v.quotesAt)} · ${alt.quotes?.source || 'Yahoo'}` : 'Brak notowań – odśwież'}
@@ -89,7 +102,7 @@ export default function AlternativesView() {
       {v.positions.map((p) => {
         const Icon = ICONS[p.id];
         const holding = alt.holdings?.[p.id] || {};
-        const summary = p.qty > 0 ? `${qtyTxt(p)} · ${formatPLN(p.value)} · 1D ${pctTxt(p.dayPct)}` : p.hasPrice ? `${formatPLN(p.unitPricePLN)} / ${p.metal ? (p.unit === 'g' ? 'g' : 'oz') : 'szt.'} · brak pozycji` : 'brak pozycji';
+        const summary = p.qty > 0 ? `${qtyTxt(p)} · ${formatPLN(p.value)}${p.pl !== null ? ` · wynik ${pctTxt(p.plPct)}` : ''} · 1D ${pctTxt(p.dayPct)}` : p.hasPrice ? `${formatPLN(p.unitPricePLN)} / ${p.metal ? (p.unit === 'g' ? 'g' : 'oz') : 'szt.'} · brak pozycji` : 'brak pozycji';
         return (
           <Card
             key={p.id}
@@ -137,8 +150,11 @@ export default function AlternativesView() {
                   onChange={(u) => {
                     // Zmiana jednostki przelicza wpisaną ilość (ta sama masa kruszcu)
                     const q = Number(holding.qty) || 0;
-                    const next = u === p.unit || !q ? holding.qty : u === 'oz' ? +(q / TROY_OZ_G).toFixed(4) : +(q * TROY_OZ_G).toFixed(2);
-                    setHolding(p.id, { unit: u, qty: next ?? '' });
+                    const next = u === p.unit || !q ? holding.qty : u === 'oz' ? +(q / TROY_OZ_G).toFixed(6) : +(q * TROY_OZ_G).toFixed(4);
+                    // …i średnią cenę zakupu (cena za gram ↔ za uncję – ten sam koszt całkowity)
+                    const a = Number(holding.avgPrice) || 0;
+                    const avg = u === p.unit || !a ? holding.avgPrice : u === 'oz' ? +(a * TROY_OZ_G).toFixed(4) : +(a / TROY_OZ_G).toFixed(6);
+                    setHolding(p.id, { unit: u, qty: next ?? '', ...(a ? { avgPrice: avg } : {}) });
                   }}
                   ariaLabel={`Jednostka – ${p.label}`}
                   options={[
@@ -148,7 +164,61 @@ export default function AlternativesView() {
                 />
               )}
             </div>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <Field label={`Średnia cena zakupu (za ${p.metal ? (p.unit === 'g' ? '1 g' : '1 oz') : '1 szt.'})`} className="w-44">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  placeholder={p.hasPrice ? (p.avgCurrency === 'USD' ? p.unitPrice : p.unitPricePLN).toFixed(2) : '0'}
+                  value={holding.avgPrice ?? ''}
+                  onChange={(e) => setHolding(p.id, { avgPrice: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) })}
+                  aria-label={`Średnia cena zakupu – ${p.label}`}
+                />
+              </Field>
+              <Segmented
+                size="sm"
+                value={p.avgCurrency}
+                onChange={(c) => setHolding(p.id, { avgCurrency: c })}
+                ariaLabel={`Waluta ceny zakupu – ${p.label}`}
+                options={[
+                  { value: 'PLN', label: 'PLN' },
+                  { value: 'USD', label: 'USD' },
+                ]}
+              />
+              {p.avgCurrency === 'USD' && (
+                <Field label="Kurs USD/PLN przy zakupie" className="w-40" hint={p.avgFxIsCurrent ? 'puste = bieżący kurs' : undefined}>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.0001"
+                    placeholder={p.avgFx ? p.avgFx.toFixed(4) : '4.0000'}
+                    value={holding.avgFx ?? ''}
+                    onChange={(e) => setHolding(p.id, { avgFx: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) })}
+                    aria-label={`Kurs USD/PLN przy zakupie – ${p.label}`}
+                  />
+                </Field>
+              )}
+            </div>
             <div className="mt-3 grid grid-cols-2 gap-2.5">
+              <div className={`col-span-2 min-w-0 rounded-xl px-3 py-2.5 ${p.pl === null ? 'bg-stone-50 dark:bg-white/[0.03]' : p.pl >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-red-50 dark:bg-red-500/10'}`} aria-label={`Zysk / strata – ${p.label}`}>
+                <div className="text-[11px] text-stone-500 dark:text-stone-400">Zysk / strata</div>
+                {p.pl === null ? (
+                  <div className="text-sm text-stone-500 dark:text-stone-400">{p.qty > 0 ? 'Wpisz średnią cenę zakupu' : 'Wpisz ilość i średnią cenę zakupu'}</div>
+                ) : (
+                  <>
+                    <div className={`truncate text-lg font-semibold tabular ${tone(p.pl)}`}>
+                      {signPLN(p.pl)} <span className="text-sm">({pctTxt(p.plPct)})</span>
+                    </div>
+                    <div className="truncate text-[11px] text-stone-500 tabular dark:text-stone-400">
+                      koszt {formatPLN(p.costPLN)} · teraz {formatPLN(p.value)}
+                      {p.avgCurrency === 'USD' ? ` · kurs zakupu ${p.avgFx.toFixed(4)}${p.avgFxIsCurrent ? ' (bieżący)' : ''}` : ''}
+                    </div>
+                  </>
+                )}
+              </div>
               <div className="min-w-0 rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-white/[0.03]">
                 <div className="text-[11px] text-stone-500 dark:text-stone-400">Wartość (PLN)</div>
                 <div className="truncate text-base font-semibold tabular">{formatPLN(p.value)}</div>
