@@ -113,6 +113,7 @@ export default function CashFlowView() {
   const last = sim.rows.at(-1);
   const cushionTarget = Number(goal.target) || 0;
   const cushionCapYear = sim.rows.find((r) => r.cushionCapped)?.year;
+  const overflowTotal = sim.rows.reduce((t, r) => t + (r.overflowToStocks || 0), 0);
   const ikeSummary = `${formatPLN(sim.base)} / mies.${ike.stepEnabled ? ` → ${formatPLN(ike.stepAmount)} od ${ike.stepYears + 1}. roku` : ''} · ${ike.mode === 'manual' ? 'ręcznie' : 'z historii'}`;
   const dyLabel = sim.dy.basis === 'history' ? `wypłaty z 12 mies. ${formatPLN(sim.dy.received)}` : sim.dy.basis === 'forecast' ? `prognoza stawek ${formatPLN(sim.dy.received)} / rok` : 'brak dywidend';
   const nextUp = upcoming[0];
@@ -436,7 +437,7 @@ export default function CashFlowView() {
           {ike.stepEnabled ? `Granicznik: od ${ike.stepYears + 1}. roku wpłata ${formatPLN(ike.stepAmount)} / mies. (wyróżniony wiersz). ` : ''}
           {sources.bonds || sources.interest
             ? cushionTarget > 0
-              ? `Poduszka rośnie${drip ? '' : ' (tylko o dopłaty – DRIP wył.)'} najwyżej do celu ${formatPLN(sim.cushion.cap)}${cushionCapYear ? ` (osiągnięty w ${cushionCapYear}. roku)` : ''} – potem odsetki liczone od kwoty celu.`
+              ? `Poduszka rośnie${drip ? '' : ' (tylko o dopłaty – DRIP wył.)'} najwyżej do celu ${formatPLN(sim.cushion.cap)}${cushionCapYear ? ` (osiągnięty w ${cushionCapYear}. roku)` : ''} – potem odsetki liczone od kwoty celu${drip ? `, a odsetki ponad próg kupują akcje poza IKE (stopa ${pct(sim.overflowRate)} netto)${overflowTotal > 0.5 ? ` – łącznie ${formatPLN(overflowTotal)}${sources.dividends ? '' : ' (włącz źródło Dywidendy, aby je zobaczyć w kapitale)'}` : ''}` : ''}.`
               : drip
                 ? 'Poduszka bez celu – rośnie o odsetki i dopłatę z zakładki Poduszka finansowa.'
                 : 'Poduszka bez celu – odsetki wypłacane (DRIP wył.), rośnie tylko o dopłatę z zakładki Poduszka finansowa.'

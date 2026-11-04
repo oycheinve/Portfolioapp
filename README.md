@@ -498,3 +498,5 @@ Więcej → **Surowce i Krypto**: złoto, srebro (gramy lub uncje trojańskie), 
 - **Harmonijka:** rozwinięcie karty zwija pozostałe karty na tym samym poziomie (wspólny `Card collapsible`, `Accordion` domyślnie `exclusive`); lista miesięcy w Cash Flow – jeden miesiąc naraz.
 
 **Kula śnieżna – DRIP:** przełącznik „Reinwestycja dywidend (DRIP): Włączona / Wyłączona” steruje reinwestycją dywidend i odsetek z poduszki. Włączony – co miesiąc otrzymane dywidendy (IKE wg Dividend Yield portfela, pozostałe pozycje wg stopy netto) i odsetki (do progu celu poduszki) są dopisywane do kapitału i od kolejnego miesiąca same generują przepływy; tabela pokazuje kwotę reinwestowaną w każdym roku. Wyłączony – przepływy są wypłacane, kapitał rośnie tylko o wpłaty i dopłaty.
+
+**Nadwyżka odsetek ponad próg celu poduszki → akcje:** gdy poduszka osiągnie cel (twardy limit), odsetki, które się w niej nie mieszczą, w symulatorze wieloletnim (przy DRIP) co miesiąc kupują akcje poza IKE (stopa netto pozostałych pozycji dywidendowych, a bez nich – Dividend Yield portfela po Belce) i same generują dywidendy. Karta „Wzrost poduszki i limit do celu” pokazuje te kwoty w kolumnie „Do akcji”.

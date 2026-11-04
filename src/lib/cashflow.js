@@ -389,12 +389,14 @@ export function cushionProjection({ bonds = 0, savings = 0, bondsRate = 0, savin
   const cap = target > 0 ? Math.max(target, start) : Infinity;
   const wB = weightBonds !== null && Number.isFinite(Number(weightBonds)) && weightBonds !== '' ? Math.min(1, Math.max(0, Number(weightBonds) / 100)) : start > 0 ? b / start : 0.5;
   const rows = [];
+  const overflowByMonth = [];
   let capReachedMonth = start >= cap ? 0 : null;
   for (let year = 1; year <= years; year += 1) {
     let bondsIncome = 0;
     let savingsIncome = 0;
     let contributed = 0;
     let reinvested = 0;
+    let overflow = 0;
     for (let m = 0; m < 12; m += 1) {
       const ib = (b * bondsRate) / 12;
       const is = (s * savingsRate) / 12;
@@ -412,11 +414,15 @@ export function cushionProjection({ bonds = 0, savings = 0, bondsRate = 0, savin
       s += rs * k + growth * k * (1 - wB);
       contributed += growth * k;
       reinvested += (rb + rs) * k;
+      // Odsetki ponad próg celu (nie mieszczą się w poduszce) – nadwyżka do przeniesienia (np. do akcji)
+      const over = (rb + rs) * (1 - k);
+      overflow += over;
+      overflowByMonth.push(over);
       if (capReachedMonth === null && b + s >= cap - 0.005) capReachedMonth = (year - 1) * 12 + m + 1;
     }
-    rows.push({ year, bonds: b, savings: s, value: b + s, bondsIncome, savingsIncome, income: bondsIncome + savingsIncome, contributed, reinvested, capped: b + s >= cap - 0.005 });
+    rows.push({ year, bonds: b, savings: s, value: b + s, bondsIncome, savingsIncome, income: bondsIncome + savingsIncome, contributed, reinvested, overflow, capped: b + s >= cap - 0.005 });
   }
-  return { cap: Number.isFinite(cap) ? cap : null, capReachedMonth, rows };
+  return { cap: Number.isFinite(cap) ? cap : null, capReachedMonth, rows, overflowByMonth };
 }
 
 // Symulator wieloletni Cash Flow: IKE (obecna wartość + plan wpłat, dywidendy wg Dividend Yield portfela, DRIP),
@@ -444,6 +450,10 @@ export function multiYearForecast(state, { today = isoDay(new Date()), years = 5
 
   let ikeCap = dy.ikeValue;
   let otherCap = otherCap0;
+  // Odsetki z poduszki ponad próg celu (DRIP) kupują akcje poza IKE: stopa netto pozostałych pozycji,
+  // a bez nich – Dividend Yield portfela po podatku Belki
+  let overflowCap = 0;
+  const overflowRate = otherRate > 0 ? otherRate : dy.rate * (1 - BELKA_RATE);
   let calYear = Number(today.slice(0, 4));
   let calMonth = Number(today.slice(5, 7)); // 1..12 – bieżący; wpłaty od następnego
   let yearDeposited = usedThisYear;
@@ -470,11 +480,13 @@ export function multiYearForecast(state, { today = isoDay(new Date()), years = 5
       ikeDeposits += dep;
       const divIke = (ikeCap * dy.rate) / 12; // IKE – bez podatku Belki
       const divOther = (otherCap * otherRate) / 12;
-      dividends += divIke + divOther;
+      const divOverflow = (overflowCap * overflowRate) / 12;
+      dividends += divIke + divOther + divOverflow;
       // DRIP: dywidenda z tego miesiąca od razu powiększa kapitał, który generuje dywidendy w kolejnych miesiącach
       ikeCap += dep + (drip ? divIke : 0);
       otherCap += Math.max(0, Number(otherContribution) || 0) + (drip ? divOther : 0);
-      if (drip) dripDividends += divIke + divOther;
+      if (drip) dripDividends += divIke + divOther + divOverflow;
+      overflowCap += (drip ? divOverflow : 0) + (cush.overflowByMonth[(year - 1) * 12 + m] || 0);
     }
     ikeTotal += ikeDeposits;
     const c = cush.rows[year - 1];
@@ -482,13 +494,13 @@ export function multiYearForecast(state, { today = isoDay(new Date()), years = 5
     const bondsInc = src.bonds ? c.bondsIncome : 0;
     const intInc = src.interest ? c.savingsIncome : 0;
     const annual = div + bondsInc + intInc;
-    const capital = (src.dividends ? ikeCap + otherCap : 0) + (src.bonds ? c.bonds : 0) + (src.interest ? c.savings : 0);
-    const reinvested = (src.dividends ? dripDividends : 0) + (src.bonds || src.interest ? c.reinvested * ((src.bonds ? c.bondsIncome : 0) + (src.interest ? c.savingsIncome : 0)) / (c.income || 1) : 0);
+    const capital = (src.dividends ? ikeCap + otherCap + overflowCap : 0) + (src.bonds ? c.bonds : 0) + (src.interest ? c.savings : 0);
+    const reinvested = (src.dividends ? dripDividends + c.overflow : 0) + (src.bonds || src.interest ? c.reinvested * ((src.bonds ? c.bondsIncome : 0) + (src.interest ? c.savingsIncome : 0)) / (c.income || 1) : 0);
     reinvestedTotal += reinvested;
-    rows.push({ year, capital, ikeCapital: ikeCap, otherCapital: otherCap, cushion: c.value, cushionCapped: c.capped, ikeDeposits, ikeDepositsTotal: ikeTotal, limitCut, dividends: div, bonds: bondsInc, interest: intInc, annual, monthly: annual / 12, reinvested, reinvestedTotal });
+    rows.push({ year, capital, ikeCapital: ikeCap, otherCapital: otherCap, cushion: c.value, cushionCapped: c.capped, ikeDeposits, ikeDepositsTotal: ikeTotal, limitCut, dividends: div, bonds: bondsInc, interest: intInc, annual, monthly: annual / 12, reinvested, reinvestedTotal, overflowToStocks: c.overflow, overflowCapital: overflowCap });
   }
   const capital0 = (src.dividends ? dy.ikeValue + otherCap0 : 0) + (src.bonds ? cb.bonds : 0) + (src.interest ? cb.savings : 0);
-  return { dy, hist, base, plan, otherRate, otherCapital: otherCap0, cushion: cush, cushionBase: cb, capital0, rows, drip };
+  return { dy, hist, base, plan, otherRate, otherCapital: otherCap0, cushion: cush, cushionBase: cb, capital0, rows, drip, overflowRate };
 }
 
 // ── Wykres przepływów (BETA): zakres i podstawa ──
