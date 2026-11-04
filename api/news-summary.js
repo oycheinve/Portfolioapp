@@ -170,43 +170,72 @@ async function authorize(req) {
 }
 
 // ── Wywołanie modelu (Gemini: instrukcja systemowa + odpowiedź JSON zgodna ze schematem) ──
-// Rodzaj klucza: „AIza…” – Google AI Studio (Gemini API), „AQ.…” – Vertex AI w trybie express (Google Cloud).
-// GEMINI_VERTEX=1 / 0 wymusza wybór. Ten sam model i prompt w obu usługach.
-export const keyKind = (key = apiKey()) => {
+// Usługa: najpierw Gemini API (Google AI Studio – klucze „AIza…” oraz nowsze „AQ.…”), a gdy odrzuci klucz albo nie
+// ma modelu – Vertex AI w trybie express (klucze „AQ.…” z Google Cloud). GEMINI_VERTEX=1 / 0 wymusza jedną usługę.
+const backends = (key = apiKey()) => {
   const force = env('GEMINI_VERTEX');
-  if (force === '1') return 'vertex';
-  if (force === '0') return 'studio';
-  return /^AQ\./.test(key) ? 'vertex' : 'studio';
+  if (force === '1') return ['vertex'];
+  if (force === '0') return ['studio'];
+  return /^AQ\./.test(key) ? ['studio', 'vertex'] : ['studio'];
 };
-// Modele po kolei: wybrany (GEMINI_MODEL), potem zapasowe – gdy dany model jest niedostępny dla klucza (404)
-const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-latest', 'gemini-2.0-flash'].filter(Boolean))];
+export const keyKind = (key = apiKey()) => backends(key).join(' → ');
+// Modele po kolei: wybrany (GEMINI_MODEL), domyślny, alias najnowszego „flash”; przy 404 – wykryty z listy modeli
+const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-latest'].filter(Boolean))];
+const retryable = (e) => e instanceof ApiError && [400, 401, 403, 404].includes(e.status) && (e.status !== 400 || /api key|api_key|credential|auth/i.test(e.message || ''));
 
-let client = null;
-let clientKey = '';
-export async function summarize(userContent) {
-  const key = apiKey();
-  if (!client || clientKey !== key) {
-    client = keyKind(key) === 'vertex' ? new GoogleGenAI({ vertexai: true, apiKey: key }) : new GoogleGenAI({ apiKey: key });
-    clientKey = key;
-  }
-  let response;
-  let model;
-  let lastError;
-  for (const m of modelChain()) {
-    try {
-      model = m;
-      response = await generate(m, userContent);
-      break;
-    } catch (e) {
-      lastError = e;
-      if (!(e instanceof ApiError && e.status === 404)) throw e;
+const clients = new Map();
+const clientFor = (backend, key) => {
+  const id = `${backend}|${key}`;
+  if (!clients.has(id)) clients.set(id, backend === 'vertex' ? new GoogleGenAI({ vertexai: true, apiKey: key }) : new GoogleGenAI({ apiKey: key }));
+  return clients.get(id);
+};
+
+// Dostępny model „flash” z listy modeli klucza (bez wersji lite / obrazowych / głosowych), najnowszy pierwszy
+async function discoverFlash(client) {
+  const names = [];
+  try {
+    for await (const m of await client.models.list({ config: { pageSize: 200 } })) {
+      const name = String(m.name || '').replace(/^models\//, '');
+      const actions = m.supportedActions || m.supportedGenerationMethods || [];
+      if (/flash/.test(name) && !/lite|image|tts|audio|live|thinking|exp/.test(name) && (!actions.length || actions.includes('generateContent'))) names.push(name);
     }
+  } catch {
+    return [];
   }
-  if (!response) throw lastError;
-  return parseResponse(response, model);
+  return names.sort((x, y) => y.localeCompare(x, 'en', { numeric: true }));
 }
 
-function generate(model, userContent) {
+export const lastRoute = { backend: null, model: null };
+export async function summarize(userContent) {
+  const key = apiKey();
+  let lastError;
+  for (const backend of backends(key)) {
+    const client = clientFor(backend, key);
+    const tried = new Set();
+    let chain = modelChain();
+    for (let round = 0; round < 2; round += 1) {
+      for (const model of chain) {
+        if (tried.has(model)) continue;
+        tried.add(model);
+        try {
+          const response = await generate(client, model, userContent);
+          Object.assign(lastRoute, { backend, model });
+          return parseResponse(response, model);
+        } catch (e) {
+          lastError = e;
+          if (!retryable(e)) throw e;
+          if (e.status !== 404) break; // klucz odrzucony przez tę usługę – następna usługa
+        }
+      }
+      if (!(lastError instanceof ApiError && lastError.status === 404) || backend !== 'studio') break;
+      chain = (await discoverFlash(client)).slice(0, 3); // żaden z modeli nie istnieje – spróbuj wykrytych
+      if (!chain.length) break;
+    }
+  }
+  throw lastError;
+}
+
+function generate(client, model, userContent) {
   return client.models.generateContent({
     model,
     contents: [{ role: 'user', parts: [{ text: userContent }] }],
@@ -284,7 +313,7 @@ async function checkConfig(req, res) {
   if (!auth.ok) return send(res, auth.status, { ok: false, ...info, error: auth.error });
   try {
     const out = await summarize('Tytuł: Test konfiguracji\n<artykul>\nSpółka ABC podała, że przychody w III kwartale wyniosły 10 mln zł (+5% r/r).\n</artykul>');
-    return send(res, 200, { ok: true, ...info, model: out.model, sample: out.summary.event });
+    return send(res, 200, { ok: true, ...info, backend: lastRoute.backend, model: out.model, sample: out.summary.event });
   } catch (e) {
     return send(res, 200, { ok: false, ...info, status: e.status ?? null, error: e instanceof ApiError ? googleDetail(e) : e.message });
   }
@@ -340,10 +369,10 @@ ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.t
   } catch (e) {
     if (e instanceof ApiError) {
       const detail = googleDetail(e);
-      const kind = keyKind() === 'vertex' ? 'klucz Vertex AI (AQ.…)' : 'klucz Google AI Studio (AIza…)';
+      const kind = `usługa: ${keyKind() === 'vertex' ? 'Vertex AI' : keyKind() === 'studio' ? 'Gemini API' : 'Gemini API, potem Vertex AI'}`;
       if (e.status === 429) return send(res, 429, { error: 'Limit darmowych zapytań Gemini – spróbuj za chwilę', detail });
       if (e.status === 400 && /api key|api_key|credential/i.test(e.message || '')) return send(res, 503, { error: `Nieprawidłowy klucz GEMINI_API_KEY (${kind})`, detail });
-      if (e.status === 401 || e.status === 403) return send(res, 503, { error: `Klucz odrzucony przez Google (${kind}) – utwórz klucz w Google AI Studio`, detail });
+      if (e.status === 401 || e.status === 403) return send(res, 503, { error: `Klucz odrzucony przez Google (${kind}) – sprawdź klucz w Google AI Studio`, detail });
       if (e.status === 404) return send(res, 503, { error: `Żaden model Gemini nie jest dostępny dla tego klucza (${kind}; próbowane: ${modelChain().join(', ')})`, detail });
       return send(res, 502, { error: `Błąd usługi AI (${e.status ?? 'sieć'})`, detail });
     }
