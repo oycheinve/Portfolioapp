@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Toolt
 import { BarChart3, CalendarClock, Check, ChevronDown, Coins, Landmark, ListTree, PiggyBank, Repeat, Scale, Snowflake, TrendingUp, Wallet, Waves } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { isoDay } from '../lib/engine.js';
-import { cashFlowForecast, multiYearForecast, normSources, passiveCoverage, upcomingCashEvents } from '../lib/cashflow.js';
+import { cashFlowForecast, cashFlowSeries, multiYearForecast, normSources, passiveCoverage, upcomingCashEvents } from '../lib/cashflow.js';
 import { chartChrome, seriesColor } from '../lib/colors.js';
 import { formatAxisPLN, formatDate, formatPLN } from '../lib/format.js';
 import { BetaBadge, Card, ChartTooltip, Field, Input, Segmented, Toggle } from '../components/ui.jsx';
@@ -72,15 +72,18 @@ export default function CashFlowView() {
   }));
   const total = g ? f.totals.gross : f.totals.net;
   const avg = total / 12;
+  // Wykres: zakres (kolejne / ostatnie 12 mies., rok kalendarzowy) i podstawa (naliczanie dzienne / realne wypłaty)
+  const chartRange = ['next12', 'last12', 'calendar'].includes(prefs.chartRange) ? prefs.chartRange : 'next12';
+  const chartBasis = prefs.chartBasis === 'payout' ? 'payout' : 'accrual';
+  const series = useMemo(() => cashFlowSeries(state, { today, range: chartRange, basis: chartBasis, sources }), [state, today, chartRange, chartBasis, srcKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chartRows = series.rows.map((r) => ({ ...r, vDividends: g ? r.dividendsGross : r.dividends, vInterest: g ? r.interestGross : r.interest, vBonds: g ? r.bondsGross : r.bonds }));
+  const chartTotal = g ? series.totals.gross : series.totals.net;
+  const chartAvg = chartTotal / 12;
+  const rangeLabel = { next12: 'kolejne 12 mies.', last12: 'ostatnie 12 mies.', calendar: `rok ${today.slice(0, 4)}` }[chartRange];
   const color = (k) => seriesColor(KIND[k].slot, isDark);
+  // Miesiące – harmonijka: rozwinięty jeden naraz
   const [open, setOpen] = useState(() => new Set([f.rows[0]?.key]));
-  const toggle = (k) =>
-    setOpen((s) => {
-      const n = new Set(s);
-      if (n.has(k)) n.delete(k);
-      else n.add(k);
-      return n;
-    });
+  const toggle = (k) => setOpen((s) => (s.has(k) ? new Set() : new Set([k])));
 
   // Pokrycie i wolna gotówka (zawsze netto – realnie dostępne pieniądze)
   const cov = passiveCoverage(f.avgNet, { fixed: budget?.fixed || 0, total: budget?.total || 0 });
@@ -178,23 +181,37 @@ export default function CashFlowView() {
         {!kinds.length && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">Wszystkie źródła są wyłączone – zaznacz przynajmniej jedno.</p>}
       </section>
 
-      {/* Wykres 12 miesięcy */}
-      <Card collapsible defaultOpen storageKey={openKey('chart')} title={beta('Wykres 12 miesięcy')} summary={`${formatPLN(total)} · średnio ${formatPLN(avg)} / mies.`} icon={BarChart3}>
-        <Legend items={[...kinds.map((k) => ({ key: k, label: KIND[k].label, color: color(k), bar: true })), { key: 'avg', label: 'Średnia / mies.', color: chrome.muted, dashed: true }]} />
-        <div className="mt-2 h-60" aria-label="Wykres prognozy przepływów">
+      {/* Wykres: zakres i podstawa naliczania */}
+      <Card collapsible defaultOpen storageKey={openKey('chart')} title={beta('Wykres przepływów')} summary={`${rangeLabel} · ${formatPLN(chartTotal)} · średnio ${formatPLN(chartAvg)} / mies.`} icon={BarChart3}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented size="sm" value={chartRange} onChange={(v) => setPrefs({ chartRange: v })} ariaLabel="Zakres wykresu" options={[{ value: 'last12', label: 'Ostatnie 12 mies.' }, { value: 'next12', label: 'Kolejne 12 mies.' }, { value: 'calendar', label: 'Rok kalendarzowy' }]} />
+          <Segmented size="sm" value={chartBasis} onChange={(v) => setPrefs({ chartBasis: v })} ariaLabel="Podstawa odsetek" options={[{ value: 'accrual', label: 'Naliczanie dzienne' }, { value: 'payout', label: 'Realne wypłaty' }]} />
+        </div>
+        <div className="mt-3">
+          <Legend items={[...kinds.map((k) => ({ key: k, label: KIND[k].label, color: color(k), bar: true })), { key: 'avg', label: 'Średnia / mies.', color: chrome.muted, dashed: true }]} />
+        </div>
+        <div className="mt-2 h-60" aria-label="Wykres przepływów">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+            <BarChart data={chartRows} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid stroke={chrome.grid} vertical={false} />
               <XAxis dataKey="label" tick={{ fill: chrome.muted, fontSize: 10 }} tickLine={false} axisLine={{ stroke: chrome.axis }} interval={0} angle={-35} textAnchor="end" height={38} />
               <YAxis tick={{ fill: chrome.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={52} tickFormatter={formatAxisPLN} />
               <Tooltip content={<ChartTooltip formatter={(v) => formatPLN(v)} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
               {sources.interest && <Bar dataKey="vInterest" name="Odsetki z KO" stackId="cf" fill={color('interest')} stroke={chrome.surface} strokeWidth={1} maxBarSize={30} isAnimationActive={false} />}
               {sources.bonds && <Bar dataKey="vBonds" name="Obligacje" stackId="cf" fill={color('bonds')} stroke={chrome.surface} strokeWidth={1} maxBarSize={30} isAnimationActive={false} />}
-              {sources.dividends && <Bar dataKey="vDividends" name="Dywidendy" stackId="cf" fill={color('dividends')} stroke={chrome.surface} strokeWidth={1} radius={[4, 4, 0, 0]} maxBarSize={30} isAnimationActive={false} />}
-              <ReferenceLine y={avg} stroke={chrome.muted} strokeDasharray="5 4" ifOverflow="extendDomain" />
+              {sources.dividends && (
+                <Bar dataKey="vDividends" name="Dywidendy" stackId="cf" stroke={chrome.surface} strokeWidth={1} radius={[4, 4, 0, 0]} maxBarSize={30} isAnimationActive={false} fill={color('dividends')} />
+              )}
+              <ReferenceLine y={chartAvg} stroke={chrome.muted} strokeDasharray="5 4" ifOverflow="extendDomain" />
             </BarChart>
           </ResponsiveContainer>
         </div>
+        <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">
+          {chartBasis === 'accrual'
+            ? 'Naliczanie dzienne: odsetki z obligacji przyrastają dzień po dniu od daty zakupu (bez skoków przy kapitalizacji i wykupie), odsetki z KO – w miesiącu, w którym narosły. Dywidendy – w dniu wypłaty.'
+            : 'Realne wypłaty: dywidendy w dniu wypłaty, kupony i wykup obligacji, dopisanie odsetek na KO (dzień księgowania wg historii konta).'}{' '}
+          {chartRange === 'next12' ? 'Prognoza od dziś.' : chartRange === 'last12' ? 'Historia z rejestru (bieżący miesiąc: do dziś + prognoza).' : 'Minione miesiące z rejestru, kolejne z prognozy.'}
+        </p>
       </Card>
 
       {/* Tabela miesiąc po miesiącu */}

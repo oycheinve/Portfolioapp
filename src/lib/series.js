@@ -18,8 +18,9 @@ function daysBetween(a, b) {
 
 export const RANGE_PRESETS = [
   { value: '1M', label: '1M' },
-  { value: 'YTD', label: 'YTD' },
-  { value: '1Y', label: '1 rok' },
+  // Rok kalendarzowy (od 1 stycznia; miniony rok – wybór z listy) vs ostatnie 12 miesięcy
+  { value: 'YTD', label: 'Rok kal.' },
+  { value: '1Y', label: '12 mies.' },
   { value: 'MAX', label: 'Max' },
 ];
 

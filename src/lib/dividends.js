@@ -345,46 +345,6 @@ export function upcomingReminders(state, days = 30, today = isoDay(new Date()), 
   return out.sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => ({ ...r, inDays: daysUntil(r.date, today) }));
 }
 
-// Prognoza dywidend na N lat z DGR i opcjonalną reinwestycją (DRIP).
-// Przy DRIP dywidenda netto kupuje nowe akcje po cenie rosnącej w tempie DGR (stała stopa dywidendy).
-export function projectDividends(positions, { years = 10, dgr = 0.06, drip = true } = {}) {
-  const startYear = new Date().getFullYear();
-  const state = positions
-    .filter((p) => p.dpsPLN > 0)
-    .map((p) => ({ id: p.key, shares: p.quantity, dps: p.dpsPLN, price: p.pricePLN, tax: p.taxRate }));
-  const run = (reinvest) => {
-    const s = state.map((x) => ({ ...x }));
-    const rows = [];
-    for (let y = 1; y <= years; y += 1) {
-      let gross = 0;
-      let net = 0;
-      for (const x of s) {
-        const dps = x.dps * Math.pow(1 + dgr, y - 1);
-        const g = x.shares * dps;
-        const n = g * (1 - x.tax);
-        gross += g;
-        net += n;
-        if (reinvest) {
-          const price = x.price * Math.pow(1 + dgr, y - 1);
-          if (price > 0) x.shares += n / price;
-        }
-      }
-      rows.push({ year: String(startYear + y - 1), gross, net, monthly: net / 12 });
-    }
-    return rows;
-  };
-  const withDrip = run(true);
-  const noDrip = run(false);
-  return withDrip.map((r, i) => ({
-    year: r.year,
-    drip: r.net,
-    noDrip: noDrip[i].net,
-    selected: drip ? r.net : noDrip[i].net,
-    alternative: drip ? noDrip[i].net : r.net,
-    monthly: (drip ? r.net : noDrip[i].net) / 12,
-  }));
-}
-
 // Uzgodnienie harmonogramu z rejestrem (bez ręcznego „Zaksięguj”):
 // 1) pozycja z wypłatą w rejestrze (np. import XTB) → oznaczona jako wypłacona i powiązana z tymi wpisami;
 //    jeśli wcześniej zaksięgowano ją automatycznie z danych Yahoo – automatyczne wpisy zastępuje prawdziwa wypłata,

@@ -6,7 +6,7 @@
 //    z tabelą inflacji CPI (GUS) – ta sama wycena co w module Poduszka.
 // Podatek Belki wg konta (IKE / IKZE – 0%); ikeSaved = podatek, którego uniknięto dzięki opakowaniu IKE/IKZE.
 import { BELKA_RATE } from './constants.js';
-import { computeHoldings, incomeEventsWithTax, isSafeAccount, isSyntheticDeposit, isoDay, limitDeposits, livePriceLookup, valuePortfolio } from './engine.js';
+import { bondIncomeEvents, computeHoldings, incomeEventsWithTax, isSafeAccount, isSyntheticDeposit, isoDay, limitDeposits, livePriceLookup, valuePortfolio } from './engine.js';
 import { getCpiTable, valueBond } from './bonds.js';
 import { dividendHistory, dividendPositions, evaluateScheduleItem, matchingIncome, sharesAt } from './dividends.js';
 import { grossInterest, nextCapitalizationDate, savingsProjection } from './savings.js';
@@ -135,24 +135,43 @@ function dividendEvents(state, win) {
 }
 
 // ── Konto oszczędnościowe ──
+// Realny dzień dopisania odsetek: przesunięcie względem końca okresu kapitalizacji wyuczone z ostatnich wpisów
+// odsetek konta (np. bank księguje ostatniego dnia miesiąca: −1 dzień, albo 2. dnia: +1); bez historii – koniec okresu.
+export function postingOffsetDays(state, account) {
+  const cap = account.capitalization || 'MONTHLY';
+  const posted = state.income
+    .filter((i) => i.accountId === account.id && i.type === 'INTEREST' && !i.auto && !String(i.id).startsWith('autoint_'))
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, 3);
+  for (const i of posted) {
+    // najbliższa granica okresu (koniec okresu, w którym odsetki naliczono)
+    const boundary = nextCapitalizationDate(addDays(i.date, -10), cap);
+    const off = daysBetween(boundary, i.date);
+    if (off >= -5 && off <= 10) return off;
+  }
+  return 0;
+}
+
 function savingsEvents(state, win) {
   const out = [];
   for (const account of state.accounts.filter((a) => a.type === 'SAVINGS')) {
     const p = savingsProjection(state, account, win.from);
     if (!(p.balance > 0) || !(p.rate > 0)) continue;
+    const offset = postingOffsetDays(state, account);
     let start = p.periodStart;
     for (let guard = 0; guard < 500; guard += 1) {
-      const end = nextCapitalizationDate(start, p.capitalization);
+      const periodEnd = nextCapitalizationDate(start, p.capitalization);
+      const end = offset ? addDays(periodEnd, offset) : periodEnd; // dzień realnego dopisania odsetek
       if (end > win.to) break;
       if (end >= win.from) {
         // Bieżący okres: odsetki od początku okresu (część już narosła); saldo stałe (bez dopłat)
-        const gross = grossInterest(p.balance, p.rate, p.capitalization, start, end);
+        const gross = grossInterest(p.balance, p.rate, p.capitalization, start, periodEnd);
         if (gross > 0.005) {
           const t = taxSplit(gross, account);
-          out.push({ kind: 'interest', date: end, label: `Odsetki – ${account.name}`, detail: `${p.rate.toLocaleString('pl-PL')}% od ${p.balance.toLocaleString('pl-PL', { maximumFractionDigits: 2 })} zł · kapitalizacja${start === p.periodStart && p.accruedNet >= 0.005 ? ` · w tym narosłe już ${p.accruedNet.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł (w wartości poduszki)` : ''}`, status: 'prognoza', gross, ...t });
+          out.push({ kind: 'interest', date: end, label: `Odsetki – ${account.name}`, detail: `${p.rate.toLocaleString('pl-PL')}% od ${p.balance.toLocaleString('pl-PL', { maximumFractionDigits: 2 })} zł · ${offset ? `dopisanie ${offset > 0 ? `${offset} dni po` : `${-offset} dni przed`} końcem okresu` : 'kapitalizacja'}${start === p.periodStart && p.accruedNet >= 0.005 ? ` · w tym narosłe już ${p.accruedNet.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł (w wartości poduszki)` : ''}`, status: 'prognoza', gross, ...t });
         }
       }
-      start = end;
+      start = periodEnd;
     }
   }
   return out;
@@ -459,4 +478,137 @@ export function multiYearForecast(state, { today = isoDay(new Date()), years = 5
   }
   const capital0 = (src.dividends ? dy.ikeValue + otherCap0 : 0) + (src.bonds ? cb.bonds : 0) + (src.interest ? cb.savings : 0);
   return { dy, hist, base, plan, otherRate, otherCapital: otherCap0, cushion: cush, cushionBase: cb, capital0, rows };
+}
+
+// ── Wykres przepływów (BETA): zakres i podstawa ──
+// range: 'next12' – bieżący + 11 kolejnych miesięcy (prognoza), 'last12' – 11 minionych + bieżący (historia z rejestru),
+//        'calendar' – styczeń–grudzień bieżącego roku (miniona część z rejestru, reszta z prognozy).
+// basis: 'payout' – realne daty wypłat (dywidendy w dniu wypłaty, kupony / wykup obligacji, dopisanie odsetek KO),
+//        'accrual' – odsetki naliczane dziennie: obligacje od dnia zakupu (przyrost odsetek narosłych + kupony w miesiącu),
+//        KO – odsetki narosłe w danym miesiącu; dywidendy zawsze w dniu wypłaty.
+const monthStart = (y, m) => isoDay(new Date(y, m, 1));
+export function cashFlowMonths(today, range = 'next12') {
+  const d = parse(today);
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const first = range === 'last12' ? new Date(y, m - 11, 1) : range === 'calendar' ? new Date(y, 0, 1) : new Date(y, m, 1);
+  return Array.from({ length: 12 }, (_, i) => {
+    const s = new Date(first.getFullYear(), first.getMonth() + i, 1);
+    const key = isoDay(s).slice(0, 7);
+    return {
+      key,
+      start: monthStart(s.getFullYear(), s.getMonth()),
+      next: monthStart(s.getFullYear(), s.getMonth() + 1),
+      label: s.toLocaleDateString('pl-PL', { month: 'short', year: '2-digit' }),
+      long: s.toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' }),
+      past: key < today.slice(0, 7),
+      current: key === today.slice(0, 7),
+    };
+  });
+}
+
+// Wypłaty zrealizowane (rejestr przychodów, kupony i wykupy obligacji) z datą ≤ dziś – netto/brutto per rodzaj
+function realizedEvents(state, today) {
+  const accById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  const out = [];
+  for (const i of incomeEventsWithTax(state)) {
+    if (i.date > today) continue;
+    const t = accById[i.accountId]?.type;
+    const kind = i.type === 'DIVIDEND' ? 'dividends' : i.type === 'INTEREST' && t === 'SAVINGS' ? 'interest' : i.type === 'INTEREST' && t === 'BONDS' ? 'bonds' : null;
+    if (kind) out.push({ kind, date: i.date, gross: Number(i.gross) || 0, net: Number.isFinite(i.net) ? i.net : 0 });
+  }
+  for (const e of bondIncomeEvents(state, today)) if (e.date <= today) out.push({ kind: 'bonds', date: e.date, gross: e.gross, net: e.net });
+  const cpi = getCpiTable(state.settings, state.inflation);
+  for (const b of state.bonds || []) {
+    const rate = bondBelkaRate(b, accById[b.accountId]);
+    const v = valueBond(b, today, rate, cpi);
+    if (v.matured && v.maturityDate <= today) {
+      const atM = valueBond(b, v.maturityDate, rate, cpi);
+      if (atM.accruedGross > 0.005) out.push({ kind: 'bonds', date: v.maturityDate, gross: atM.accruedGross, net: atM.accruedNet });
+    }
+  }
+  return out;
+}
+
+// Odsetki obligacji naliczone w przedziale [a, b): przyrost odsetek narosłych + kupony wypłacone w przedziale (netto/brutto)
+function bondAccrualBetween(state, a, b) {
+  const accById = Object.fromEntries(state.accounts.map((x) => [x.id, x]));
+  const cpi = getCpiTable(state.settings, state.inflation);
+  let net = 0;
+  let gross = 0;
+  for (const bond of state.bonds || []) {
+    if (bond.purchaseDate >= b) continue;
+    const rate = bondBelkaRate(bond, accById[bond.accountId]);
+    const va = valueBond(bond, a, rate, cpi);
+    const vb = valueBond(bond, b, rate, cpi);
+    if (va.matured) continue;
+    const coupons = vb.coupons.filter((c) => c.date > a && c.date <= b).reduce((s, c) => s + c.gross, 0);
+    const g = vb.accruedGross - va.accruedGross + coupons;
+    gross += g;
+    net += g * (1 - rate);
+  }
+  return { gross: Math.max(0, gross), net: Math.max(0, net) };
+}
+
+export function cashFlowSeries(state, { today = isoDay(new Date()), range = 'next12', basis = 'payout', sources } = {}) {
+  const src = normSources(sources);
+  const months = cashFlowMonths(today, range);
+  const rows = months.map((k) => ({ ...k, dividends: 0, interest: 0, bonds: 0, dividendsGross: 0, interestGross: 0, bondsGross: 0, net: 0, gross: 0 }));
+  const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
+  const add = (r, kind, net, gross) => {
+    if (!r || !src[kind] || !(gross > 0 || net > 0)) return;
+    r[kind] += net;
+    r[`${kind}Gross`] += gross;
+    r.net += net;
+    r.gross += gross;
+  };
+  const lastKey = rows[rows.length - 1].key;
+  // Przeszłość (≤ dziś): wypłaty z rejestru; przy naliczaniu dziennym odsetki KO z wpisu przypisane do miesiąca naliczenia
+  if (rows[0].key <= today.slice(0, 7)) {
+    for (const e of realizedEvents(state, today)) {
+      if (basis === 'accrual' && e.kind === 'bonds') continue;
+      const date = basis === 'accrual' && e.kind === 'interest' ? addDays(e.date, -1) : e.date;
+      add(byKey[monthKey(date)], e.kind, e.net, e.gross);
+    }
+  }
+  // Przyszłość (> dziś): prognoza wypłat do końca zakresu
+  if (lastKey >= today.slice(0, 7)) {
+    const [ly, lm] = lastKey.split('-').map(Number);
+    const ahead = (ly - Number(today.slice(0, 4))) * 12 + (lm - Number(today.slice(5, 7))) + 1;
+    const f = cashFlowForecast(state, { today, months: ahead, sources: src });
+    for (const e of f.events) {
+      if (e.date <= today && e.kind !== 'dividends') continue; // dziś już w rejestrze / w narosłych
+      if (basis === 'accrual' && (e.kind === 'bonds' || e.kind === 'interest')) continue;
+      add(byKey[monthKey(e.date)], e.kind, e.net, e.gross);
+    }
+    if (basis === 'accrual' && src.interest) {
+      // KO: odsetki narastające dziennie od dziś do końca każdego miesiąca (obecne saldo, stopa i Belka konta)
+      for (const account of state.accounts.filter((a) => a.type === 'SAVINGS')) {
+        const p = savingsProjection(state, account, today);
+        if (!(p.balance > 0) || !(p.rate > 0)) continue;
+        const cap = p.capitalization === 'DAILY' ? 'DAILY' : 'MONTHLY';
+        for (const r of rows) {
+          if (r.next <= today) continue;
+          const from = r.start > today ? r.start : today;
+          const g = grossInterest(p.balance, p.rate, cap, from, r.next);
+          add(r, 'interest', g * (1 - p.belka), g);
+        }
+        // Bieżący, jeszcze niezaksięgowany okres (od początku okresu / ostatniego wpisu do dziś) – w swoich miesiącach
+        for (const r of rows) {
+          const a = r.start > p.periodStart ? r.start : p.periodStart;
+          const b = r.next < today ? r.next : today;
+          if (a >= b) continue;
+          const g = grossInterest(p.balance, p.rate, cap, a, b);
+          add(r, 'interest', g * (1 - p.belka), g);
+        }
+      }
+    }
+  }
+  // Obligacje przy naliczaniu dziennym – przeszłość i przyszłość jednolicie (przyrost odsetek dzień po dniu)
+  if (basis === 'accrual' && src.bonds) for (const r of rows) {
+    const acc = bondAccrualBetween(state, r.start, r.next);
+    add(r, 'bonds', acc.net, acc.gross);
+  }
+  const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
+  return { rows, range, basis, totals: { net: sum('net'), gross: sum('gross'), dividends: sum('dividends'), interest: sum('interest'), bonds: sum('bonds') } };
 }

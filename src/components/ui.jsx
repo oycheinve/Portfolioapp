@@ -43,6 +43,13 @@ export function Card({ title, subtitle, icon: Icon, actions, children, className
 
 // Zwinięta: jednoliniowa belka (ikona, nazwa, strzałka). Rozwinięta: opis i akcje sekcji, potem treść.
 // Płynne rozwijanie (animacja wysokości przez grid-template-rows); treść zwiniętej karty jest nieaktywna (inert).
+// Harmonijka (globalnie): rozwinięcie karty zwija pozostałe karty na tym samym poziomie zagnieżdżenia.
+// Rejestr otwartej karty per poziom; przy starcie otwarta zostaje pierwsza (np. domyślnie rozwinięta / zapamiętana).
+const CollapseDepthContext = createContext(0);
+const openByDepth = new Map(); // poziom → id otwartej karty
+const COLLAPSE_EVENT = 'fintrack-collapse-open';
+let collapseSeq = 0;
+
 // summary – krótkie podsumowanie pod nazwą w belce (widoczne także po zwinięciu); storageKey – zapamiętanie
 // rozwinięcia na tym urządzeniu (localStorage, bez synchronizacji).
 const readOpen = (key, fallback) => {
@@ -55,26 +62,54 @@ const readOpen = (key, fallback) => {
   }
 };
 function CollapsibleCard({ title, subtitle, icon: Icon, actions, children, className = '', bodyClassName = '', defaultOpen = false, summary, storageKey }) {
+  const depth = useContext(CollapseDepthContext);
+  const [id] = useState(() => {
+    collapseSeq += 1;
+    return `c${collapseSeq}`;
+  });
+  const remember = (v) => {
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(storageKey, v ? '1' : '0');
+    } catch {
+      // brak localStorage – rozwinięcie tylko do końca sesji
+    }
+  };
   const [open, setOpen] = useState(() => readOpen(storageKey, defaultOpen));
   const [settled, setSettled] = useState(open);
+  const openRef = useRef(open);
+  openRef.current = open;
   useEffect(() => {
-    if (defaultOpen && !storageKey) {
-      setOpen(true);
-      setSettled(true);
+    // Start: otwarta zostaje pierwsza karta poziomu (np. domyślnie rozwinięta), kolejne się zwijają
+    if (openRef.current) {
+      const other = openByDepth.get(depth);
+      if (other && other !== id) {
+        setOpen(false);
+        setSettled(false);
+      } else openByDepth.set(depth, id);
     }
-  }, [defaultOpen, storageKey]);
+    // Rozwinięcie innej karty na tym samym poziomie – ta się zwija
+    const onOpen = (e) => {
+      if (e.detail?.depth === depth && e.detail.id !== id) {
+        setSettled(false);
+        setOpen(false);
+      }
+    };
+    window.addEventListener(COLLAPSE_EVENT, onOpen);
+    return () => {
+      window.removeEventListener(COLLAPSE_EVENT, onOpen);
+      if (openByDepth.get(depth) === id) openByDepth.delete(depth);
+    };
+  }, [depth, id]);
   const toggle = () => {
     setSettled(false);
-    setOpen((o) => {
-      if (storageKey) {
-        try {
-          localStorage.setItem(storageKey, o ? '0' : '1');
-        } catch {
-          // brak localStorage – rozwinięcie tylko do końca sesji
-        }
-      }
-      return !o;
-    });
+    const next = !open;
+    setOpen(next);
+    remember(next);
+    if (next) {
+      openByDepth.set(depth, id);
+      window.dispatchEvent(new CustomEvent(COLLAPSE_EVENT, { detail: { depth, id } }));
+    } else if (openByDepth.get(depth) === id) openByDepth.delete(depth);
   };
   return (
     <section className={`min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900 ${className}`}>
@@ -110,7 +145,9 @@ function CollapsibleCard({ title, subtitle, icon: Icon, actions, children, class
               </div>
             )}
             <div className={`p-4 sm:p-5 ${bodyClassName}`}>
-              <CardCollapseContext.Provider value={false}>{children}</CardCollapseContext.Provider>
+              <CollapseDepthContext.Provider value={depth + 1}>
+                <CardCollapseContext.Provider value={false}>{children}</CardCollapseContext.Provider>
+              </CollapseDepthContext.Provider>
             </div>
           </div>
         </div>
@@ -457,11 +494,13 @@ export function Dropdown({ label, icon: Icon, badge, children, align = 'left', t
 
 // Akordeon sekcji: lista zwijanych pozycji, rozwinięte zapamiętywane w localStorage (klucz storageKey).
 // items: [{ id, title, subtitle, icon, badge, render: () => węzeł }] – treść renderowana tylko po rozwinięciu.
-export function Accordion({ items, storageKey, defaultOpen = [], exclusive = false }) {
+export function Accordion({ items, storageKey, defaultOpen = [], exclusive = true, forceOpen = null }) {
   const [open, setOpen] = useState(() => {
+    if (forceOpen) return [forceOpen];
     try {
       const saved = storageKey ? JSON.parse(localStorage.getItem(storageKey) || 'null') : null;
-      return Array.isArray(saved) ? saved : defaultOpen;
+      const list = Array.isArray(saved) ? saved : defaultOpen;
+      return exclusive ? list.slice(0, 1) : list;
     } catch {
       return defaultOpen;
     }
@@ -506,7 +545,11 @@ export function Accordion({ items, storageKey, defaultOpen = [], exclusive = fal
               {item.badge}
               <ChevronDown size={18} className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
-            {isOpen && <div className="mt-2.5 space-y-4 sm:space-y-6">{item.render()}</div>}
+            {isOpen && (
+              <div className="mt-2.5 space-y-4 sm:space-y-6">
+                <CollapseDepthContext.Provider value={100}>{item.render()}</CollapseDepthContext.Provider>
+              </div>
+            )}
           </div>
         );
       })}

@@ -9,7 +9,8 @@ import { otherAssetsValue } from '../../lib/engine.js';
 
 const RANGES = [
   { value: '6M', label: '6M' },
-  { value: '1Y', label: '1R' },
+  { value: '1Y', label: '12 mies.' },
+  { value: 'YTD', label: 'Rok kal.' },
   { value: 'ALL', label: 'Max' },
 ];
 
@@ -40,6 +41,7 @@ export default function NetWorthPanel({ valuation, compact = false }) {
     const ids = state.accounts.map((a) => a.id);
     const cutoff = new Date();
     if (range === '6M') cutoff.setMonth(cutoff.getMonth() - 6);
+    else if (range === 'YTD') cutoff.setMonth(0, 1); // rok kalendarzowy: od 1 stycznia
     else if (range === '1Y') cutoff.setFullYear(cutoff.getFullYear() - 1);
     else cutoff.setFullYear(1970);
     const cutoffIso = cutoff.toISOString().slice(0, 10);

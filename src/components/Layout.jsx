@@ -19,12 +19,14 @@ export const NAV_ITEMS = [
   { id: 'allocation', label: 'Alokacja', longLabel: 'Alokacja i Dopłaty', icon: PieChart, hidden: true },
   { id: 'tasks', label: 'Zadania', longLabel: 'Zadania', icon: ListChecks, mobile: true },
   // Nazwa z rokiem docelowym z ustawień FIRE (np. „FIRE 2055”) – navLabel()
-  { id: 'fire', label: 'FIRE', longLabel: 'FIRE', icon: Flame },
+  // FIRE – ukryty w menu (cele FIRE w Ustawieniach i symulacja w Symulacjach zostają); dawny adres → Pulpit
+  { id: 'fire', label: 'FIRE', longLabel: 'FIRE', icon: Flame, hidden: true },
   { id: 'reports', label: 'Raport X', longLabel: 'Raport na X', icon: FileText, hidden: true },
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper, mobile: true },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
-  { id: 'cashflow', label: 'Cash Flow', longLabel: 'Cash Flow Forecast', icon: Waves, beta: true },
+  // Cash Flow Forecast – sekcja zakładki Dywidendy (#/dividends/cashflow)
+  { id: 'cashflow', label: 'Cash Flow', longLabel: 'Cash Flow Forecast', icon: Waves, beta: true, hidden: true },
   { id: 'alternatives', label: 'Surowce i Krypto', longLabel: 'Surowce i Krypto', icon: Gem, beta: true },
   { id: 'shopping', label: 'Zakupy', longLabel: 'Listy zakupów', icon: ShoppingCart, mobile: true },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings, topbar: true },
@@ -38,7 +40,7 @@ const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon) – płaska siatka 2 kolumn; pod nią przełącznik motywu i Ustawienia.
 // Pozycje z dolnego paska (np. Newsy) i ukryte nie trafiają do arkusza.
-const MORE_ORDER = ['charts', 'cashflow', 'goals', 'fire', 'safe', 'alternatives', 'simulations', 'allocation', 'reports', 'dividends'];
+const MORE_ORDER = ['charts', 'dividends', 'goals', 'safe', 'alternatives', 'simulations', 'allocation', 'reports'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !MORE_ORDER.includes(n.id))].filter((n) => n && !n.mobile);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym

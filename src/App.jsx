@@ -45,11 +45,20 @@ const VIEWS = {
 // Dawna zakładka Statystyki – podsumowania są teraz w Wykresach
 // Dawny panel #/notifications – teraz w Ustawieniach (System i Konto → Powiadomienia)
 // Rejestr wpłat i wypłat – teraz w Ustawieniach (Portfel i Aktywa)
-const ALIASES = { cash: 'settings/cash', notifications: 'settings/notifications', stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes' };
+// Cash Flow Forecast – teraz sekcja Dywidend; FIRE – ukryty (adres prowadzi na Pulpit)
+const ALIASES = { cash: 'settings/cash', notifications: 'settings/notifications', stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes', cashflow: 'dividends/cashflow', fire: 'dashboard' };
 
 function readHash() {
   let h = window.location.hash.replace('#/', '').replace('#', '');
-  if (ALIASES[h]) h = ALIASES[h];
+  if (ALIASES[h]) {
+    h = ALIASES[h];
+    // Stary adres (np. #/cashflow) – pasek adresu pokazuje nowe miejsce
+    try {
+      window.history.replaceState(null, '', `#/${h}`);
+    } catch {
+      // brak History API – sam widok i tak jest właściwy
+    }
+  }
   const [id, param = null] = h.split('/');
   return NAV_ITEMS.some((n) => n.id === id) ? { id, param } : { id: 'dashboard', param: null };
 }
