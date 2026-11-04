@@ -19,7 +19,7 @@ function yahooApi() {
       res.end(logo.body);
       return;
     }
-    // Podsumowania AI (POST) – ta sama funkcja co na Vercel; klucz ANTHROPIC_API_KEY z otoczenia procesu
+    // Podsumowania AI (POST) – ta sama funkcja co na Vercel; klucz GEMINI_API_KEY z otoczenia procesu
     // Inflacja CPI (GUS): odczyt z tabeli inflation_rates i synchronizacja – jak funkcje Vercel
     if (req.url.startsWith('/api/inflation-sync')) {
       await inflationSync(req, res);

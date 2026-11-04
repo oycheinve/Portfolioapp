@@ -1,17 +1,20 @@
-// /api/news-summary (POST) – inwestorskie podsumowanie AI (Claude) dla artykułu albo całego dnia w Newsach.
+// /api/news-summary (POST) – inwestorskie podsumowanie AI (Google Gemini) dla artykułu albo całego dnia w Newsach.
 // Treść: { mode: 'article', link, title, source, pubDate, topic }  albo
 //        { mode: 'digest', label, items: [{ title, source, pubDate, topic }] } (podsumowanie dnia z nagłówków).
 // Wynik: { summary: { event, numbers[], impact[], sentiment }, basis: 'article' | 'lead' | 'headlines', model, cached }
 // Zmienne środowiskowe (Vercel → Settings → Environment Variables):
-//   ANTHROPIC_API_KEY – klucz API Claude (tylko po stronie serwera, nigdy z prefiksem VITE_),
+//   GEMINI_API_KEY (albo GOOGLE_API_KEY) – darmowy klucz z Google AI Studio (tylko serwer, nigdy z prefiksem VITE_),
+//   GEMINI_MODEL – opcjonalnie inny model (domyślnie gemini-2.5-flash),
 //   SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (albo VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY) – weryfikacja sesji:
 //   z podsumowań korzystają tylko zalogowani użytkownicy (koszt API); AI_ALLOW_ANON=1 – bez logowania (np. lokalnie).
-import Anthropic from '@anthropic-ai/sdk';
+import { ApiError, GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 
 export const config = { maxDuration: 60 };
 
-const MODEL = 'claude-opus-5-5';
+// Szybki model z darmowym pakietem zapytań w Google AI Studio (gemini-1.5-flash został wycofany przez Google)
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+const apiKey = () => env('GEMINI_API_KEY', 'GOOGLE_API_KEY');
 const env = (...names) => names.map((n) => process.env[n]).find((v) => v && String(v).trim()) || '';
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
@@ -21,7 +24,7 @@ const HEADERS = {
 const MAX_TEXT = 15000;
 const MIN_TEXT = 400;
 
-// ── Instrukcja dla modelu (stała – nadaje się do cache promptu) ──
+// ── Instrukcja dla modelu (stała, wspólna dla wszystkich zapytań) ──
 const SYSTEM = `Jesteś analitykiem giełdowym przygotowującym podsumowania wiadomości dla indywidualnego inwestora z Polski (akcje GPW i zagraniczne, ETF-y). Piszesz po polsku, rzeczowo i zwięźle, wyłącznie na podstawie dostarczonego tekstu.
 
 Zwróć podsumowanie w trzech częściach:
@@ -166,31 +169,42 @@ async function authorize(req) {
   return error || !data?.user ? { ok: false, status: 401, error: 'Sesja wygasła – zaloguj się ponownie' } : { ok: true };
 }
 
-// ── Wywołanie modelu ──
+// ── Wywołanie modelu (Gemini: instrukcja systemowa + odpowiedź JSON zgodna ze schematem) ──
 let client = null;
 export async function summarize(userContent) {
-  client ||= new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') });
-  const response = await client.beta.messages.create({
-    model: MODEL,
-    max_tokens: 8000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default', // odmowa filtra bezpieczeństwa → ponowienie na modelu zapasowym w tym samym wywołaniu
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-    system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: userContent }],
+  client ||= new GoogleGenAI({ apiKey: apiKey() });
+  const model = env('GEMINI_MODEL') || DEFAULT_MODEL;
+  const response = await client.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts: [{ text: userContent }] }],
+    config: {
+      systemInstruction: SYSTEM,
+      responseMimeType: 'application/json',
+      responseJsonSchema: SCHEMA,
+      temperature: 0.2, // rzeczowe podsumowanie bez „twórczości”
+      maxOutputTokens: 4096,
+    },
   });
-  if (response.stop_reason === 'refusal') throw Object.assign(new Error('Model odmówił podsumowania tego tekstu'), { status: 422 });
-  if (response.stop_reason === 'max_tokens') throw Object.assign(new Error('Podsumowanie zostało ucięte – spróbuj ponownie'), { status: 502 });
-  const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  const s = JSON.parse(text);
+  const finish = response.candidates?.[0]?.finishReason;
+  if (response.promptFeedback?.blockReason || finish === 'SAFETY' || finish === 'PROHIBITED_CONTENT' || finish === 'BLOCKLIST') {
+    throw Object.assign(new Error('Model odmówił podsumowania tego tekstu'), { status: 422 });
+  }
+  if (finish === 'MAX_TOKENS') throw Object.assign(new Error('Podsumowanie zostało ucięte – spróbuj ponownie'), { status: 502 });
+  const text = response.text || '';
+  let s;
+  try {
+    s = JSON.parse(text);
+  } catch {
+    throw Object.assign(new Error('Nieczytelna odpowiedź modelu – spróbuj ponownie'), { status: 502 });
+  }
   return {
     summary: {
       event: String(s.event || '').trim(),
       numbers: (s.numbers || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 15),
       impact: (s.impact || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 5),
-      sentiment: s.sentiment,
+      sentiment: ['pozytywny', 'negatywny', 'neutralny', 'mieszany'].includes(s.sentiment) ? s.sentiment : 'neutralny',
     },
-    model: response.model,
+    model: response.modelVersion || model,
   };
 }
 
@@ -217,7 +231,7 @@ function send(res, status, body) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'Użyj POST' });
-  if (!env('ANTHROPIC_API_KEY')) return send(res, 503, { error: 'Podsumowania AI nie są skonfigurowane (brak ANTHROPIC_API_KEY na serwerze)' });
+  if (!apiKey()) return send(res, 503, { error: 'Podsumowania AI nie są skonfigurowane (brak GEMINI_API_KEY na serwerze)' });
   try {
     const auth = await authorize(req);
     if (!auth.ok) return send(res, auth.status, { error: auth.error });
@@ -261,9 +275,13 @@ ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.t
     cache.set(key, out);
     return send(res, 200, { ...out, cached: false });
   } catch (e) {
-    if (e instanceof Anthropic.RateLimitError) return send(res, 429, { error: 'Limit zapytań AI – spróbuj za chwilę' });
-    if (e instanceof Anthropic.AuthenticationError) return send(res, 503, { error: 'Nieprawidłowy klucz ANTHROPIC_API_KEY' });
-    if (e instanceof Anthropic.APIError) return send(res, 502, { error: `Błąd usługi AI (${e.status ?? 'sieć'})` });
+    if (e instanceof ApiError) {
+      if (e.status === 429) return send(res, 429, { error: 'Limit darmowych zapytań Gemini – spróbuj za chwilę' });
+      if (e.status === 400 && /api key/i.test(e.message || '')) return send(res, 503, { error: 'Nieprawidłowy klucz GEMINI_API_KEY' });
+      if (e.status === 401 || e.status === 403) return send(res, 503, { error: 'Nieprawidłowy klucz GEMINI_API_KEY albo brak dostępu do modelu' });
+      if (e.status === 404) return send(res, 503, { error: 'Niedostępny model Gemini – sprawdź GEMINI_MODEL' });
+      return send(res, 502, { error: `Błąd usługi AI (${e.status ?? 'sieć'})` });
+    }
     return send(res, e.status || 500, { error: e.message || 'Błąd podsumowania' });
   }
 }
