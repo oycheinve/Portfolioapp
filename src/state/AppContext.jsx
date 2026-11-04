@@ -11,6 +11,7 @@ import { pendingSavingsInterest } from '../lib/savings.js';
 import { computeLimitsForYear } from '../lib/tax.js';
 import { uid } from '../lib/format.js';
 import { reconcileDividends } from '../lib/dividends.js';
+import { fixedDividendPlan } from '../lib/dividendFacts.js';
 import { runDividendSync } from '../lib/dividendSync.js';
 import { MARKET_OPEN_MIN, isWarsawMarketOpen, mayAutoFetch, warsawClock } from '../lib/marketHours.js';
 import { useCloudSync } from './useCloudSync.js';
@@ -116,6 +117,15 @@ export function AppProvider({ children, cloud = null }) {
         .join(';');
     if (key(desired) !== key(current)) dispatch({ type: 'SYNC_AUTO_FUNDING', payload: desired });
   }, [state.accounts, state.bonds, state.cashflows, state.trades, state.income, state.instruments, state.settings.cpiOverrides]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Stałe wpisy dywidend (dividendFacts.js – np. Grupa Kęty 4.11.2026: 9,42 zł brutto) – bezwarunkowo w rejestrze
+  useEffect(() => {
+    const p = fixedDividendPlan(state, isoDay(new Date()));
+    if (p.instruments.length) dispatch({ type: 'ADD_MANY', payload: { collection: 'instruments', items: p.instruments } });
+    if (p.removeIncome.length) dispatch({ type: 'REMOVE_MANY', payload: { collection: 'income', ids: p.removeIncome } });
+    for (const item of p.income) dispatch({ type: 'UPSERT', payload: { collection: 'income', item } });
+    if (p.schedule.length) dispatch({ type: 'ADD_MANY', payload: { collection: 'dividendSchedule', items: p.schedule } });
+  }, [state.income, state.instruments, state.accounts, state.trades, state.dividendSchedule]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dywidendy bez ręcznego klikania: parowanie harmonogramu z rejestrem (np. import XTB) i autoksięgowanie po dniu wypłaty
   useEffect(() => {
