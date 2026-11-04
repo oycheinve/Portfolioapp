@@ -28,7 +28,7 @@ export const NAV_ITEMS = [
 ];
 
 // Kolejność zakładek w dolnym pasku (telefon) – niezależna od kolejności w menu bocznym; za nimi „Więcej”
-const MOBILE_ORDER = ['dashboard', 'portfolio', 'budget', 'tasks', 'shopping', 'news'];
+const MOBILE_ORDER = ['dashboard', 'portfolio', 'shopping', 'budget', 'tasks', 'news'];
 // Pozycje widoczne w menu (bez tymczasowo ukrytych i dostępnych z górnego paska)
 const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden && !n.topbar);
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)).filter(Boolean);
