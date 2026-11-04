@@ -382,7 +382,7 @@ export function cushionWeights({ bonds, savings }, weightBonds) {
 // Poduszka miesiąc po miesiącu: odsetki (netto) zostają w poduszce, dopłata (kwota / mies. albo % rocznie ponad
 // odsetki) dzielona wg wag docelowych (bez wag – wg obecnych proporcji). TWARDY LIMIT: wartość rośnie najwyżej
 // do celu (cap = max(cel, obecna wartość)); po osiągnięciu celu kapitał stoi, a odsetki liczone są od kwoty celu.
-export function cushionProjection({ bonds = 0, savings = 0, bondsRate = 0, savingsRate = 0, target = 0, monthlyContribution = 0, growthPct = 0, weightBonds = null, years = 5 }) {
+export function cushionProjection({ bonds = 0, savings = 0, bondsRate = 0, savingsRate = 0, target = 0, monthlyContribution = 0, growthPct = 0, weightBonds = null, years = 5, reinvestInterest = true }) {
   let b = Math.max(0, bonds);
   let s = Math.max(0, savings);
   const start = b + s;
@@ -394,6 +394,7 @@ export function cushionProjection({ bonds = 0, savings = 0, bondsRate = 0, savin
     let bondsIncome = 0;
     let savingsIncome = 0;
     let contributed = 0;
+    let reinvested = 0;
     for (let m = 0; m < 12; m += 1) {
       const ib = (b * bondsRate) / 12;
       const is = (s * savingsRate) / 12;
@@ -402,14 +403,18 @@ export function cushionProjection({ bonds = 0, savings = 0, bondsRate = 0, savin
       const total = b + s;
       const room = Math.max(0, cap - total);
       const growth = Math.max(0, Number(monthlyContribution) || 0) + (total * (Math.max(0, Number(growthPct) || 0) / 100)) / 12;
-      const add = ib + is + growth;
+      // Bez reinwestycji odsetki są wypłacane (nie powiększają kapitału) – rośnie tylko dopłata
+      const rb = reinvestInterest ? ib : 0;
+      const rs = reinvestInterest ? is : 0;
+      const add = rb + rs + growth;
       const k = add > 0 ? Math.min(1, room / add) : 0;
-      b += ib * k + growth * k * wB;
-      s += is * k + growth * k * (1 - wB);
+      b += rb * k + growth * k * wB;
+      s += rs * k + growth * k * (1 - wB);
       contributed += growth * k;
+      reinvested += (rb + rs) * k;
       if (capReachedMonth === null && b + s >= cap - 0.005) capReachedMonth = (year - 1) * 12 + m + 1;
     }
-    rows.push({ year, bonds: b, savings: s, value: b + s, bondsIncome, savingsIncome, income: bondsIncome + savingsIncome, contributed, capped: b + s >= cap - 0.005 });
+    rows.push({ year, bonds: b, savings: s, value: b + s, bondsIncome, savingsIncome, income: bondsIncome + savingsIncome, contributed, reinvested, capped: b + s >= cap - 0.005 });
   }
   return { cap: Number.isFinite(cap) ? cap : null, capReachedMonth, rows };
 }
@@ -435,7 +440,7 @@ export function multiYearForecast(state, { today = isoDay(new Date()), years = 5
   const otherRate = otherCap0 > 0 ? other.reduce((s, p) => s + p.annualNet, 0) / otherCap0 : 0;
 
   const cb = cushionBase(state, today);
-  const cush = cushionProjection({ ...cb, target: Number(cushion.target) || 0, monthlyContribution: cushion.growthMode === 'pct' ? 0 : Number(cushion.monthlyContribution) || 0, growthPct: cushion.growthMode === 'pct' ? Number(cushion.growthPct) || 0 : 0, weightBonds: cushion.weightBonds, years });
+  const cush = cushionProjection({ ...cb, target: Number(cushion.target) || 0, monthlyContribution: cushion.growthMode === 'pct' ? 0 : Number(cushion.monthlyContribution) || 0, growthPct: cushion.growthMode === 'pct' ? Number(cushion.growthPct) || 0 : 0, weightBonds: cushion.weightBonds, years, reinvestInterest: drip });
 
   let ikeCap = dy.ikeValue;
   let otherCap = otherCap0;
@@ -443,9 +448,11 @@ export function multiYearForecast(state, { today = isoDay(new Date()), years = 5
   let calMonth = Number(today.slice(5, 7)); // 1..12 – bieżący; wpłaty od następnego
   let yearDeposited = usedThisYear;
   let ikeTotal = 0;
+  let reinvestedTotal = 0;
   const rows = [];
   for (let year = 1; year <= years; year += 1) {
     let dividends = 0;
+    let dripDividends = 0; // dywidendy dopisane do kapitału (DRIP)
     let ikeDeposits = 0;
     let limitCut = 0;
     for (let m = 0; m < 12; m += 1) {
@@ -464,8 +471,10 @@ export function multiYearForecast(state, { today = isoDay(new Date()), years = 5
       const divIke = (ikeCap * dy.rate) / 12; // IKE – bez podatku Belki
       const divOther = (otherCap * otherRate) / 12;
       dividends += divIke + divOther;
+      // DRIP: dywidenda z tego miesiąca od razu powiększa kapitał, który generuje dywidendy w kolejnych miesiącach
       ikeCap += dep + (drip ? divIke : 0);
       otherCap += Math.max(0, Number(otherContribution) || 0) + (drip ? divOther : 0);
+      if (drip) dripDividends += divIke + divOther;
     }
     ikeTotal += ikeDeposits;
     const c = cush.rows[year - 1];
@@ -474,10 +483,12 @@ export function multiYearForecast(state, { today = isoDay(new Date()), years = 5
     const intInc = src.interest ? c.savingsIncome : 0;
     const annual = div + bondsInc + intInc;
     const capital = (src.dividends ? ikeCap + otherCap : 0) + (src.bonds ? c.bonds : 0) + (src.interest ? c.savings : 0);
-    rows.push({ year, capital, ikeCapital: ikeCap, otherCapital: otherCap, cushion: c.value, cushionCapped: c.capped, ikeDeposits, ikeDepositsTotal: ikeTotal, limitCut, dividends: div, bonds: bondsInc, interest: intInc, annual, monthly: annual / 12 });
+    const reinvested = (src.dividends ? dripDividends : 0) + (src.bonds || src.interest ? c.reinvested * ((src.bonds ? c.bondsIncome : 0) + (src.interest ? c.savingsIncome : 0)) / (c.income || 1) : 0);
+    reinvestedTotal += reinvested;
+    rows.push({ year, capital, ikeCapital: ikeCap, otherCapital: otherCap, cushion: c.value, cushionCapped: c.capped, ikeDeposits, ikeDepositsTotal: ikeTotal, limitCut, dividends: div, bonds: bondsInc, interest: intInc, annual, monthly: annual / 12, reinvested, reinvestedTotal });
   }
   const capital0 = (src.dividends ? dy.ikeValue + otherCap0 : 0) + (src.bonds ? cb.bonds : 0) + (src.interest ? cb.savings : 0);
-  return { dy, hist, base, plan, otherRate, otherCapital: otherCap0, cushion: cush, cushionBase: cb, capital0, rows };
+  return { dy, hist, base, plan, otherRate, otherCapital: otherCap0, cushion: cush, cushionBase: cb, capital0, rows, drip };
 }
 
 // ── Wykres przepływów (BETA): zakres i podstawa ──

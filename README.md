@@ -490,9 +490,11 @@ Więcej → **Surowce i Krypto**: złoto, srebro (gramy lub uncje trojańskie), 
 
 ## Porządki w nawigacji, Dywidendach i wykresach Cash Flow
 
-- **Menu:** FIRE ukryty (cele FIRE zostają w Ustawieniach, symulacja – w Symulacjach; `#/fire` → Pulpit). **Cash Flow Forecast (BETA)** jest sekcją zakładki Dywidendy (`#/dividends/cashflow`; stary `#/cashflow` przekierowuje).
+- **Menu:** FIRE ukryty (cele FIRE zostają w Ustawieniach, symulacja – w Symulacjach; `#/fire` → Pulpit). **Cash Flow Forecast (BETA)** to osobna podzakładka Dywidend – kafel na górze zakładki otwiera pełny widok `#/dividends/cashflow` z przyciskiem powrotu (stary `#/cashflow` przekierowuje).
 - **Dywidendy:** usunięta prognoza DGR (rolę przejął Cash Flow Forecast); „Dane dywidend” (automatyczna synchronizacja z Yahoo / historii) – w Ustawieniach → Strategie, Cele i Giełda.
 - **Wykres przepływów** (`cashFlowSeries`): zakres **Ostatnie 12 mies. / Kolejne 12 mies. / Rok kalendarzowy** (miniona część z rejestru, reszta z prognozy) i podstawa **Naliczanie dzienne** (domyślnie – odsetki obligacji przyrastają dzień po dniu od daty zakupu, bez schodków przy kapitalizacji i wykupie; KO – w miesiącu narastania) albo **Realne wypłaty** (dzień wypłaty dywidendy, kupon / wykup obligacji, dopisanie odsetek KO).
 - **Realne daty odsetek KO:** dzień dopisania wyuczony z historii wpisów konta (`postingOffsetDays`, np. ostatni dzień miesiąca) – w „Nadchodzących wypłatach”, tabeli miesięcy i wykresie wypłat.
 - **Wykresy historyczne:** zakres „12 mies.” i „Rok kal.” (Pulpit – Majątek, Wykresy).
 - **Harmonijka:** rozwinięcie karty zwija pozostałe karty na tym samym poziomie (wspólny `Card collapsible`, `Accordion` domyślnie `exclusive`); lista miesięcy w Cash Flow – jeden miesiąc naraz.
+
+**Kula śnieżna – DRIP:** przełącznik „Reinwestycja dywidend (DRIP): Włączona / Wyłączona” steruje reinwestycją dywidend i odsetek z poduszki. Włączony – co miesiąc otrzymane dywidendy (IKE wg Dividend Yield portfela, pozostałe pozycje wg stopy netto) i odsetki (do progu celu poduszki) są dopisywane do kapitału i od kolejnego miesiąca same generują przepływy; tabela pokazuje kwotę reinwestowaną w każdym roku. Wyłączony – przepływy są wypłacane, kapitał rośnie tylko o wpłaty i dopłaty.

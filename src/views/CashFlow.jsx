@@ -360,7 +360,7 @@ export default function CashFlowView() {
       </Card>
 
       {/* Symulator wieloletni (kula śnieżna) */}
-      <Card collapsible defaultOpen storageKey={openKey('snowball')} title={beta('Kula śnieżna')} summary={last ? `za ${yearsLabel(years)}: ${formatPLN(last.monthly)} / mies. · kapitał ${formatPLN(last.capital)}` : ''} subtitle="Wieloletnia prognoza dochodu pasywnego netto" icon={Snowflake}>
+      <Card collapsible defaultOpen storageKey={openKey('snowball')} title={beta('Kula śnieżna')} summary={last ? `za ${yearsLabel(years)}: ${formatPLN(last.monthly)} / mies. · DRIP ${drip ? 'wł.' : 'wył.'} · kapitał ${formatPLN(last.capital)}` : ''} subtitle="Wieloletnia prognoza dochodu pasywnego netto" icon={Snowflake}>
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <div className="mb-1 text-[11px] font-medium text-stone-500 dark:text-stone-400">Horyzont</div>
@@ -370,17 +370,32 @@ export default function CashFlowView() {
             <Input type="number" inputMode="decimal" min="0" step="100" placeholder="0" value={prefs.contribution ?? ''} onChange={(e) => setPrefs({ contribution: numOrEmpty(e.target.value) })} aria-label="Miesięczna dopłata w symulacji" />
           </Field>
         </div>
-        <div className="mt-3">
-          <Toggle checked={drip} onChange={(v) => setPrefs({ drip: v })} label="Reinwestuj 100% dywidend (DRIP)" description={`IKE: Dividend Yield ${pct(sim.dy.rate)}; pozostałe pozycje: ${pct(sim.otherRate)} netto. Bez wzrostu dywidend i cen.`} />
+        <div className={`mt-3 rounded-xl border px-3 py-2.5 ${drip ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/25 dark:bg-emerald-500/10' : 'border-stone-200 bg-stone-50 dark:border-white/10 dark:bg-white/[0.03]'}`}>
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm font-semibold">
+            <Repeat size={15} className={drip ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-400'} />
+            Reinwestycja dywidend (DRIP):
+            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${drip ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-neutral-950' : 'bg-stone-300 text-stone-700 dark:bg-white/15 dark:text-stone-200'}`}>{drip ? 'Włączona' : 'Wyłączona'}</span>
+          </div>
+          <Toggle
+            checked={drip}
+            onChange={(v) => setPrefs({ drip: v })}
+            label="Reinwestuj 100% dywidend i odsetek"
+            description={
+              drip
+                ? `Co miesiąc otrzymane dywidendy (IKE: Dividend Yield ${pct(sim.dy.rate)}, pozostałe pozycje: ${pct(sim.otherRate)} netto) i odsetki z poduszki (do progu celu) są dopisywane do kapitału i od następnego miesiąca same generują przepływy. Łącznie reinwestowane: ${formatPLN(last?.reinvestedTotal || 0)}.`
+                : 'Dywidendy i odsetki są wypłacane (nie powiększają kapitału) – kapitał rośnie tylko o wpłaty i dopłaty.'
+            }
+          />
         </div>
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[30rem] text-sm tabular" aria-label="Symulacja wieloletnia">
+          <table className="w-full min-w-[34rem] text-sm tabular" aria-label="Symulacja wieloletnia">
             <thead>
               <tr className="text-left text-[11px] text-stone-500 dark:text-stone-400">
                 <th className="py-1.5 font-medium">Rok</th>
                 <th className="py-1.5 text-right font-medium">Kapitał</th>
                 <th className="py-1.5 text-right font-medium">Wpłaty IKE</th>
                 <th className="py-1.5 text-right font-medium">Dochód / rok</th>
+                <th className="py-1.5 text-right font-medium">Reinwest.</th>
                 <th className="py-1.5 text-right font-medium">/ mies.</th>
               </tr>
             </thead>
@@ -388,6 +403,7 @@ export default function CashFlowView() {
               <tr className="text-stone-500 dark:text-stone-400">
                 <td className="py-1.5">Teraz</td>
                 <td className="py-1.5 text-right">{formatPLN(sim.capital0)}</td>
+                <td className="py-1.5 text-right">—</td>
                 <td className="py-1.5 text-right">—</td>
                 <td className="py-1.5 text-right">{formatPLN(f.totals.net)}</td>
                 <td className="py-1.5 text-right">{formatPLN(f.avgNet)}</td>
@@ -409,6 +425,7 @@ export default function CashFlowView() {
                     {r.limitCut > 0.5 && <span className="block text-[10px] text-amber-600 dark:text-amber-400">limit −{formatPLN(r.limitCut)}</span>}
                   </td>
                   <td className="py-1.5 text-right font-semibold text-emerald-700 dark:text-emerald-400">{formatPLN(r.annual)}</td>
+                  <td className="py-1.5 text-right text-stone-500 dark:text-stone-400">{drip ? `+${formatPLN(r.reinvested)}` : '—'}</td>
                   <td className="py-1.5 text-right">{formatPLN(r.monthly)}</td>
                 </tr>
               ))}
@@ -419,8 +436,10 @@ export default function CashFlowView() {
           {ike.stepEnabled ? `Granicznik: od ${ike.stepYears + 1}. roku wpłata ${formatPLN(ike.stepAmount)} / mies. (wyróżniony wiersz). ` : ''}
           {sources.bonds || sources.interest
             ? cushionTarget > 0
-              ? `Poduszka rośnie najwyżej do celu ${formatPLN(sim.cushion.cap)}${cushionCapYear ? ` (osiągnięty w ${cushionCapYear}. roku)` : ''} – potem odsetki liczone od kwoty celu.`
-              : 'Poduszka bez celu – rośnie o odsetki i dopłatę z zakładki Poduszka finansowa.'
+              ? `Poduszka rośnie${drip ? '' : ' (tylko o dopłaty – DRIP wył.)'} najwyżej do celu ${formatPLN(sim.cushion.cap)}${cushionCapYear ? ` (osiągnięty w ${cushionCapYear}. roku)` : ''} – potem odsetki liczone od kwoty celu.`
+              : drip
+                ? 'Poduszka bez celu – rośnie o odsetki i dopłatę z zakładki Poduszka finansowa.'
+                : 'Poduszka bez celu – odsetki wypłacane (DRIP wył.), rośnie tylko o dopłatę z zakładki Poduszka finansowa.'
             : 'Poduszka wyłączona z obliczeń.'}
         </p>
       </Card>

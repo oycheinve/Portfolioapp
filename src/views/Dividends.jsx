@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { BarChart3, CalendarClock, CalendarDays, ListChecks, Waves } from 'lucide-react';
+import { BarChart3, CalendarClock, CalendarDays, ChevronLeft, ChevronRight, ListChecks, Waves } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { DividendCalendar, DividendKpis } from '../components/dividends/DividendWidgets.jsx';
 import { ScheduleCard } from '../components/dividends/DividendManagement.jsx';
@@ -51,27 +51,42 @@ const ITEMS = [
     ),
   },
   { id: 'register', title: 'Rejestr wypłat', subtitle: 'Harmonogram dywidend, statusy i księgowanie wypłat', icon: ListChecks, render: () => <ScheduleCard /> },
-  // Cash Flow Forecast (BETA) – część zakładki Dywidendy (dawniej osobna pozycja menu); źródła danych dywidend – w Ustawieniach
-  {
-    id: 'cashflow',
-    title: (
-      <>
-        Cash Flow Forecast
-        <BetaBadge />
-      </>
-    ),
-    subtitle: 'Dywidendy, odsetki z KO i obligacje – prognoza, historia i symulator',
-    icon: Waves,
-    render: () => <CashFlowView />,
-  },
 ];
 
-// param: sekcja rozwinięta z adresu (np. #/dividends/cashflow – dawna zakładka Cash Flow)
-export default function DividendsView({ param }) {
+// Cash Flow Forecast (BETA) – osobna podzakładka Dywidend (#/dividends/cashflow, pełny widok z powrotem do listy)
+export default function DividendsView({ param, onNavigate }) {
   useDividendAutoSync();
+  if (param === 'cashflow') {
+    return (
+      <div className="space-y-3">
+        <button type="button" onClick={() => onNavigate?.('dividends')} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400" aria-label="Wróć do Dywidend">
+          <ChevronLeft size={16} /> Dywidendy
+        </button>
+        <CashFlowView />
+      </div>
+    );
+  }
   return (
     <div className="space-y-3">
-      <Accordion key={param || 'default'} items={ITEMS} storageKey="wealth-app-dividends-open-v2" defaultOpen={['summary']} forceOpen={ITEMS.some((i) => i.id === param) ? param : null} exclusive />
+      {/* Wejście do podzakładki Cash Flow Forecast (BETA) */}
+      <button
+        type="button"
+        onClick={() => onNavigate?.('dividends/cashflow')}
+        className="flex w-full items-center gap-3 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 px-4 py-3 text-left transition-colors hover:bg-emerald-50 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+          <Waves size={18} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">
+            Cash Flow Forecast
+            <BetaBadge />
+          </span>
+          <span className="block truncate text-xs text-stone-500 dark:text-stone-400">Prognoza i historia przepływów, wpłaty IKE, Kula śnieżna (DRIP)</span>
+        </span>
+        <ChevronRight size={18} className="shrink-0 text-stone-400" />
+      </button>
+      <Accordion items={ITEMS} storageKey="wealth-app-dividends-open-v2" defaultOpen={['summary']} exclusive />
     </div>
   );
 }
