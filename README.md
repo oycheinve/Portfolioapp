@@ -449,3 +449,11 @@ W zakładce „Zadania” w nowym tygodniu, gdy w poprzednim zostały niewykonan
 4. W aplikacji: Więcej → Powiadomienia → „Powiadomienia z serwera” (wymaga logowania) → „Wyślij testowe z serwera”.
 
 Endpointy: `api/push-cron.js` (przegląd subskrypcji w strefie czasowej użytkownika, zadania z `daily_tasks` / `daily_task_logs`, wiadomości przez `api/news.js` + klasyfikację podmiotu, wysyłka `web-push`, usuwanie wygasłych subskrypcji 404/410, `?dry=1` – podgląd planu), `api/push-test.js` (POST z tokenem sesji – test na urządzenia użytkownika), wspólna logika `api/_push.js`. Service worker: zdarzenia `push` (JSON `{ title, body, url, tag }` → `showNotification`), `pushsubscriptionchange`, `notificationclick` (otwiera aplikację w danym widoku). Ten sam `tag` powiadomień lokalnych i z serwera – system zastępuje je zamiast dublować. Bez konfiguracji wszystko działa w trybie lokalnym.
+
+## IKE - Julka (osobne, odizolowane konto)
+
+Ustawienia → Portfel i Aktywa → **IKE - Julka**. Systematyczny zakup ETF-u **IE00BK5BQT80** (Vanguard FTSE All-World UCITS ETF Acc, notowanie Yahoo `VWCE.DE` w EUR) za stałą kwotę (domyślnie 100 zł / mies.).
+
+- Wyliczenie (`src/lib/julkaIke.js`, mechanizm przewalutowania jak na IKE w XTB, domyślnie 0,05%): `kwota w EUR = (kwota PLN − prowizja) / kurs EUR/PLN`, `jednostki = kwota w EUR / cena ETF` – zaokrąglenie do 4 miejsc. Kurs (`EURPLN=X`) i cena to zamknięcie z dnia zakupu (ostatnia sesja ≤ data), dla dzisiejszej daty – bieżące notowanie. Gdy notowań nie da się pobrać, kurs i cenę wpisuje się ręcznie.
+- Zakup przyciskiem „Dodaj zakup miesięczny” z wyborem daty albo automatycznie: wybrany dzień miesiąca od wskazanego miesiąca – zaległe zakupy są dopisywane przy otwarciu aplikacji (pomijane są miesiące, w których jest już zakup). Historia z korektą (przeliczenie jednostek) i usuwaniem.
+- Izolacja: dane są wyłącznie w kluczu `wealth-app-ike-julka-v1` (synchronizowanym z Supabase w kolumnie `ui_prefs` i obecnym w kopii zapasowej) – nie są częścią stanu portfela, więc nie trafiają do Pulpitu, Portfela, Wykresów, statystyk, limitów IKE, kalkulatorów, raportów ani filtrów kont.

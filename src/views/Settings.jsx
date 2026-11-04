@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeftRight, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Landmark, LineChart, Pencil, Plus, Radio, Scale, Target, Trash2, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Landmark, LineChart, Pencil, Plus, Radio, Scale, Target, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
@@ -12,6 +12,7 @@ import NotificationsView from './NotificationsView.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import InflationCard from '../components/settings/InflationCard.jsx';
 import CashRegister from './CashRegister.jsx';
+import JulkaIkeCard from '../components/settings/JulkaIkeCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
 // Konta i ustawienia: trzy kategorie (akordeon – otwarta najwyżej jedna), w środku płaskie kafelki podkategorii.
@@ -20,6 +21,7 @@ import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES 
 const SECTIONS = {
   accounts: { title: 'Konta inwestycyjne', hint: 'IKE, IKZE, konta maklerskie', icon: Wallet, render: () => <AccountsSection /> },
   cash: { title: 'Rejestr wpłat i wypłat', hint: 'Wpłaty, wypłaty i historia przepływów', icon: ArrowLeftRight, render: () => <CashRegister /> },
+  julka: { title: 'IKE - Julka', hint: 'Osobne konto: ETF IE00BK5BQT80 za 100 zł / mies.', icon: Baby, render: () => <JulkaIkeCard /> },
   'other-assets': { title: 'Nieruchomości i inne aktywa', hint: 'Wliczane do Majątku Całkowitego', icon: Building2, render: () => <OtherAssetsSection /> },
   limits: { title: 'Limity wpłat IKE / IKZE', hint: 'Roczne limity i wykorzystanie', icon: CalendarClock, render: () => <LimitsCard /> },
   fire: { title: 'Cele FIRE', hint: 'Rok, majątek i dochód docelowy', icon: Target, render: () => <FireGoalsCard /> },
@@ -31,7 +33,7 @@ const SECTIONS = {
   backup: { title: 'Kopia zapasowa danych', hint: 'Eksport i wczytanie pliku JSON', icon: Database, render: () => <BackupCard /> },
 };
 const GROUPS = [
-  { id: 'assets', emoji: '💼', title: 'Portfel i Aktywa', subtitle: 'Konta · wpłaty i wypłaty · nieruchomości · limity IKE / IKZE', items: ['accounts', 'cash', 'other-assets', 'limits'] },
+  { id: 'assets', emoji: '💼', title: 'Portfel i Aktywa', subtitle: 'Konta · wpłaty i wypłaty · nieruchomości · limity · IKE - Julka', items: ['accounts', 'cash', 'other-assets', 'limits', 'julka'] },
   { id: 'strategy', emoji: '📈', title: 'Strategie, Cele i Giełda', subtitle: 'Cele FIRE · podatki · notowania', items: ['fire', 'tax', 'prices'] },
   { id: 'system', emoji: '⚙️', title: 'System i Konto', subtitle: 'Konto i chmura · powiadomienia · inflacja · kopia zapasowa', items: ['cloud', 'notifications', 'inflation', 'backup'] },
 ];

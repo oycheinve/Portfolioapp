@@ -90,6 +90,15 @@ function CloudStatus({ onNavigate }) {
 export function Layout({ view, onNavigate, children }) {
   const { state, actions, refreshing, cloud } = useApp();
   useNotificationScheduler(state, cloud?.enabled ? cloud.user?.id : null);
+  // IKE - Julka (konto odizolowane): zaległe automatyczne zakupy miesięczne – po cichu, chwilę po starcie
+  useEffect(() => {
+    const t = setTimeout(() => {
+      import('../lib/julkaIke.js')
+        .then((m) => (m.readJulka().autoEnabled ? m.runJulkaAuto(new Date().toISOString().slice(0, 10)) : null))
+        .catch(() => {});
+    }, 6000);
+    return () => clearTimeout(t);
+  }, []);
   // Brak sieci (np. aplikacja na telefonie offline) – widoczny znaczek; dane działają z pamięci urządzenia
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   useEffect(() => {
