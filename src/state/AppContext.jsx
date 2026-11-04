@@ -6,6 +6,7 @@ import { createDemoState } from './demoData.js';
 import { autoFundingCashflows, buildSnapshot, isAutoFunding, isBondRedemption, isoDay, livePriceLookup } from '../lib/engine.js';
 import { refreshAllPrices } from '../lib/prices.js';
 import { fetchAllHistory } from '../lib/history.js';
+import { rowsToMap } from '../lib/inflation.js';
 import { pendingSavingsInterest } from '../lib/savings.js';
 import { computeLimitsForYear } from '../lib/tax.js';
 import { uid } from '../lib/format.js';
@@ -244,6 +245,29 @@ export function AppProvider({ children, cloud = null }) {
     [notify],
   );
 
+  // Inflacja CPI (GUS) z tabeli Supabase inflation_rates przez /api/inflation – przy starcie, najwyżej co 12 godzin;
+  // bez serwera / tabeli aplikacja korzysta z tabeli wbudowanej (i ręcznych korekt), bez komunikatu
+  const refreshInflation = useCallback(async ({ force = false } = {}) => {
+    const cur = stateRef.current.inflation;
+    if (!force && cur?.fetchedAt && Date.now() - new Date(cur.fetchedAt).getTime() < 12 * 3600 * 1000) return cur;
+    dispatch({ type: 'SET_INFLATION', payload: { status: 'loading' } });
+    try {
+      const res = await fetch(`/api/inflation${force ? `?t=${Date.now()}` : ''}`, { cache: force ? 'no-store' : 'default' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !Array.isArray(body.rows)) throw new Error(body.error || `HTTP ${res.status}`);
+      const payload = { rows: rowsToMap(body.rows), updatedAt: body.updatedAt || null, fetchedAt: new Date().toISOString(), status: 'ok', error: null };
+      dispatch({ type: 'SET_INFLATION', payload });
+      return payload;
+    } catch (e) {
+      dispatch({ type: 'SET_INFLATION', payload: { status: 'offline', error: e.message, fetchedAt: new Date().toISOString() } });
+      return null;
+    }
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => refreshInflation(), 2500);
+    return () => clearTimeout(t);
+  }, [refreshInflation]);
+
   // Notowania odświeżane wyłącznie przy wejściu do aplikacji (start, powrót do karty/okna) i tylko w godzinach
   // sesji GPW (pn–pt 9:00–16:50). Bez timerów w tle – aplikacja zminimalizowana lub otwarta bez nawigacji nic nie pobiera.
   useEffect(() => {
@@ -294,6 +318,7 @@ export function AppProvider({ children, cloud = null }) {
       deleteAccount: (id) => dispatch({ type: 'DELETE_ACCOUNT', payload: id }),
       loadDemo: () => dispatch({ type: 'LOAD_DEMO' }),
       resetEmpty: () => dispatch({ type: 'RESET_EMPTY' }),
+      refreshInflation,
       clearHistory: (opts = {}) => dispatch({ type: 'CLEAR_HISTORY', payload: { ...opts, today: isoDay(new Date()) } }),
       exportState: () => {
         const s = stateRef.current;
@@ -359,7 +384,7 @@ export function AppProvider({ children, cloud = null }) {
       refreshHistory,
       notify,
     }),
-    [refreshPrices, refreshHistory, notify],
+    [refreshPrices, refreshHistory, refreshInflation, notify],
   );
 
   // Dane dywidend (Yahoo / historia wypłat) pobierane po starcie aplikacji – raz na 12 h, w godzinach sesji, bez otwierania zakładki

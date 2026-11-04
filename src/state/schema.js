@@ -105,6 +105,8 @@ export function createEmptyState() {
       updatedAt: null,
       log: [],
     },
+    // Inflacja CPI z bazy (tabela inflation_rates, odczyty GUS): { rows: { 'RRRR-MM': { yoy, mom, source } }, … }
+    inflation: { rows: {}, updatedAt: null, fetchedAt: null, status: 'idle' },
     prices: {
       quotes: {},
       fx: { rates: { PLN: 1, USD: 3.65, EUR: 4.25, GBP: 4.88, CHF: 4.55 }, source: 'domyślne', updatedAt: null },
@@ -182,6 +184,8 @@ export function migrateState(raw) {
     ...(raw.priceHistory || {}),
     series: { ...(raw.priceHistory?.series || {}) },
   };
+  out.inflation = { ...base.inflation, ...(raw.inflation || {}), rows: { ...(raw.inflation?.rows || {}) } };
+  if (out.inflation.status === 'loading') out.inflation.status = 'idle';
   out.prices = {
     ...base.prices,
     ...(raw.prices || {}),

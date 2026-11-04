@@ -5,6 +5,8 @@ import { proxyYahoo } from './api/yahoo.js';
 import { fetchLogo, fetchLogoUrl } from './api/logo.js';
 import { fetchNews } from './api/news.js';
 import newsSummary from './api/news-summary.js';
+import inflationApi from './api/inflation.js';
+import inflationSync from './api/inflation-sync.js';
 
 // /api/yahoo?path=…, /api/news?q=…, /api/news-summary (POST) i /api/logo?domain=… lokalnie (dev i preview) – ta sama logika co funkcje serwerowe Vercel w api/
 function yahooApi() {
@@ -18,6 +20,15 @@ function yahooApi() {
       return;
     }
     // Podsumowania AI (POST) – ta sama funkcja co na Vercel; klucz ANTHROPIC_API_KEY z otoczenia procesu
+    // Inflacja CPI (GUS): odczyt z tabeli inflation_rates i synchronizacja – jak funkcje Vercel
+    if (req.url.startsWith('/api/inflation-sync')) {
+      await inflationSync(req, res);
+      return;
+    }
+    if (req.url.startsWith('/api/inflation')) {
+      await inflationApi(req, res);
+      return;
+    }
     if (req.url.startsWith('/api/news-summary')) {
       await newsSummary(req, res);
       return;

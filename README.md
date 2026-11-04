@@ -390,6 +390,14 @@ Zakładka „Zadania” (`#/tasks`, w dolnym pasku w miejscu „Cele” i w menu
 
 
 
+## Inflacja CPI z GUS – baza, synchronizacja i benchmark
+
+- **Baza**: tabela Supabase `inflation_rates` (`supabase/inflation_rates.sql` – uruchom raz w SQL Editor): `year`, `month`, `yoy` (r/r %, analogiczny miesiąc poprzedniego roku = 100), `mom` (m/m %, poprzedni miesiąc = 100), `cpi_value` (wskaźnik GUS, kolumna wyliczana), `source`, `is_manual`, `updated_at`; odczyt publiczny (RLS), zapis tylko kluczem service role; skrypt wstawia odczyty startowe 2023–2025.
+- **Pobieranie** `api/inflation-sync.js`: plik GUS „Miesięczne wskaźniki cen towarów i usług konsumpcyjnych od 1982 roku” (CSV, kolumny rozpoznawane po nagłówkach; adres do nadpisania `GUS_CPI_CSV_URL`), a gdy niedostępny – Eurostat HICP dla Polski (tylko uzupełnia brakujące miesiące). Dane od 2000 r.; wiersze `is_manual` nie są nadpisywane; `?dry=1` – podgląd. Harmonogram: Vercel Cron codziennie ok. 9:20 UTC (`vercel.json`, autoryzacja `CRON_SECRET`) albo pg_cron (instrukcja w pliku SQL); ręcznie – „Pobierz z GUS teraz” w Ustawieniach (zalogowany użytkownik).
+- **Aplikacja**: `api/inflation.js` → `state.inflation` (przy starcie, najwyżej co 12 h; bez serwera – tabela wbudowana). Tabela CPI (`getCpiTable` → `buildCpiTable` w `src/lib/inflation.js`): wbudowane odczyty → dane z bazy → ręczne korekty (`settings.cpiOverrides` r/r, `settings.cpiMomOverrides` m/m).
+- **Benchmark „Inflacja CPI”** w Wykresach: indeks cen łańcuchowany z miesięcznych odczytów GUS m/m (przybliżenie z r/r tylko dla miesięcy bez m/m); źródło w liście benchmarków („GUS · odczyty miesięczne do RRRR-MM”). Kafelek „vs benchmarki” pokazuje realną stopę zwrotu w okresie: (1 + TWR) / (1 + inflacja CPI) − 1. Te same odczyty r/r liczą oprocentowanie obligacji COI/EDO.
+- **Ustawienia → System i Konto → Inflacja CPI (GUS)**: ostatni odczyt r/r i m/m, źródło i zakres danych z bazy, „Odśwież z bazy”, „Pobierz z GUS teraz” oraz tabela korekt (r/r albo m/m, rok po roku).
+
 ## Podsumowania AI w Newsach (Claude)
 
 - **Artykuł**: przycisk „✨ Podsumowanie AI” pod każdym artykułem rozwija blok z sekcjami **Główne wydarzenie** (1–2 zdania), **Kluczowe liczby i dane** (punkty „Nazwa: wartość (kontekst)”, nazwa pogrubiona) i **Wpływ na spółkę / inwestora** (2–4 punkty) oraz wydźwięk (pozytywny / negatywny / neutralny / mieszany). Podczas pracy widać „AI analizuje artykuł…”, przy błędzie – komunikat i „Spróbuj ponownie” (`src/components/news/AiSummary.jsx`).

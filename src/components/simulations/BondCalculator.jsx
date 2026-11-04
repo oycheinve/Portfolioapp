@@ -54,7 +54,7 @@ export default function BondCalculator() {
       return next;
     });
   const setOffer = (id, patch) => set({ offers: { ...p.offers, [id]: { ...p.offers[id], ...patch } } });
-  const cpi = useMemo(() => getCpiTable(state.settings), [state.settings]);
+  const cpi = useMemo(() => getCpiTable(state.settings, state.inflation), [state.settings, state.inflation]);
   const result = useMemo(() => compareBonds(p, cpi), [p, cpi]);
   const color = (id) => seriesColor(SLOTS[id] ?? 0, isDark);
   const data = useMemo(() => {

@@ -7,7 +7,7 @@ import { getCpiTable } from '../../lib/bonds.js';
 import { passiveIncomeByMonth, savingsProjection } from '../../lib/savings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatAxisPLN, formatDate, formatPLN, formatPercent, todayISO } from '../../lib/format.js';
-import { Badge, Button, Card, ChartTooltip, EmptyState, Field, IconButton, Input, Select, Toggle } from '../ui.jsx';
+import { Badge, Button, Card, ChartTooltip, EmptyState, Field, IconButton, Input, Segmented, Select, Toggle } from '../ui.jsx';
 import { AccountFormModal, DeleteAccountModal, SAVINGS_NAME } from '../settings/AccountForm.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
 
@@ -190,53 +190,64 @@ export function PassiveIncomeCard() {
   );
 }
 
+// Odczyty CPI z podglądem źródła (GUS z bazy, wbudowane, ręcznie) i ręczną korektą r/r albo m/m.
+// Korekty zapisują się w ustawieniach (settings.cpiOverrides / cpiMomOverrides) i mają pierwszeństwo przed bazą.
 export function CpiCard() {
   const { state, actions } = useApp();
-  const table = useMemo(() => getCpiTable(state.settings), [state.settings]);
+  const table = useMemo(() => getCpiTable(state.settings, state.inflation), [state.settings, state.inflation]);
   const years = [...new Set(Object.keys(table).map((k) => k.slice(0, 4)))].sort().reverse();
   const [year, setYear] = useState(years[0]);
-  const overrides = state.settings.cpiOverrides || {};
+  const [measure, setMeasure] = useState('yoy');
+  const field = measure === 'yoy' ? 'cpiOverrides' : 'cpiMomOverrides';
+  const overrides = state.settings[field] || {};
   const setReading = (key, value) => {
     const next = { ...overrides };
     if (value === '') delete next[key];
     else next[key] = Number(value);
-    actions.updateSettings({ cpiOverrides: next });
+    actions.updateSettings({ [field]: next });
   };
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+  const shown = (r) => (measure === 'yoy' ? r?.value : r?.mom);
 
   return (
     <Card
-      title="Odczyty inflacji CPI (r/r)"
-      subtitle="Podstawa oprocentowania COI/EDO od 2. roku i benchmarku inflacji"
+      title="Odczyty inflacji CPI"
+      subtitle="Podstawa oprocentowania COI/EDO od 2. roku i benchmarku inflacji w wykresach"
       icon={Table2}
       actions={
-        <Select value={year} onChange={(e) => setYear(e.target.value)} className="w-auto" aria-label="Rok">
-          {[...new Set([String(new Date().getFullYear()), ...years])].sort().reverse().map((y) => (
-            <option key={y}>{y}</option>
-          ))}
-        </Select>
+        <div className="flex items-center gap-2">
+          <Segmented size="sm" value={measure} onChange={setMeasure} ariaLabel="Miara inflacji" options={[{ value: 'yoy', label: 'r/r' }, { value: 'mom', label: 'm/m' }]} />
+          <Select value={year} onChange={(e) => setYear(e.target.value)} className="w-auto" aria-label="Rok">
+            {[...new Set([String(new Date().getFullYear()), ...years])].sort().reverse().map((y) => (
+              <option key={y}>{y}</option>
+            ))}
+          </Select>
+        </div>
       }
     >
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         {months.map((k) => {
           const r = table[k];
+          const manual = overrides[k] !== undefined;
+          const value = shown(r);
           return (
             <Field key={k} label={new Date(`${k}-01`).toLocaleDateString('pl-PL', { month: 'short' })}>
               <Input
                 type="number"
-                step="0.1"
+                step={measure === 'yoy' ? '0.1' : '0.01'}
                 value={overrides[k] ?? ''}
-                placeholder={r ? String(r.value) : '—'}
+                placeholder={Number.isFinite(value) ? String(value) : '—'}
                 onChange={(e) => setReading(k, e.target.value)}
-                className={r?.estimate && overrides[k] === undefined ? 'border-amber-300 dark:border-amber-500/40' : ''}
-                title={r?.estimate ? 'Wartość szacunkowa – wpisz odczyt GUS' : r?.manual ? 'Odczyt wpisany ręcznie' : 'Odczyt GUS'}
+                aria-label={`Inflacja ${measure === 'yoy' ? 'r/r' : 'm/m'} ${k}`}
+                className={manual ? 'border-blue-400 dark:border-blue-400/50' : r?.estimate && measure === 'yoy' ? 'border-amber-300 dark:border-amber-500/40' : ''}
+                title={manual ? 'Korekta ręczna' : r?.estimate && measure === 'yoy' ? 'Wartość szacunkowa – wpisz odczyt GUS' : r ? `Źródło: ${r.source}` : 'Brak odczytu'}
               />
             </Field>
           );
         })}
       </div>
       <p className="mt-3 text-[11px] text-stone-500 dark:text-stone-500">
-        Szare podpowiedzi to wbudowane odczyty GUS; pola z pomarańczową ramką to szacunki – wpisz właściwą wartość, aby nadpisać. Puste pole = wartość domyślna.
+        Szare podpowiedzi to odczyty GUS (z bazy inflation_rates albo wbudowane); niebieska ramka – Twoja korekta, pomarańczowa – szacunek do uzupełnienia. Puste pole = odczyt GUS. {measure === 'mom' ? 'Odczyty m/m (poprzedni miesiąc = 100) budują indeks cen benchmarku; bez nich indeks liczony jest w przybliżeniu z r/r.' : 'Odczyty r/r (analogiczny miesiąc poprzedniego roku = 100) – oprocentowanie COI/EDO.'}
       </p>
     </Card>
   );

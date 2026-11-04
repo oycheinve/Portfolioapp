@@ -111,7 +111,7 @@ export function buildPortfolioRows(state) {
   }
 
   // Obligacje – per transza
-  const cpi = getCpiTable(state.settings);
+  const cpi = getCpiTable(state.settings, state.inflation);
   for (const b of v.bonds) {
     const belka = bondBelkaRate(b, b.account);
     const val = valueBond(b, today, belka, cpi);

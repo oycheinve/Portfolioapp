@@ -18,7 +18,7 @@ export default function BondsSection() {
   const [expanded, setExpanded] = useState(null);
   const [toDelete, setToDelete] = useState(null);
   const today = todayISO();
-  const cpi = useMemo(() => getCpiTable(state.settings), [state.settings]);
+  const cpi = useMemo(() => getCpiTable(state.settings, state.inflation), [state.settings, state.inflation]);
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
 
   const rows = useMemo(

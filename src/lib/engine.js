@@ -133,7 +133,7 @@ export function livePriceLookup(state) {
 export function bondIncomeEvents(state, asOf) {
   const events = [];
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
-  const cpi = getCpiTable(state.settings);
+  const cpi = getCpiTable(state.settings, state.inflation);
   for (const bond of state.bonds) {
     const account = accountsById[bond.accountId];
     const rate = bondBelkaRate(bond, account);
@@ -327,7 +327,7 @@ export function flowItems(state) {
     .filter((c) => !bondsAccounts.has(c.accountId) && !isBondRedemption(c))
     .map((c) => ({ accountId: c.accountId, date: c.date, type: c.type, amount: Number(c.amount) || 0, source: c.source }));
   const today = isoDay(new Date());
-  const cpi = getCpiTable(state.settings);
+  const cpi = getCpiTable(state.settings, state.inflation);
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   for (const b of state.bonds) {
     if (!accountsById[b.accountId] || !b.purchaseDate) continue;
@@ -424,7 +424,7 @@ export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
     };
   });
 
-  const cpi = getCpiTable(state.settings);
+  const cpi = getCpiTable(state.settings, state.inflation);
   // Tylko aktywne transze – wykupione (dzień wykupu minął) nie są już częścią portfela
   const bonds = state.bonds
     .filter((b) => inFilter(accountIds, b.accountId) && b.purchaseDate <= day)
@@ -671,7 +671,7 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
   // Odsetki naliczone (skapitalizowane) w obligacjach w okresie
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   let bondAccrualDelta = 0;
-  const cpi = getCpiTable(state.settings);
+  const cpi = getCpiTable(state.settings, state.inflation);
   for (const b of state.bonds) {
     if (!accountIds.includes(b.accountId)) continue;
     const rate = bondBelkaRate(b, accountsById[b.accountId]);

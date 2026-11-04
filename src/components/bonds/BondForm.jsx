@@ -36,7 +36,7 @@ export default function BondForm({ form, setForm, onSave }) {
   const account = state.accounts.find((a) => a.id === f.accountId) || state.accounts.find((a) => a.type === 'BONDS');
   const accountBelka = account ? belkaRateForAccount(account) : 0.19;
   const belka = f.belkaEnabled === false ? 0 : accountBelka;
-  const cpi = useMemo(() => getCpiTable(state.settings), [state.settings]);
+  const cpi = useMemo(() => getCpiTable(state.settings, state.inflation), [state.settings, state.inflation]);
   const schedule = useMemo(() => (open && f.purchaseDate ? bondSchedule({ ...f, quantity: Number(f.quantity) || 0 }, cpi) : []), [open, f, cpi]);
   const set = (patch) => setForm({ ...f, ...patch });
 

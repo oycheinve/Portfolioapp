@@ -1,4 +1,5 @@
 import { BOND_NOMINAL, BOND_TYPES, CPI_PL_YOY } from './constants.js';
+import { buildCpiTable } from './inflation.js';
 
 const DAY = 86400000;
 
@@ -26,14 +27,10 @@ function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// Tabela CPI r/r: wartości domyślne (GUS) nadpisane odczytami użytkownika z ustawień
-export function getCpiTable(settings) {
-  const table = {};
-  for (const [k, v] of Object.entries(CPI_PL_YOY)) table[k] = { ...v };
-  for (const [k, v] of Object.entries(settings?.cpiOverrides || {})) {
-    if (Number.isFinite(Number(v)) && v !== '' && v !== null) table[k] = { value: Number(v), estimate: false, manual: true };
-  }
-  return table;
+// Tabela CPI: wbudowane odczyty → dane GUS z bazy (state.inflation, tabela inflation_rates) → ręczne korekty
+// z Ustawień (settings.cpiOverrides – r/r, settings.cpiMomOverrides – m/m). { 'RRRR-MM': { value: r/r %, mom, … } }
+export function getCpiTable(settings, inflation = null) {
+  return buildCpiTable(CPI_PL_YOY, inflation?.rows, settings?.cpiOverrides, settings?.cpiMomOverrides);
 }
 
 // Szczegóły oprocentowania w okresie odsetkowym (index od 0).

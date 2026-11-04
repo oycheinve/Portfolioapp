@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Landmark, Pencil, Plus, Radio, Scale, Target, Trash2, Wallet } from 'lucide-react';
+import { Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Landmark, LineChart, Pencil, Plus, Radio, Scale, Target, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
@@ -10,6 +10,7 @@ import BackupCard from '../components/settings/BackupCard.jsx';
 import CloudCard from '../components/settings/CloudCard.jsx';
 import NotificationsView from './NotificationsView.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
+import InflationCard from '../components/settings/InflationCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
 // Konta i ustawienia: trzy kategorie (akordeon – otwarta najwyżej jedna), w środku płaskie kafelki podkategorii.
@@ -24,12 +25,13 @@ const SECTIONS = {
   prices: { title: 'Notowania', hint: 'Źródła cen i odświeżanie', icon: Radio, render: () => <PricesSection /> },
   cloud: { title: 'Konto i synchronizacja w chmurze', hint: 'Logowanie i zapis w Supabase', icon: Cloud, render: () => <CloudCard /> },
   notifications: { title: 'Powiadomienia', hint: 'Zadania, zmiany notowań, raport, Web Push', icon: Bell, render: () => <NotificationsView /> },
+  inflation: { title: 'Inflacja CPI (GUS)', hint: 'Odczyty miesięczne, korekty, benchmark', icon: LineChart, render: () => <InflationCard /> },
   backup: { title: 'Kopia zapasowa danych', hint: 'Eksport i wczytanie pliku JSON', icon: Database, render: () => <BackupCard /> },
 };
 const GROUPS = [
   { id: 'assets', emoji: '💼', title: 'Portfel i Aktywa', subtitle: 'Konta inwestycyjne · nieruchomości i inne aktywa · limity IKE / IKZE', items: ['accounts', 'other-assets', 'limits'] },
   { id: 'strategy', emoji: '📈', title: 'Strategie, Cele i Giełda', subtitle: 'Cele FIRE · podatki · notowania', items: ['fire', 'tax', 'prices'] },
-  { id: 'system', emoji: '⚙️', title: 'System i Konto', subtitle: 'Konto i chmura · powiadomienia · kopia zapasowa', items: ['cloud', 'notifications', 'backup'] },
+  { id: 'system', emoji: '⚙️', title: 'System i Konto', subtitle: 'Konto i chmura · powiadomienia · inflacja · kopia zapasowa', items: ['cloud', 'notifications', 'inflation', 'backup'] },
 ];
 const groupOf = (sectionId) => GROUPS.find((g) => g.items.includes(sectionId))?.id || null;
 // Kategoria otwarta przy powrocie z sekcji (do końca sesji karty)

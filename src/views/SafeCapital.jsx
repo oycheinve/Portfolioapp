@@ -19,7 +19,7 @@ export default function SafeCapitalView() {
   const today = isoDay(new Date());
   const data = useMemo(() => {
     const v = valuePortfolio(state, { asOf: today, accountIds: null, priceLookup: livePriceLookup(state) });
-    const cpi = getCpiTable(state.settings);
+    const cpi = getCpiTable(state.settings, state.inflation);
     let bondsIncome = 0;
     for (const b of v.bonds) {
       const belka = bondBelkaRate(b, b.account);

@@ -241,6 +241,9 @@ export default function ChartsCenter({ param }) {
 
   const sum = series.summary;
   const firstBench = benchmarks.find((b) => b !== 'CPI');
+  // Realna stopa zwrotu w okresie: TWR skorygowany o faktyczną inflację CPI (GUS) z tego samego okresu
+  const cpiPct = sum.benchmarks?.CPI?.pct;
+  const realReturn = benchmarks.includes('CPI') && Number.isFinite(cpiPct) && Number.isFinite(sum.twr) ? { cpi: cpiPct, real: (1 + sum.twr) / (1 + cpiPct) - 1 } : null;
   const historyStatus = state.priceHistory.status;
   const reconstructed = Object.values(resolver.sources).includes('reconstructed');
   const usesSelection = option.kind === 'series' || option.kind === 'dividends';
@@ -396,6 +399,7 @@ export default function ChartsCenter({ param }) {
                     .join(' · ')
                 : '—'
             }
+            sub={realReturn ? `realnie ${formatPercent(realReturn.real, { sign: true, digits: 1 })} · inflacja ${formatPercent(realReturn.cpi, { sign: true, digits: 1 })}` : null}
             small
           />}
         </div>

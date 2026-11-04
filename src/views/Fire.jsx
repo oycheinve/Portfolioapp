@@ -23,7 +23,7 @@ function formatWhen(r) {
 export function currentPassiveIncome(state) {
   const today = isoDay(new Date());
   const div = dividendKpis(state, today).forwardNet;
-  const cpi = getCpiTable(state.settings);
+  const cpi = getCpiTable(state.settings, state.inflation);
   const accountsById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   let bonds = 0;
   for (const b of state.bonds) {

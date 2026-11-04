@@ -30,6 +30,8 @@ export function reducer(state, action) {
       return touch({ ...state, [collection]: [...state[collection], ...fresh] });
     }
 
+    case 'SET_INFLATION':
+      return { ...state, inflation: { ...state.inflation, ...action.payload, rows: action.payload.rows ? { ...action.payload.rows } : state.inflation.rows } };
     case 'SET_PRICE_HISTORY':
       return {
         ...state,

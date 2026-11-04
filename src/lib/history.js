@@ -5,6 +5,7 @@ import { fetchYahooHistory } from './prices.js';
 import { mapLimited } from './yahooFetch.js';
 import { fxToPLN, isoDay } from './engine.js';
 import { getCpiTable } from './bonds.js';
+import { cpiIndexFn } from './inflation.js';
 
 const DAY = 86400000;
 
@@ -90,36 +91,9 @@ export async function fetchAllHistory(state) {
   return { series, status, updatedAt: now, log: log.slice(0, 40) };
 }
 
-// Indeks CPI (miesięczny łańcuch z odczytów r/r: (1 + r/r)^(1/12) na miesiąc)
-function buildCpiIndex(settings) {
-  const table = getCpiTable(settings);
-  const keys = Object.keys(table).sort();
-  if (!keys.length) return () => 1;
-  const index = {};
-  let level = 1;
-  for (const k of keys) {
-    index[k] = level;
-    level *= Math.pow(1 + table[k].value / 100, 1 / 12);
-  }
-  const lastKey = keys[keys.length - 1];
-  const lastMonthly = Math.pow(1 + table[lastKey].value / 100, 1 / 12);
-  const lastLevel = level;
-  return (iso) => {
-    const key = iso.slice(0, 7);
-    const day = Number(iso.slice(8, 10));
-    const frac = (day - 1) / 30;
-    if (index[key] !== undefined) {
-      const next = keys[keys.indexOf(key) + 1];
-      const nextLevel = next ? index[next] : lastLevel;
-      return index[key] * Math.pow(nextLevel / index[key], frac);
-    }
-    if (key < keys[0]) return 1;
-    // po ostatnim odczycie – kontynuacja ostatniej dynamiki
-    const [y, m] = key.split('-').map(Number);
-    const [ly, lm] = lastKey.split('-').map(Number);
-    const months = (y - ly) * 12 + (m - lm) - 1 + frac;
-    return lastLevel * Math.pow(lastMonthly, Math.max(0, months));
-  };
+// Indeks CPI: łańcuch z miesięcznych odczytów GUS m/m (gdy brak – przybliżenie z r/r), patrz cpiIndexFn
+function buildCpiIndex(state) {
+  return cpiIndexFn(getCpiTable(state.settings, state.inflation));
 }
 
 // Indeks o stałej stopie rocznej (kapitalizacja ciągła w dniach), poziom 100 na 2000-01-01
@@ -209,7 +183,7 @@ export function createPriceResolver(state) {
     return interpolate(anchorsFor(inst), iso);
   };
 
-  const cpiIndex = buildCpiIndex(state.settings);
+  const cpiIndex = buildCpiIndex(state);
 
   // Benchmark: historia Yahoo → instrument-proxy z portfela → brak
   const benchmarkInfo = {};
@@ -220,7 +194,9 @@ export function createPriceResolver(state) {
       continue;
     }
     if (b.id === 'CPI') {
-      benchmarkInfo[b.id] = { available: true, source: 'Tabela CPI (GUS)' };
+      const rows = state.inflation?.rows || {};
+      const last = Object.keys(rows).sort().at(-1);
+      benchmarkInfo[b.id] = { available: true, source: last ? `GUS · odczyty miesięczne do ${last}` : 'Tabela CPI (GUS, wbudowana)' };
       continue;
     }
     const s = b.yahooSymbol ? series[b.yahooSymbol] : null;
