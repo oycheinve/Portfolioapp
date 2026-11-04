@@ -12,8 +12,9 @@ import { createClient } from '@supabase/supabase-js';
 
 export const config = { maxDuration: 60 };
 
-// Szybki model z darmowym pakietem zapytań w Google AI Studio (gemini-1.5-flash został wycofany przez Google)
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Alias najnowszego szybkiego modelu „flash” z darmowym pakietem w Google AI Studio (konkretne wersje, np.
+// gemini-1.5 / 2.0 / 2.5-flash, Google wycofuje – alias przechodzi na aktualną wersję automatycznie)
+const DEFAULT_MODEL = 'gemini-flash-latest';
 const apiKey = () => env('GEMINI_API_KEY', 'GOOGLE_API_KEY');
 const env = (...names) => names.map((n) => process.env[n]).find((v) => v && String(v).trim()) || '';
 const HEADERS = {
@@ -181,7 +182,11 @@ const backends = (key = apiKey()) => {
 export const keyKind = (key = apiKey()) => backends(key).join(' → ');
 // Modele po kolei: wybrany (GEMINI_MODEL), domyślny, alias najnowszego „flash”; przy 404 – wykryty z listy modeli
 // Przeciążenie (503) albo limit danego modelu (429) → kolejny model z listy (osobne limity darmowego pakietu)
-const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean))];
+const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-lite-latest'].filter(Boolean)).values()].filter((m) => !missingModels.has(m));
+// Modele, które zwróciły 404 (wycofane / niedostępne dla klucza) – pomijane w kolejnych zapytaniach tej instancji
+const missingModels = new Set();
+// Łączny czas prób w jednym zapytaniu (Vercel przerywa funkcję po czasie → HTTP 504)
+const TIME_BUDGET_MS = 22000;
 const overloaded = (e) => e instanceof ApiError && [429, 500, 503].includes(e.status);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const retryable = (e) => e instanceof ApiError && [400, 401, 403, 404].includes(e.status) && (e.status !== 400 || /api key|api_key|credential|auth/i.test(e.message || ''));
@@ -214,6 +219,7 @@ const keyRejected = (e) => e instanceof ApiError && (e.status === 401 || e.statu
 export async function summarize(userContent) {
   const key = apiKey();
   lastRoute.attempts = [];
+  const deadline = Date.now() + TIME_BUDGET_MS;
   let firstError; // błąd pierwszej usługi (Gemini API) – ważniejszy niż błąd usługi zapasowej
   for (const backend of backends(key)) {
     // Vertex AI tylko wtedy, gdy Gemini API odrzuciło sam klucz (nie przy przeciążeniu, limicie czy braku modelu)
@@ -226,13 +232,15 @@ export async function summarize(userContent) {
       for (const model of chain) {
         if (tried.has(model)) continue;
         tried.add(model);
+        if (Date.now() > deadline - 3000) break; // brak czasu na kolejną próbę
         try {
           let response;
           try {
             response = await generate(client, model, userContent);
           } catch (e) {
             if (!(overloaded(e) && e.status !== 429)) throw e;
-            await sleep(900); // chwilowe przeciążenie – jedna ponowna próba tego samego modelu
+            if (Date.now() > deadline - 8000) throw e;
+            await sleep(1500); // chwilowe przeciążenie – jedna ponowna próba tego samego modelu
             response = await generate(client, model, userContent);
           }
           Object.assign(lastRoute, { backend, model });
@@ -241,13 +249,15 @@ export async function summarize(userContent) {
           // ostatni „ważny” błąd: przeciążenie/limit nie przykrywa wcześniejszego braku modelu i odwrotnie
           lastError = e;
           lastRoute.attempts.push(`${backend}:${model} → ${e.status ?? 'błąd'}`);
+          if (e instanceof ApiError && e.status === 404) missingModels.add(model);
           if (overloaded(e)) continue; // przeciążony / limit – następny model
           if (!retryable(e)) throw e;
           if (e.status !== 404) break; // klucz odrzucony przez tę usługę – następna usługa
         }
       }
       if (!(lastError instanceof ApiError && lastError.status === 404) || backend !== 'studio') break;
-      chain = (await discoverFlash(client)).filter((m) => !tried.has(m)).slice(0, 3); // żaden model nie istnieje – wykryte
+      if (Date.now() > deadline - 6000) break;
+      chain = (await discoverFlash(client)).filter((m) => !tried.has(m) && !missingModels.has(m)).slice(0, 2); // żaden model nie istnieje – wykryte
       if (!chain.length) break;
     }
     firstError ||= lastError;
@@ -265,6 +275,7 @@ function generate(client, model, userContent) {
       responseJsonSchema: SCHEMA,
       temperature: 0.2, // rzeczowe podsumowanie bez „twórczości”
       maxOutputTokens: 4096,
+      httpOptions: { timeout: 15000 },
     },
   });
 }
@@ -390,7 +401,7 @@ ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.t
     if (e instanceof ApiError) {
       const detail = googleDetail(e);
       const kind = `usługa: ${keyKind() === 'vertex' ? 'Vertex AI' : keyKind() === 'studio' ? 'Gemini API' : 'Gemini API, potem Vertex AI'}`;
-      if (e.status === 429) return send(res, 429, { error: 'Limit darmowych zapytań Gemini – spróbuj za chwilę', detail });
+      if (e.status === 429) return send(res, 429, { error: 'Wyczerpany darmowy limit zapytań Gemini dla tego klucza – spróbuj później (limit odnawia się codziennie) albo sprawdź limity w Google AI Studio', detail });
       if (e.status === 503 || e.status === 500) return send(res, 503, { error: 'Modele Gemini są chwilowo przeciążone po stronie Google – spróbuj za minutę', detail });
       if (e.status === 400 && /api key|api_key|credential/i.test(e.message || '')) return send(res, 503, { error: `Nieprawidłowy klucz GEMINI_API_KEY (${kind})`, detail });
       if (e.status === 401 || e.status === 403) return send(res, 503, { error: `Klucz odrzucony przez Google (${kind}) – sprawdź klucz w Google AI Studio`, detail });
