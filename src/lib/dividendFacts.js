@@ -65,9 +65,14 @@ export function fixedDividendPlan(state, today) {
     const to = new Date(`${f.payDate}T12:00:00`);
     to.setDate(to.getDate() + 7);
     const toIso = `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`;
-    const inWindow = state.income.filter((i) => i.type === 'DIVIDEND' && i.instrumentId === inst.id && i.date >= f.exDate && i.date <= toIso);
+    // Ta sama wypłata z importu (np. XTB) = wpis z dnia wypłaty (−3 / +7 dni); inne wypłaty KTY (np. wcześniejsza
+    // transza, wpisy ręczne z innych dni) nie blokują stałego wpisu
+    const from = new Date(`${f.payDate}T12:00:00`);
+    from.setDate(from.getDate() - 3);
+    const fromIso = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
+    const kty = new Set(state.instruments.filter((i) => factsFor(i).includes(f)).map((i) => i.id));
     const current = state.income.find((i) => i.id === incomeId);
-    const imported = inWindow.filter((i) => i.id !== incomeId && !isAutoBooked(i));
+    const imported = state.income.filter((i) => i.type === 'DIVIDEND' && kty.has(i.instrumentId) && i.date >= fromIso && i.date <= toIso && i.id !== incomeId && !isAutoBooked(i) && Number(i.gross) > 0);
     if (imported.length) {
       if (current) out.removeIncome.push(incomeId);
       continue;
