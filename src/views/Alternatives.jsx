@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bitcoin, Coins, Gem, RefreshCw, Settings2 } from 'lucide-react';
+import { Bitcoin, Coins, Gem, ListPlus, RefreshCw, Settings2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { TROY_OZ_G, altQuotesStale, altSettings, alternativesValue, fetchAltQuotes } from '../lib/alternatives.js';
-import { formatDateTime, formatPLN } from '../lib/format.js';
+import { formatDate, formatDateTime, formatPLN } from '../lib/format.js';
 import { BetaBadge, Button, Card, Field, Input, Segmented, Toggle } from '../components/ui.jsx';
 
 const ICONS = { gold: Coins, silver: Coins, btc: Bitcoin, eth: Gem };
@@ -15,7 +15,7 @@ const qtyTxt = (p) => `${p.qty.toLocaleString('pl-PL', { maximumFractionDigits: 
 
 // Surowce i Krypto (BETA): złoto, srebro, BTC, ETH – ilość wpisywana przez użytkownika, ceny na żywo z Yahoo Finance
 // (USD → PLN po kursie USDPLN=X), zmiana dzienna (cena i kurs), doliczanie do Majątku Całkowitego.
-export default function AlternativesView() {
+export default function AlternativesView({ onNavigate }) {
   const { state, actions } = useApp();
   const alt = altSettings(state);
   const v = alternativesValue(state);
@@ -130,6 +130,40 @@ export default function AlternativesView() {
                 </div>
               </div>
             </div>
+            {p.fromPurchases ? (
+              <div className="mt-3 rounded-xl border border-stone-200 px-3 py-2.5 dark:border-white/10" aria-label={`Z rejestru zakupów – ${p.label}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                    Z rejestru zakupów ({p.purchases.count}) · od {formatDate(p.purchases.first)}
+                  </div>
+                  <Button size="sm" icon={ListPlus} onClick={() => onNavigate?.('settings/cash')}>
+                    Rejestr zakupów
+                  </Button>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-sm tabular">
+                  <div>
+                    <div className="text-[11px] text-stone-500 dark:text-stone-400">Ilość</div>
+                    <div className="font-semibold">{qtyTxt(p)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-stone-500 dark:text-stone-400">Średnia cena nabycia</div>
+                    <div className="font-semibold">
+                      {formatPLN(p.avgPrice)} / {p.metal ? (p.unit === 'g' ? 'g' : 'oz') : 'szt.'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-stone-500 dark:text-stone-400">Koszt łącznie</div>
+                    <div className="font-semibold">{formatPLN(p.costPLN)}</div>
+                  </div>
+                </div>
+                {p.metal && (
+                  <div className="mt-2">
+                    <Segmented size="sm" value={p.unit} onChange={(u) => setHolding(p.id, { unit: u })} ariaLabel={`Jednostka – ${p.label}`} options={[{ value: 'g', label: 'gramy' }, { value: 'oz', label: 'uncje' }]} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
             <div className="mt-3 flex flex-wrap items-end gap-3">
               <Field label={`Ilość (${p.metal ? (p.unit === 'g' ? 'gramy' : 'uncje') : 'szt.'})`} className="w-40">
                 <Input
@@ -202,6 +236,11 @@ export default function AlternativesView() {
                 </Field>
               )}
             </div>
+                <button type="button" onClick={() => onNavigate?.('settings/cash')} className="mt-2 text-[11px] text-blue-600 hover:underline dark:text-blue-400">
+                  albo dodaj zakupy w rejestrze (Ustawienia → Rejestr wpłat i wypłat) – średnia cena nabycia policzy się sama
+                </button>
+              </>
+            )}
             <div className="mt-3 grid grid-cols-2 gap-2.5">
               <div className={`col-span-2 min-w-0 rounded-xl px-3 py-2.5 ${p.pl === null ? 'bg-stone-50 dark:bg-white/[0.03]' : p.pl >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-red-50 dark:bg-red-500/10'}`} aria-label={`Zysk / strata – ${p.label}`}>
                 <div className="text-[11px] text-stone-500 dark:text-stone-400">Zysk / strata</div>

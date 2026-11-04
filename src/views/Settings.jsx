@@ -13,6 +13,7 @@ import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import DividendSyncCard from '../components/dividends/DividendSyncCard.jsx';
 import InflationCard from '../components/settings/InflationCard.jsx';
 import CashRegister from './CashRegister.jsx';
+import AltPurchasesCard from '../components/alternatives/AltPurchasesCard.jsx';
 import JulkaIkeCard from '../components/settings/JulkaIkeCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
@@ -21,7 +22,17 @@ import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES 
 // i #/settings/notifications (także #/notifications) prowadzą wprost do sekcji.
 const SECTIONS = {
   accounts: { title: 'Konta inwestycyjne', hint: 'IKE, IKZE, konta maklerskie', icon: Wallet, render: () => <AccountsSection /> },
-  cash: { title: 'Rejestr wpłat i wypłat', hint: 'Wpłaty, wypłaty i historia przepływów', icon: ArrowLeftRight, render: () => <CashRegister /> },
+  cash: {
+    title: 'Rejestr wpłat i wypłat',
+    hint: 'Wpłaty, wypłaty, historia przepływów i zakupy surowców / krypto',
+    icon: ArrowLeftRight,
+    render: () => (
+      <>
+        <AltPurchasesCard />
+        <CashRegister />
+      </>
+    ),
+  },
   julka: { title: 'IKE - Julka', hint: 'Osobne konto: ETF IE00BK5BQT80 za 100 zł / mies.', icon: Baby, render: () => <JulkaIkeCard /> },
   'other-assets': { title: 'Nieruchomości i inne aktywa', hint: 'Wliczane do Majątku Całkowitego', icon: Building2, render: () => <OtherAssetsSection /> },
   limits: { title: 'Limity wpłat IKE / IKZE', hint: 'Roczne limity i wykorzystanie', icon: CalendarClock, render: () => <LimitsCard /> },

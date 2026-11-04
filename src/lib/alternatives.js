@@ -74,10 +74,40 @@ export function valueAltPosition(asset, holding, quotes) {
 }
 
 // Wszystkie pozycje + suma (wartość w PLN, zmiana dzienna); inNetWorth – czy doliczać do Majątku Całkowitego
+// ── Rejestr zakupów (zakładka Wpłaty) ──
+// purchases: [{ id, asset, date, qty, unit: 'g' | 'oz' | 'szt.', unitPrice, currency: 'PLN' | 'USD', fx }]
+// Kwota w PLN = ilość × cena jednostkowa × kurs (USD; PLN – 1). Metale liczone w gramach (uncja = 31,1034768 g).
+export function purchaseTotalPLN(p) {
+  const fx = p?.currency === 'USD' ? num(p?.fx) : 1;
+  return num(p?.qty) * num(p?.unitPrice) * fx;
+}
+const toGrams = (qty, unit) => (unit === 'oz' ? qty * TROY_OZ_G : qty);
+
+// Średnia cena nabycia (średnia ważona ilością): Σ kwot PLN / Σ jednostek – w jednostce wyświetlanej (g / oz / szt.)
+export function purchaseStats(state, assetId, displayUnit = 'g') {
+  const asset = ALT_ASSETS.find((a) => a.id === assetId);
+  const list = (altSettings(state).purchases || []).filter((p) => p.asset === assetId && num(p.qty) > 0);
+  if (!asset || !list.length) return null;
+  const total = list.reduce((sum, p) => sum + purchaseTotalPLN(p), 0);
+  const base = list.reduce((sum, p) => sum + (asset.metal ? toGrams(num(p.qty), p.unit) : num(p.qty)), 0); // gramy / sztuki
+  const qty = asset.metal && displayUnit === 'oz' ? base / TROY_OZ_G : base;
+  return { count: list.length, totalPLN: total, qty, unit: asset.metal ? displayUnit : 'szt.', avgPricePLN: qty > 0 ? total / qty : 0, first: list.reduce((m, p) => (p.date < m ? p.date : m), list[0].date) };
+}
+
+// Pozycja efektywna: z rejestru zakupów (ilość i średnia cena nabycia w PLN), a bez zakupów – wpis ręczny
+export function effectiveHolding(state, assetId) {
+  const h = altSettings(state).holdings?.[assetId] || {};
+  const st = purchaseStats(state, assetId, h.unit || 'g');
+  if (!st) return { ...h, fromPurchases: false };
+  return { ...h, qty: st.qty, avgPrice: st.avgPricePLN, avgCurrency: 'PLN', avgFx: null, fromPurchases: true, purchases: st };
+}
+
 export function alternativesValue(state) {
   const s = altSettings(state);
-  const holdings = s.holdings || {};
-  const positions = ALT_ASSETS.map((a) => valueAltPosition(a, holdings[a.id], s.quotes));
+  const positions = ALT_ASSETS.map((a) => {
+    const h = effectiveHolding(state, a.id);
+    return { ...valueAltPosition(a, h, s.quotes), fromPurchases: h.fromPurchases, purchases: h.purchases || null };
+  });
   const held = positions.filter((p) => p.qty > 0);
   const value = held.reduce((sum, p) => sum + p.value, 0);
   const dayChange = held.reduce((sum, p) => sum + p.dayChange, 0);
@@ -104,7 +134,7 @@ export function alternativesValue(state) {
 export async function fetchAltQuotes(state, { all = true, fresh = false } = {}) {
   const { fetchYahooQuote } = await import('./prices.js');
   const s = altSettings(state);
-  const list = ALT_ASSETS.filter((a) => all || num(s.holdings?.[a.id]?.qty) > 0);
+  const list = ALT_ASSETS.filter((a) => all || num(effectiveHolding(state, a.id).qty) > 0);
   const prevQuotes = s.quotes || {};
   const next = { ...prevQuotes, fx: { ...(prevQuotes.fx || {}) } };
   const errors = [];
