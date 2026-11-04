@@ -67,7 +67,7 @@ async function fetchSummary(key, payload) {
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.summary) throw new Error(body.error ? `${body.error}${body.detail ? ` – Google: ${body.detail}` : ''}` : (res.status === 404 ? 'Podsumowania AI są dostępne po wdrożeniu na serwerze (Vercel)' : res.status === 504 ? 'Serwer AI nie odpowiedział na czas – spróbuj ponownie za chwilę' : `HTTP ${res.status}`));
-  const value = { summary: body.summary, basis: body.basis, ...(body.period ? { period: body.period } : {}) };
+  const value = { summary: body.summary, basis: body.basis, ...(body.period ? { period: body.period } : {}), ...(body.note ? { note: body.note } : {}) };
   writeCache(key, value);
   return value;
 }

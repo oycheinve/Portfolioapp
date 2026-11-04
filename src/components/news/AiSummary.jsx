@@ -8,7 +8,7 @@ const SENTIMENT = {
   mieszany: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
   neutralny: 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300',
 };
-const BASIS = { lead: 'na podstawie zajawki artykułu', headlines: 'na podstawie nagłówków z wczoraj i dziś' };
+const BASIS = { lead: 'na podstawie zajawki artykułu', headlines: 'na podstawie nagłówków z wczoraj i dziś', title: 'tylko na podstawie tytułu' };
 
 // „Nazwa: wartość (kontekst)” – nazwa pogrubiona dla szybkiego czytania na telefonie
 function NumberLine({ text }) {
@@ -32,9 +32,14 @@ function Section({ title, children }) {
 }
 
 export function SummaryBody({ value }) {
-  const { summary, basis, period } = value;
+  const { summary, basis, period, note } = value;
   return (
     <div className="space-y-3 text-[13px] leading-relaxed text-stone-700 dark:text-stone-300">
+      {basis === 'title' && (
+        <p className="rounded-lg border border-amber-200/70 bg-amber-50/70 px-2.5 py-1.5 text-[12px] text-amber-900 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200">
+          Treść artykułu niedostępna{note ? ` – ${note}` : ''}. Poniżej skrót z samego tytułu; pełną treść otworzysz w przeglądarce.
+        </p>
+      )}
       {period?.label && (
         <p className="rounded-lg bg-white/70 px-2.5 py-1.5 text-[12px] font-semibold text-stone-800 dark:bg-white/[0.05] dark:text-stone-100">
           Podsumowanie z okresu: <span className="font-normal text-stone-600 tabular dark:text-stone-300">{period.label}</span>

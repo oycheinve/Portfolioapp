@@ -382,25 +382,40 @@ export default async function handler(req, res) {
     let content;
     let basis;
     let period = null;
+    let note = '';
     if (mode === 'article') {
       if (!/^https?:\/\//.test(body.link || '')) return send(res, 400, { error: 'Brak adresu artykułu' });
       key = `a|${body.link}`;
       if (cache.has(key)) return send(res, 200, { ...cache.get(key), cached: true });
-      let fetched;
+      let fetched = null;
+      let blocked = '';
       try {
         fetched = await articleText(body.link);
+        if (fetched.text.length < 80) blocked = 'portal nie udostępnia treści (płatna treść lub blokada)';
       } catch (e) {
-        return send(res, 422, { error: `Nie udało się pobrać treści artykułu (${e.message}) – otwórz go w przeglądarce` });
+        blocked = /HTTP 40[13]/.test(e.message) ? `portal blokuje automatyczne pobieranie treści (${e.message})` : `nie udało się pobrać treści (${e.message})`;
       }
-      if (fetched.text.length < 80) return send(res, 422, { error: 'Portal nie udostępnia treści artykułu (płatna treść lub blokada) – otwórz go w przeglądarce' });
-      basis = fetched.basis;
-      content = `Spółka / temat w aplikacji: ${String(body.topic || '—').slice(0, 80)}
+      const head = `Spółka / temat w aplikacji: ${String(body.topic || '—').slice(0, 80)}
 Tytuł: ${String(body.title || '').slice(0, 300)}
-Źródło: ${String(body.source || '').slice(0, 80)} · ${fmtDate(body.pubDate)}
+Źródło: ${String(body.source || '').slice(0, 80)} · ${fmtDate(body.pubDate)}`;
+      if (blocked) {
+        // Treść niedostępna (np. HTTP 403 portalu) – krótkie podsumowanie z samego tytułu zamiast błędu
+        if (!String(body.title || '').trim()) return send(res, 422, { error: `Nie udało się pobrać treści artykułu – ${blocked}. Otwórz go w przeglądarce` });
+        basis = 'title';
+        note = blocked;
+        content = `${head}
+Uwaga: treść artykułu jest niedostępna (${blocked}). Masz wyłącznie tytuł. Podsumuj tylko to, co wynika wprost z tytułu: „event” – 1 zdanie; „numbers” – wyłącznie liczby obecne w tytule (inaczej pusta lista); „impact” – 1–2 punkty, wyraźnie zaznacz, że to wniosek z samego tytułu i od czego zależy znaczenie dla akcjonariuszy. Nie dopowiadaj faktów, liczb ani spółek spoza tytułu.
+<artykul>
+${String(body.title || '').slice(0, 300)}
+</artykul>`;
+      } else {
+        basis = fetched.basis;
+        content = `${head}
 ${basis === 'lead' ? 'Uwaga: dostępna jest tylko zajawka artykułu.\n' : ''}
 <artykul>
 ${fetched.text}
 </artykul>`;
+      }
     } else {
       const items = (Array.isArray(body.items) ? body.items : []).filter((it) => it?.title).slice(0, 60);
       if (!items.length) return send(res, 400, { error: 'Brak artykułów do podsumowania' });
@@ -418,7 +433,7 @@ Opieraj się wyłącznie na nagłówkach – bez domysłów co do treści artyku
 ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.title).slice(0, 300)} (${String(it.source || '').slice(0, 60)}, ${fmtDate(it.pubDate)})`).join('\n')}
 </naglowki>`;
     }
-    const out = { ...(await summarize(content)), basis, ...(period ? { period } : {}) };
+    const out = { ...(await summarize(content)), basis, ...(period ? { period } : {}), ...(note ? { note } : {}) };
     if (cache.size > 300) cache.delete(cache.keys().next().value);
     cache.set(key, out);
     return send(res, 200, { ...out, cached: false });
