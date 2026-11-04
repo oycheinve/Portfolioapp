@@ -8,7 +8,7 @@ const SENTIMENT = {
   mieszany: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
   neutralny: 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300',
 };
-const BASIS = { lead: 'na podstawie zajawki artykułu', headlines: 'na podstawie nagłówków dnia' };
+const BASIS = { lead: 'na podstawie zajawki artykułu', headlines: 'na podstawie nagłówków z wczoraj i dziś' };
 
 // „Nazwa: wartość (kontekst)” – nazwa pogrubiona dla szybkiego czytania na telefonie
 function NumberLine({ text }) {
@@ -32,9 +32,14 @@ function Section({ title, children }) {
 }
 
 export function SummaryBody({ value }) {
-  const { summary, basis } = value;
+  const { summary, basis, period } = value;
   return (
     <div className="space-y-3 text-[13px] leading-relaxed text-stone-700 dark:text-stone-300">
+      {period?.label && (
+        <p className="rounded-lg bg-white/70 px-2.5 py-1.5 text-[12px] font-semibold text-stone-800 dark:bg-white/[0.05] dark:text-stone-100">
+          Podsumowanie z okresu: <span className="font-normal text-stone-600 tabular dark:text-stone-300">{period.label}</span>
+        </p>
+      )}
       <Section title="Główne wydarzenie">
         <p className="font-medium text-stone-800 dark:text-stone-100">{summary.event}</p>
       </Section>
@@ -85,7 +90,8 @@ export default function AiSummary({ cacheKey, payload, loadingText = 'AI analizu
   const run = async (force = false) => {
     setState({ status: 'loading' });
     try {
-      setState({ status: 'done', value: await requestSummary(cacheKey, payloadRef.current, { force }) });
+      const p = typeof payloadRef.current === 'function' ? payloadRef.current() : payloadRef.current;
+      setState({ status: 'done', value: await requestSummary(cacheKey, p, { force }) });
     } catch (e) {
       setState({ status: 'error', error: e.message });
     }

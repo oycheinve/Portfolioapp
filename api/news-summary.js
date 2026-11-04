@@ -44,7 +44,7 @@ Zasady:
 const SCHEMA = {
   type: 'object',
   properties: {
-    event: { type: 'string', description: 'Główne wydarzenie – 1–2 zdania' },
+    event: { type: 'string', description: 'Główne wydarzenie – 1–2 zdania (w podsumowaniu okresu 4–6 zdań)' },
     numbers: { type: 'array', items: { type: 'string' }, description: 'Kluczowe liczby i dane – punkty „Nazwa: wartość (kontekst)”' },
     impact: { type: 'array', items: { type: 'string' }, description: 'Wpływ na spółkę / inwestora – 2–4 punkty (w podsumowaniu dnia 3–6)' },
     sentiment: { type: 'string', enum: ['pozytywny', 'negatywny', 'neutralny', 'mieszany'] },
@@ -296,12 +296,30 @@ function parseResponse(response, model) {
   return {
     summary: {
       event: String(s.event || '').trim(),
-      numbers: (s.numbers || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 15),
+      numbers: (s.numbers || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 20),
       impact: (s.impact || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 6),
       sentiment: ['pozytywny', 'negatywny', 'neutralny', 'mieszany'].includes(s.sentiment) ? s.sentiment : 'neutralny',
     },
     model: response.modelVersion || model,
   };
+}
+
+// Okres podsumowania dnia: od (początek wczoraj) do (chwila zapytania) – z aplikacji, a gdy brak / błędny –
+// z dat nagłówków. Etykieta po polsku, np. „3.11.2026, 00:00 – 4.11.2026, 10:15”.
+function digestPeriod(raw, items) {
+  const parse = (v) => {
+    const d = v ? new Date(v) : null;
+    return d && !Number.isNaN(d.getTime()) ? d : null;
+  };
+  const dates = items.map((it) => parse(it.pubDate)).filter(Boolean).sort((x, y) => x - y);
+  let from = parse(raw?.from);
+  let to = parse(raw?.to);
+  if (!from || !to || from > to || to - from > 3 * 86400000) {
+    from = dates[0] || new Date();
+    to = dates.at(-1) || new Date();
+  }
+  const fmt = (d) => d.toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return { from: from.toISOString(), to: to.toISOString(), label: `${fmt(from)} – ${fmt(to)}` };
 }
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) : 'brak daty');
@@ -363,6 +381,7 @@ export default async function handler(req, res) {
     let key;
     let content;
     let basis;
+    let period = null;
     if (mode === 'article') {
       if (!/^https?:\/\//.test(body.link || '')) return send(res, 400, { error: 'Brak adresu artykułu' });
       key = `a|${body.link}`;
@@ -383,21 +402,23 @@ ${basis === 'lead' ? 'Uwaga: dostępna jest tylko zajawka artykułu.\n' : ''}
 ${fetched.text}
 </artykul>`;
     } else {
-      const items = (Array.isArray(body.items) ? body.items : []).filter((it) => it?.title).slice(0, 40);
+      const items = (Array.isArray(body.items) ? body.items : []).filter((it) => it?.title).slice(0, 60);
       if (!items.length) return send(res, 400, { error: 'Brak artykułów do podsumowania' });
-      key = `d|${items.map((it) => it.title).join('|')}`;
+      period = digestPeriod(body.period, items);
+      key = `d|${period.label}|${items.map((it) => it.title).join('|')}`;
       if (cache.has(key)) return send(res, 200, { ...cache.get(key), cached: true });
       basis = 'headlines';
-      content = `Podsumowanie dnia (${String(body.label || 'dzisiejsze wiadomości').slice(0, 80)}) na podstawie nagłówków wiadomości o spółkach z portfela inwestora. To podsumowanie dnia – bardziej szczegółowe niż dla pojedynczego artykułu:
-- „event”: 3–5 zdań – najważniejsze wydarzenia dnia pogrupowane według spółek (nazwa spółki na początku zdania), od najistotniejszych dla akcjonariuszy; wspomnij każdą spółkę z nagłówków, o której jest konkretna informacja.
-- „numbers”: wszystkie liczby z nagłówków (kursy, zmiany %, kwoty, wyniki, dywidendy, ceny docelowe, daty) – każdy punkt zaczynaj od nazwy spółki, np. „LPP – kurs: −3,2% na sesji 3.11”.
-- „impact”: 3–6 punktów – po jednym dla każdej spółki, której dotyczą istotne wiadomości (nazwa spółki na początku), plus ewentualnie jeden punkt o nastroju rynku, gdy wynika z nagłówków.
-Opieraj się wyłącznie na nagłówkach – bez domysłów co do treści artykułów.
+      content = `Podsumowanie okresu ${period.label} (${String(body.label || 'wczoraj i dziś').slice(0, 40)}) na podstawie ${items.length} nagłówków wiadomości o spółkach z portfela inwestora.
+Cel: maksymalnie skompresowana pigułka wiedzy – każde zdanie i każdy punkt niesie konkretny fakt (kto, co, ile, kiedy). Zero zdań ogólnych, zero powtórzeń między sekcjami, zero przymiotników ocennych bez danych.
+- „event”: 4–6 krótkich, gęstych zdań – najważniejsze wydarzenia okresu pogrupowane według spółek (nazwa spółki na początku zdania, kilka faktów tej samej spółki w jednym zdaniu), od najistotniejszych dla akcjonariuszy; przy faktach zależnych od dnia podaj dzień (wczoraj / dziś albo datę). Uwzględnij każdą spółkę, o której nagłówki niosą konkretną informację.
+- „numbers”: wszystkie liczby z nagłówków (kursy, zmiany %, kwoty, wyniki, dywidendy, ceny docelowe, rekomendacje, wolumeny, daty) w formacie „Spółka – wskaźnik: wartość (kontekst, dzień)”, np. „LPP – kurs: −3,2% (sesja 3.11)”; najważniejsze najpierw, do 20 punktów.
+- „impact”: 3–6 punktów „Spółka – konsekwencja dla akcjonariusza (od czego zależy dalszy ruch)”; ewentualnie jeden punkt o nastroju rynku (np. WIG20), gdy wynika z nagłówków. Nie powtarzaj faktów z „event” – wyciągaj z nich wnioski.
+Opieraj się wyłącznie na nagłówkach – bez domysłów co do treści artykułów i bez informacji spoza listy.
 <naglowki>
 ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.title).slice(0, 300)} (${String(it.source || '').slice(0, 60)}, ${fmtDate(it.pubDate)})`).join('\n')}
 </naglowki>`;
     }
-    const out = { ...(await summarize(content)), basis };
+    const out = { ...(await summarize(content)), basis, ...(period ? { period } : {}) };
     if (cache.size > 300) cache.delete(cache.keys().next().value);
     cache.set(key, out);
     return send(res, 200, { ...out, cached: false });

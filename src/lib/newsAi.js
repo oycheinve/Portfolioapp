@@ -31,7 +31,7 @@ const hash = (text) => {
   for (let i = 0; i < text.length; i += 1) h = (h * 33 + text.charCodeAt(i)) >>> 0;
   return h.toString(36);
 };
-export const digestKey = (day, items) => `d2|${day}|${hash(items.map((it) => it.link).sort().join(' '))}`;
+export const digestKey = (day, items) => `d3|${day}|${hash(items.map((it) => it.link).sort().join(' '))}`;
 export const cachedSummary = (key) => readCache()[key] || null;
 
 async function sessionToken() {
@@ -67,7 +67,7 @@ async function fetchSummary(key, payload) {
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.summary) throw new Error(body.error ? `${body.error}${body.detail ? ` – Google: ${body.detail}` : ''}` : (res.status === 404 ? 'Podsumowania AI są dostępne po wdrożeniu na serwerze (Vercel)' : res.status === 504 ? 'Serwer AI nie odpowiedział na czas – spróbuj ponownie za chwilę' : `HTTP ${res.status}`));
-  const value = { summary: body.summary, basis: body.basis };
+  const value = { summary: body.summary, basis: body.basis, ...(body.period ? { period: body.period } : {}) };
   writeCache(key, value);
   return value;
 }

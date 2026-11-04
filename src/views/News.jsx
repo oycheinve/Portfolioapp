@@ -10,6 +10,12 @@ import { articleKey, digestKey } from '../lib/newsAi.js';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
 const LIST_LIMIT = 60;
+const DIGEST_LIMIT = 60;
+// Początek wczorajszego dnia (północ czasu lokalnego)
+const startOfYesterday = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+}; // najwyżej tyle nagłówków z wczoraj i dziś w podsumowaniu dnia
 const DIGEST_COLLAPSED_KEY = 'fintrack-news-digest-collapsed';
 
 // Nazwa do wyszukiwania: pełna nazwa spółki bez dopisków typu „S.A.” (trafniejsze wyniki niż sam ticker)
@@ -140,14 +146,17 @@ export default function NewsView() {
   }, [result.items, held, topics]);
   const selectedIds = useMemo(() => new Set(selected.map((t) => t.id)), [selected]);
   const generalCount = classified.filter((it) => it.mainId === GENERAL_ID).length;
-  const items = classified.filter((it) => (it.mainId === GENERAL_ID ? generalOn : selectedIds.has(it.mainId))).slice(0, LIST_LIMIT);
+  const visible = classified.filter((it) => (it.mainId === GENERAL_ID ? generalOn : selectedIds.has(it.mainId)));
+  const items = visible.slice(0, LIST_LIMIT);
   const allErrors = result.errors.length > 0 && result.items.length === 0;
-  // Podsumowanie dnia (AI): artykuły z ostatnich 24 godzin z widocznej listy
-  const dayItems = useMemo(() => {
-    const from = Date.now() - 24 * 3600 * 1000;
-    return items.filter((it) => it.pubDate && new Date(it.pubDate).getTime() >= from).slice(0, 40);
-  }, [items]);
+  // Podsumowanie dnia (AI): artykuły z wczoraj i dziś (od północy wczoraj do teraz) z zaznaczonych tematów
   const today = isoDay(new Date());
+  const yesterday = isoDay(new Date(Date.now() - 86400000));
+  const dayItems = useMemo(() => {
+    const from = startOfYesterday().getTime();
+    return visible.filter((it) => it.pubDate && new Date(it.pubDate).getTime() >= from).slice(0, DIGEST_LIMIT);
+  }, [visible, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fmtDay = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pl-PL', { day: 'numeric', month: 'numeric', year: 'numeric' });
   const [aiOpen, setAiOpen] = useState(() => new Set());
   // Zwinięte podsumowanie dnia – wybór zapamiętany w przeglądarce
   const [digestCollapsed, setDigestCollapsed] = useState(() => {
@@ -311,7 +320,7 @@ export default function NewsView() {
               <div className="min-w-0 flex-1">
                 <h2 className="text-sm font-semibold">Podsumowanie dnia (AI)</h2>
                 <p className="truncate text-xs text-stone-500 dark:text-stone-400">
-                  {dayItems.length} {dayItems.length === 1 ? 'artykuł' : dayItems.length % 10 >= 2 && dayItems.length % 10 <= 4 && (dayItems.length % 100 < 12 || dayItems.length % 100 > 14) ? 'artykuły' : 'artykułów'} z ostatnich 24 godzin
+                  {dayItems.length} {dayItems.length === 1 ? 'artykuł' : dayItems.length % 10 >= 2 && dayItems.length % 10 <= 4 && (dayItems.length % 100 < 12 || dayItems.length % 100 > 14) ? 'artykuły' : 'artykułów'} · wczoraj i dziś ({fmtDay(yesterday)} – {fmtDay(today)})
                 </p>
               </div>
               <span className="shrink-0 text-[11px] font-medium text-stone-400 dark:text-stone-500">{digestCollapsed ? 'Pokaż' : 'Zwiń'}</span>
@@ -322,7 +331,12 @@ export default function NewsView() {
               <AiSummary
                 allowRefresh
                 cacheKey={digestKey(today, dayItems)}
-                payload={{ mode: 'digest', label: `ostatnie 24 godziny, ${today}`, items: dayItems.map((it) => ({ title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag })) }}
+                payload={() => ({
+                  mode: 'digest',
+                  label: 'wczoraj i dziś',
+                  period: { from: startOfYesterday().toISOString(), to: new Date().toISOString() },
+                  items: dayItems.map((it) => ({ title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag })),
+                })}
                 loadingText="AI analizuje wiadomości dnia…"
               />
             </div>
