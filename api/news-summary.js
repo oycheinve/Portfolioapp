@@ -180,7 +180,10 @@ const backends = (key = apiKey()) => {
 };
 export const keyKind = (key = apiKey()) => backends(key).join(' → ');
 // Modele po kolei: wybrany (GEMINI_MODEL), domyślny, alias najnowszego „flash”; przy 404 – wykryty z listy modeli
-const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-latest'].filter(Boolean))];
+// Przeciążenie (503) albo limit danego modelu (429) → kolejny model z listy (osobne limity darmowego pakietu)
+const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'].filter(Boolean))];
+const overloaded = (e) => e instanceof ApiError && [429, 500, 503].includes(e.status);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const retryable = (e) => e instanceof ApiError && [400, 401, 403, 404].includes(e.status) && (e.status !== 400 || /api key|api_key|credential|auth/i.test(e.message || ''));
 
 const clients = new Map();
@@ -218,11 +221,19 @@ export async function summarize(userContent) {
         if (tried.has(model)) continue;
         tried.add(model);
         try {
-          const response = await generate(client, model, userContent);
+          let response;
+          try {
+            response = await generate(client, model, userContent);
+          } catch (e) {
+            if (!(overloaded(e) && e.status !== 429)) throw e;
+            await sleep(900); // chwilowe przeciążenie – jedna ponowna próba tego samego modelu
+            response = await generate(client, model, userContent);
+          }
           Object.assign(lastRoute, { backend, model });
           return parseResponse(response, model);
         } catch (e) {
           lastError = e;
+          if (overloaded(e)) continue; // przeciążony / limit – następny model
           if (!retryable(e)) throw e;
           if (e.status !== 404) break; // klucz odrzucony przez tę usługę – następna usługa
         }
@@ -371,6 +382,7 @@ ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.t
       const detail = googleDetail(e);
       const kind = `usługa: ${keyKind() === 'vertex' ? 'Vertex AI' : keyKind() === 'studio' ? 'Gemini API' : 'Gemini API, potem Vertex AI'}`;
       if (e.status === 429) return send(res, 429, { error: 'Limit darmowych zapytań Gemini – spróbuj za chwilę', detail });
+      if (e.status === 503 || e.status === 500) return send(res, 503, { error: 'Modele Gemini są chwilowo przeciążone po stronie Google – spróbuj za minutę', detail });
       if (e.status === 400 && /api key|api_key|credential/i.test(e.message || '')) return send(res, 503, { error: `Nieprawidłowy klucz GEMINI_API_KEY (${kind})`, detail });
       if (e.status === 401 || e.status === 403) return send(res, 503, { error: `Klucz odrzucony przez Google (${kind}) – sprawdź klucz w Google AI Studio`, detail });
       if (e.status === 404) return send(res, 503, { error: `Żaden model Gemini nie jest dostępny dla tego klucza (${kind}; próbowane: ${modelChain().join(', ')})`, detail });
