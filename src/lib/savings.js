@@ -3,43 +3,15 @@
 import { BELKA_RATE, CAPITALIZATION } from './constants.js';
 import { computeCashBalances, incomeEventsWithTax, bondIncomeEvents, isoDay, safeInterestFilter } from './engine.js';
 import { belkaRateForAccount } from './tax.js';
+import { accruedSavingsInterest, grossInterest, nextCapitalizationDate } from './accrual.js';
 
 function parse(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
-function daysBetween(a, b) {
-  return Math.round((parse(b) - parse(a)) / 86400000);
-}
-
-// Granice okresów kapitalizacji (data dopisania odsetek). Kapitalizacja dzienna księgowana zbiorczo co miesiąc.
-export function nextCapitalizationDate(iso, capitalization) {
-  const d = parse(iso);
-  const y = d.getFullYear();
-  const m = d.getMonth();
-  if (capitalization === 'YEARLY') return isoDay(new Date(y + 1, 0, 1));
-  if (capitalization === 'QUARTERLY') return isoDay(new Date(y, Math.floor(m / 3) * 3 + 3, 1));
-  return isoDay(new Date(y, m + 1, 1));
-}
-
-function periodStartFor(iso, capitalization) {
-  const d = parse(iso);
-  const y = d.getFullYear();
-  const m = d.getMonth();
-  if (capitalization === 'YEARLY') return isoDay(new Date(y, 0, 1));
-  if (capitalization === 'QUARTERLY') return isoDay(new Date(y, Math.floor(m / 3) * 3, 1));
-  return isoDay(new Date(y, m, 1));
-}
-
-// Odsetki brutto za okres [start, end) od salda `balance`
-export function grossInterest(balance, ratePct, capitalization, start, end) {
-  const r = (Number(ratePct) || 0) / 100;
-  const days = Math.max(0, daysBetween(start, end));
-  if (balance <= 0 || r <= 0 || days === 0) return 0;
-  if (capitalization === 'DAILY') return balance * (Math.pow(1 + r / 365, days) - 1);
-  return balance * r * (days / 365);
-}
+// Granice okresów i odsetki za okres – wspólne z wyceną kont (accrual.js)
+export { nextCapitalizationDate, grossInterest } from './accrual.js';
 
 export function effectiveAnnualRate(ratePct, capitalization) {
   const r = (Number(ratePct) || 0) / 100;
@@ -47,9 +19,9 @@ export function effectiveAnnualRate(ratePct, capitalization) {
   return Math.pow(1 + r / n, n) - 1;
 }
 
-function lastInterestDate(state, accountId) {
+function lastInterestDate(state, accountId, upTo = null) {
   return state.income
-    .filter((i) => i.accountId === accountId && i.type === 'INTEREST')
+    .filter((i) => i.accountId === accountId && i.type === 'INTEREST' && (!upTo || i.date <= upTo))
     .reduce((m, i) => (!m || i.date > m ? i.date : m), null);
 }
 
@@ -62,9 +34,11 @@ export function savingsProjection(state, account, today = isoDay(new Date())) {
   const deferred = !!account.belkaDeferred && account.belkaEnabled !== false;
   const cap = account.capitalization || 'MONTHLY';
   const rate = Number(account.interestRate) || 0;
-  const periodStart = periodStartFor(today, cap);
   const nextCap = nextCapitalizationDate(today, cap);
-  const accruedGross = grossInterest(balance, rate, cap, periodStart, today);
+  // Narosłe od początku okresu kapitalizacji (albo od ostatniego zaksięgowania) – to samo co w wycenie konta
+  const acc = accruedSavingsInterest(account, balance, today, lastInterestDate(state, account.id, today));
+  const periodStart = acc.from;
+  const accruedGross = acc.gross;
   const r = rate / 100;
   const monthGross = balance > 0 ? balance * (cap === 'DAILY' ? Math.pow(1 + r / 365, 365 / 12) - 1 : r / 12) : 0;
   const ear = effectiveAnnualRate(rate, cap);
@@ -87,6 +61,7 @@ export function savingsProjection(state, account, today = isoDay(new Date())) {
     last12Net: last12.reduce((s, i) => s + i.net, 0),
     last12Gross: last12.reduce((s, i) => s + (Number(i.gross) || 0), 0),
     lastPosted: lastInterestDate(state, account.id),
+    valueToday: balance + accruedGross * (1 - belka), // saldo + odsetki narosłe netto (wycena konta na dziś)
     deferred,
     pitDueYtd: deferred
       ? income

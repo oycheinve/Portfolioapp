@@ -52,7 +52,7 @@ export function buildPortfolioRows(state) {
       since: firstDate(ops),
       category: savings ? 'CASH' : 'FREE_CASH',
       name: savings ? a.name : `Wolne środki – ${a.name}`,
-      sub: savings ? `${Number(a.interestRate) || 0}% · kapitalizacja` : `gotówka konta ${a.name} (w wartości konta)`,
+      sub: savings ? `${Number(a.interestRate) || 0}% · kapitalizacja${(v.byAccount[a.id]?.accruedInterest || 0) >= 0.005 ? ` · w tym narosłe odsetki ${(v.byAccount[a.id].accruedInterest).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł` : ''}` : `gotówka konta ${a.name} (w wartości konta)`,
       accountId: a.id,
       account: a,
       value: cash,

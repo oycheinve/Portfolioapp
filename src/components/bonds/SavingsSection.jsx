@@ -76,8 +76,11 @@ function SavingsCard({ account, onEdit, onDelete, onAdd }) {
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="text-xs text-stone-500 dark:text-stone-400">Saldo</div>
-          <div className="text-3xl font-semibold tracking-tight tabular">{formatPLN(p.balance)}</div>
+          <div className="text-xs text-stone-500 dark:text-stone-400">Wartość na dziś</div>
+          <div className="text-3xl font-semibold tracking-tight tabular">{formatPLN(p.valueToday)}</div>
+          <div className="text-[11px] text-stone-500 tabular dark:text-stone-400">
+            saldo {formatPLN(p.balance)} + narosłe odsetki {formatPLN(p.accruedNet)} (codziennie)
+          </div>
         </div>
         <Badge tone={p.deferred ? 'violet' : p.belka === 0 ? 'green' : 'amber'}>
           {p.deferred ? 'Belka odroczona (PIT)' : account.belkaEnabled === false ? 'bez Belki (brutto)' : `Belka ${Math.round(p.belka * 100)}%`}

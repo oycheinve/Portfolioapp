@@ -3,6 +3,7 @@ import { ACCOUNT_TYPES, XTB_FX_FEE_PCT } from './constants.js';
 import { getCpiTable, valueBond } from './bonds.js';
 import { bondBelkaRate, computeIncomeTax, limitForAccount } from './tax.js';
 import { alternativesValue } from './alternatives.js';
+import { accruedSavingsInterest } from './accrual.js';
 
 const DAY = 86400000;
 
@@ -437,9 +438,19 @@ export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
     .filter((b) => !b.valuation.matured);
 
   const byAccount = {};
+  let savingsAccrued = 0;
   for (const a of state.accounts) {
     if (!inFilter(accountIds, a.id)) continue;
-    byAccount[a.id] = { stocks: 0, etf: 0, bonds: 0, cash: cash[a.id] || 0, total: 0 };
+    const booked = cash[a.id] || 0;
+    // Konto oszczędnościowe: odsetki narosłe do dnia wyceny (netto) doliczane codziennie do wartości konta –
+    // przed formalną kapitalizacją; po zaksięgowaniu odsetek naliczanie startuje od nowa (bez podwójnego liczenia)
+    let accrued = 0;
+    if (a.type === 'SAVINGS' && booked > 0 && Number(a.interestRate) > 0) {
+      const lastPosted = income.filter((i) => i.accountId === a.id && i.type === 'INTEREST' && i.date <= day).reduce((m, i) => (!m || i.date > m ? i.date : m), null);
+      accrued = accruedSavingsInterest(a, booked, day, lastPosted).net;
+      savingsAccrued += accrued;
+    }
+    byAccount[a.id] = { stocks: 0, etf: 0, bonds: 0, cash: booked + accrued, bookedCash: booked, accruedInterest: accrued, total: 0 };
   }
   for (const p of positions) {
     const slot = byAccount[p.accountId];
@@ -478,6 +489,8 @@ export function valuePortfolio(state, { asOf, accountIds, priceLookup }) {
       bonds: bondsTotal,
       cash: cashTotal,
       savingsCash,
+      savingsAccrued,
+      bondsAccrued: bonds.reduce((sum, b) => sum + (b.valuation.accruedNet || 0), 0),
       brokerCash: cashTotal - savingsCash,
       market: stocks + etf,
       safe: bondsTotal + cashTotal,
@@ -685,7 +698,14 @@ export function computePeriodStats(state, { period = 'ALL', filter = 'ALL', toda
     const startAcc = startDate && b.purchaseDate <= startDate ? valueBond(b, startDate, rate, cpi).accruedNet : 0;
     bondAccrualDelta += endAcc - startAcc;
   }
-  const interestNet = interestCashNet + bondAccrualDelta;
+  // Odsetki narosłe (niezaksięgowane) na kontach oszczędnościowych – część wartości, więc i odsetek w okresie
+  const savAcc = (date) => {
+    if (!date) return 0;
+    const vv = valuePortfolio(state, { asOf: date, accountIds: accountIds.filter((id) => accountsById[id]?.type === 'SAVINGS'), priceLookup: () => null });
+    return vv.totals.savingsAccrued || 0;
+  };
+  const savingsAccrualDelta = state.accounts.some((a) => a.type === 'SAVINGS' && accountIds.includes(a.id)) ? savAcc(todayIso) - savAcc(startDate) : 0;
+  const interestNet = interestCashNet + bondAccrualDelta + savingsAccrualDelta;
   const priceGain = totalReturn - dividendsNet - interestNet;
 
   const mdReturn = modifiedDietz(startValue, endValue, flowsList(state, accountIds, startDate, todayIso), startDate || firstFlowDate(state, accountIds) || todayIso, todayIso);

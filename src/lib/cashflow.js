@@ -149,7 +149,7 @@ function savingsEvents(state, win) {
         const gross = grossInterest(p.balance, p.rate, p.capitalization, start, end);
         if (gross > 0.005) {
           const t = taxSplit(gross, account);
-          out.push({ kind: 'interest', date: end, label: `Odsetki – ${account.name}`, detail: `${p.rate.toLocaleString('pl-PL')}% od ${p.balance.toLocaleString('pl-PL', { maximumFractionDigits: 2 })} zł · kapitalizacja`, status: 'prognoza', gross, ...t });
+          out.push({ kind: 'interest', date: end, label: `Odsetki – ${account.name}`, detail: `${p.rate.toLocaleString('pl-PL')}% od ${p.balance.toLocaleString('pl-PL', { maximumFractionDigits: 2 })} zł · kapitalizacja${start === p.periodStart && p.accruedNet >= 0.005 ? ` · w tym narosłe już ${p.accruedNet.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł (w wartości poduszki)` : ''}`, status: 'prognoza', gross, ...t });
         }
       }
       start = end;

@@ -475,3 +475,9 @@ Więcej → **Surowce i Krypto**: złoto, srebro (gramy lub uncje trojańskie), 
 - Karta aktywa (zwijana, z podsumowaniem w belce): cena rynkowa (PLN i USD), ilość, wartość w PLN, zmiana dzienna 1D w PLN (ruch ceny i kursu).
 - Majątek Całkowity: wartość doliczana do Net Worth (Pulpit – osobny segment „Surowce i krypto”, cele majątku, udział poduszki); przełącznik w „Ustawieniach modułu”. W Portfelu kategoria „Surowce i krypto” z filtrem.
 - Zapis: `settings.alternatives` (`holdings`, `quotes`, `includeInNetWorth`) – localStorage i Supabase razem z portfelem.
+
+## Odsetki narosłe dziennie – konto oszczędnościowe i obligacje
+
+- **Konto oszczędnościowe:** wycena (`valuePortfolio` → `byAccount[id].cash`) = zaksięgowane saldo + odsetki narosłe netto od początku bieżącego okresu kapitalizacji (albo od ostatniego wpisu odsetek, jeśli był później) do dnia wyceny (`src/lib/accrual.js`, kapitalizacja dzienna – procent składany, pozostałe – liniowo wg dni; Belka wg konta). Pola pomocnicze: `bookedCash`, `accruedInterest`, `totals.savingsAccrued`. Po zaksięgowaniu odsetek (automatycznie w dniu kapitalizacji) naliczanie startuje od nowa – wartość jest ciągła, bez podwójnego liczenia.
+- **Obligacje skarbowe:** wartość = nominał + odsetki narosłe netto liniowo wg dni okresu odsetkowego (jak dotąd, `valueBond`); suma w `totals.bondsAccrued`.
+- Dotyczy Majątku Całkowitego, Poduszki finansowej (karta KO: „Wartość na dziś” = saldo + narosłe), Portfela, wykresów struktury, migawek historii, Cash Flow Forecast (kapitał poduszki; wypłata w dniu kapitalizacji z adnotacją, ile już narosło) i statystyk – przyrost narosłych odsetek liczony jako odsetki, nie zysk kursowy.
