@@ -399,6 +399,10 @@ Zakładka „Zadania” (`#/tasks`, w dolnym pasku w miejscu „Cele” i w menu
 - **Benchmark „Inflacja CPI”** w Wykresach: indeks cen łańcuchowany z miesięcznych odczytów GUS m/m (przybliżenie z r/r tylko dla miesięcy bez m/m); źródło w liście benchmarków („GUS · odczyty miesięczne do RRRR-MM”). Kafelek „vs benchmarki” pokazuje realną stopę zwrotu w okresie: (1 + TWR) / (1 + inflacja CPI) − 1. Te same odczyty r/r liczą oprocentowanie obligacji COI/EDO.
 - **Ustawienia → System i Konto → Inflacja CPI (GUS)**: ostatni odczyt r/r i m/m, źródło i zakres danych z bazy, „Odśwież z bazy”, „Pobierz z GUS teraz” oraz tabela korekt (r/r albo m/m, rok po roku).
 
+## Zweryfikowane dywidendy (korekty danych Yahoo)
+
+Yahoo podaje dzień dywidendy i stawkę, ale nie dzień wypłaty (aplikacja szacuje go na „dzień dywidendy + 14 dni”), a przy wypłatach w transzach bywa niepełne. `src/lib/dividendFacts.js` (`VERIFIED_DIVIDENDS`) zawiera potwierdzone dane spółek, np. **Grupa Kęty (KTY) – II transza: dzień dywidendy 18.08.2026, wypłata 4.11.2026, 32,64 zł na akcję**. Przy synchronizacji dywidend (Dywidendy → „Synchronizuj” albo automatycznie co 12 h) pozycja harmonogramu z tego terminu dostaje prawdziwy dzień wypłaty i stawkę (albo powstaje nowa), a po dniu wypłaty jest księgowana według liczby akcji na każdym koncie w dniu przed dniem dywidendy – także ułamkowej (np. 0,2887 × 32,64 zł = 9,42 zł brutto; podatek Belki według typu konta, IKE/IKZE 0%) – o ile wypłaty nie ma już w rejestrze (np. z importu XTB; bez duplikatów). Kolejne potwierdzone wypłaty dodaje się jako nowe wpisy tablicy.
+
 ## Listy zakupów
 
 Zakładka „Listy zakupów” (`#/shopping`, „Zakupy” na dolnym pasku i pozycja w menu bocznym; `src/views/Shopping.jsx`, `src/lib/shopping.js`): wiele list (pigułki z liczbą pozycji do kupienia, „Nowa lista”, zmiana nazwy, usunięcie listy z pozycjami), dodawanie produktów z opcjonalną ilością, odhaczanie (przekreślenie, sekcja „Kupione”), usuwanie pozycji i „Usuń kupione”. Wybrana lista zapamiętana w przeglądarce.

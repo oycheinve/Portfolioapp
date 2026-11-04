@@ -3,6 +3,7 @@
 import { computeHoldings, isoDay } from './engine.js';
 import { bookingEntries, canAutoBook, dividendHistory, scheduleStatus, sharesAt } from './dividends.js';
 import { fetchYahooDividends } from './prices.js';
+import { factsFor } from './dividendFacts.js';
 import { mapLimited, yahooSymbolFor } from './yahooFetch.js';
 
 const DAY = 86400000;
@@ -91,24 +92,51 @@ export function planDividendSync(state, histories, { autoBook = false, today = i
     }
   }
 
-  // 3) Automatyczne księgowanie potwierdzonych wypłat po dniu wypłaty
+  // 3) Zweryfikowane dywidendy (dividendFacts.js): poprawa dnia wypłaty i stawki w harmonogramie albo nowa pozycja
+  const updates = [];
+  for (const inst of state.instruments) {
+    for (const f of factsFor(inst)) {
+      const held = Object.values(sharesAt(state, inst.id, addDays(f.exDate, -1))).reduce((sum, q) => sum + q, 0);
+      if (held <= 0) continue;
+      const fields = { dps: f.dps, currency: f.currency, exDate: f.exDate, payDate: f.payDate, payDateEstimated: false, estimated: false, source: 'VERIFIED', note: f.note, verified: true };
+      const near = (list) => list.filter((it) => it.instrumentId === inst.id && it.exDate && daysApart(it.exDate, f.exDate) <= 10);
+      const inNew = near(newItems);
+      const inSchedule = near(schedule);
+      const differs = (it) => Object.entries(fields).some(([k, v]) => it[k] !== v);
+      if (inNew.length || inSchedule.length) {
+        // Prognozy / dane Yahoo z tego terminu → jedna pozycja z prawdziwymi danymi (pozostałe nowe pomijane)
+        const target = inSchedule.find((it) => it.bookedAt) || inSchedule[0] || inNew[0];
+        for (const it of inNew) if (it !== target) newItems.splice(newItems.indexOf(it), 1);
+        if (inNew.includes(target)) Object.assign(target, fields);
+        else if (differs(target)) updates.push({ ...target, ...fields });
+      } else {
+        newItems.push({ id: id(inst, f.exDate, 'v'), instrumentId: inst.id, ...fields, withholdingPct: 0 });
+      }
+    }
+  }
+  const withUpdates = [...schedule.map((it) => updates.find((u) => u.id === it.id) || it), ...newItems];
+
+  // 4) Automatyczne księgowanie potwierdzonych wypłat po dniu wypłaty (zweryfikowane – zawsze, gdy brak w rejestrze)
   const bookings = [];
-  if (autoBook) {
-    for (const item of [...schedule, ...newItems]) {
-      if (item.bookedAt || !canAutoBook(item, today) || scheduleStatus(item, today) !== 'PENDING') continue;
+  {
+    for (const item of withUpdates) {
+      if (!autoBook && !item.verified) continue;
+      // zweryfikowane: także sprawdzenie rejestru (wypłata z importu XTB = już wypłacona, bez duplikatu)
+      if (item.bookedAt || !canAutoBook(item, today) || scheduleStatus(item, today, item.verified ? state : null) !== 'PENDING') continue;
       const entries = bookingEntries(state, item, today);
       if (entries.length) bookings.push({ item, entries });
     }
   }
-  return { newItems, bookings };
+  return { newItems, updates, bookings };
 }
 
 export async function runDividendSync(state, actions, { silent = false } = {}) {
   const prefs = state.settings.dividendPrefs || {};
   const { histories, log } = await fetchDividendHistories(state);
   const online = Object.keys(histories).length;
-  const { newItems, bookings } = planDividendSync(state, histories, { autoBook: !!prefs.autoBook });
+  const { newItems, updates, bookings } = planDividendSync(state, histories, { autoBook: !!prefs.autoBook });
   if (newItems.length) actions.addMany('dividendSchedule', newItems);
+  for (const u of updates) if (!bookings.some((b) => b.item.id === u.id)) actions.upsert('dividendSchedule', u);
   for (const b of bookings) {
     actions.addMany('income', b.entries);
     actions.upsert('dividendSchedule', { ...b.item, bookedAt: new Date().toISOString(), incomeIds: b.entries.map((e) => e.id) });
