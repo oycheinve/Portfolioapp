@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
-import { BarChart3, CalendarClock, CalendarDays, CloudDownload, ListChecks, TrendingUp } from 'lucide-react';
+import { BarChart3, CalendarClock, CalendarDays, ChevronRight, CloudDownload, ListChecks, TrendingUp, Waves } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { DividendCalendar, DividendKpis } from '../components/dividends/DividendWidgets.jsx';
 import { ForecastCard, ScheduleCard } from '../components/dividends/DividendManagement.jsx';
 import DividendSyncCard, { useDividendAutoSync } from '../components/dividends/DividendSyncCard.jsx';
 import { upcomingReminders } from '../lib/dividends.js';
 import { formatDate } from '../lib/format.js';
-import { Accordion, Badge, Card } from '../components/ui.jsx';
+import { Accordion, Badge, BetaBadge, Card } from '../components/ui.jsx';
 
 // Najbliższe daty dywidendowe (odcięcie i wypłata) – zwięzła lista pod kalendarzem
 function UpcomingList() {
@@ -54,7 +54,29 @@ const ITEMS = [
   { id: 'sync', title: 'Automatyczne dane dywidend', subtitle: 'Synchronizacja dat i kwot z Yahoo / historii wypłat', icon: CloudDownload, render: () => <DividendSyncCard /> },
 ];
 
-export default function DividendsView() {
+export default function DividendsView({ onNavigate }) {
   useDividendAutoSync();
-  return <Accordion items={ITEMS} storageKey="wealth-app-dividends-open-v2" defaultOpen={['summary']} exclusive />;
+  return (
+    <div className="space-y-3">
+      {/* Wejście do prognozy przepływów (BETA) */}
+      <button
+        type="button"
+        onClick={() => onNavigate?.('cashflow')}
+        className="flex w-full items-center gap-3 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 px-4 py-3 text-left transition-colors hover:bg-emerald-50 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+          <Waves size={18} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">
+            Cash Flow Forecast
+            <BetaBadge />
+          </span>
+          <span className="block truncate text-xs text-stone-500 dark:text-stone-400">Dywidendy, odsetki z KO i obligacje – prognoza na 12 miesięcy</span>
+        </span>
+        <ChevronRight size={18} className="shrink-0 text-stone-400" />
+      </button>
+      <Accordion items={ITEMS} storageKey="wealth-app-dividends-open-v2" defaultOpen={['summary']} exclusive />
+    </div>
+  );
 }

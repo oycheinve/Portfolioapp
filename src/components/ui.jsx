@@ -486,3 +486,15 @@ export function Accordion({ items, storageKey, defaultOpen = [], exclusive = fal
     </div>
   );
 }
+
+// Plakietka „BETA” – nowe funkcje w fazie testów (tytuły kart, kafelki menu, nagłówki widoków)
+export function BetaBadge({ className = '' }) {
+  return (
+    <span
+      className={`ml-1.5 inline-flex shrink-0 items-center rounded-full border border-fuchsia-300/70 bg-fuchsia-50 px-1.5 py-px align-middle text-[9px] leading-3 font-bold tracking-wider text-fuchsia-700 uppercase dark:border-fuchsia-400/30 dark:bg-fuchsia-500/10 dark:text-fuchsia-300 ${className}`}
+      title="Nowa funkcja w fazie testów"
+    >
+      Beta
+    </span>
+  );
+}

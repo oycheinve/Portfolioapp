@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, X } from 'lucide-react';
+import { ClipboardList, Cloud, CloudOff, Coins, FileText, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, Waves, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
 import { useNotificationScheduler } from '../state/useNotificationScheduler.js';
+import { BetaBadge } from './ui.jsx';
 
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 // hidden: true = tymczasowo ukryta we wszystkich menu (widok i adres #/… nadal działają, kod bez zmian)
@@ -23,6 +24,7 @@ export const NAV_ITEMS = [
   { id: 'budget', label: 'Budżet', longLabel: 'Budżet', icon: ClipboardList, mobile: true },
   { id: 'news', label: 'Newsy', longLabel: 'Newsy', icon: Newspaper, mobile: true },
   { id: 'goals', label: 'Cele', longLabel: 'Cele roczne', icon: Target },
+  { id: 'cashflow', label: 'Cash Flow', longLabel: 'Cash Flow Forecast', icon: Waves, beta: true },
   { id: 'shopping', label: 'Zakupy', longLabel: 'Listy zakupów', icon: ShoppingCart, mobile: true },
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings, topbar: true },
 ];
@@ -35,7 +37,7 @@ const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon) – płaska siatka 2 kolumn; pod nią przełącznik motywu i Ustawienia.
 // Pozycje z dolnego paska (np. Newsy) i ukryte nie trafiają do arkusza.
-const MORE_ORDER = ['charts', 'goals', 'fire', 'safe', 'simulations', 'allocation', 'reports', 'dividends'];
+const MORE_ORDER = ['charts', 'cashflow', 'goals', 'fire', 'safe', 'simulations', 'allocation', 'reports', 'dividends'];
 const MORE_ITEMS = [...MORE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)), ...MENU_ITEMS.filter((n) => !MORE_ORDER.includes(n.id))].filter((n) => n && !n.mobile);
 
 // Etykieta pozycji menu – FIRE z rokiem docelowym
@@ -144,6 +146,7 @@ export function Layout({ view, onNavigate, children }) {
               >
                 <Icon size={18} />
                 {navLabel(item, state.settings)}
+                {item.beta && <BetaBadge />}
                 {badges[item.id] && (
                   <span
                     className="ml-auto rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white"
@@ -174,7 +177,10 @@ export function Layout({ view, onNavigate, children }) {
               <Wallet size={16} />
             </span>
           </div>
-          <h1 className="truncate text-base font-semibold">{navLabel(current, state.settings)}</h1>
+          <h1 className="truncate text-base font-semibold">
+            {navLabel(current, state.settings)}
+            {current?.beta && <BetaBadge />}
+          </h1>
           <div className="ml-auto flex items-center gap-2">
             {!online && (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300" title="Brak połączenia – dane z pamięci urządzenia, kursy z ostatnich danych">
@@ -274,7 +280,10 @@ export function Layout({ view, onNavigate, children }) {
                     <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${active ? 'bg-white/80 dark:bg-white/10' : 'bg-white/70 dark:bg-white/10'}`}>
                       <Icon size={20} strokeWidth={1.8} />
                     </span>
-                    <span className="min-w-0">{navLabel(item, state.settings).replace(/\//g, '/\u200b')}</span>
+                    <span className="min-w-0">
+                      {navLabel(item, state.settings).replace(/\//g, '/\u200b')}
+                      {item.beta && <BetaBadge />}
+                    </span>
                     {badges[item.id] && <span className="absolute top-2 right-2.5 rounded-full bg-red-600 px-1.5 text-[10px] leading-4 font-semibold text-white">{badges[item.id]}</span>}
                   </button>
                 );

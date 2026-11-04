@@ -10,6 +10,7 @@ import { seriesColor } from '../lib/colors.js';
 import { formatPLN, formatPercent } from '../lib/format.js';
 import { Card } from '../components/ui.jsx';
 import BondsSection from '../components/bonds/BondsSection.jsx';
+import SafeGoalCard from '../components/bonds/SafeGoalCard.jsx';
 import { CpiCard, SavingsCards } from '../components/bonds/SavingsSection.jsx';
 
 // Poduszka finansowa = konta oszczędnościowe i konta obligacji skarbowych (obligacje + gotówka na nich).
@@ -56,6 +57,7 @@ export default function SafeCapitalView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      <SafeGoalCard value={data.safe} yearlyIncomeNet={data.income} />
       <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-neutral-900">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
