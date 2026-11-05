@@ -365,6 +365,7 @@ export async function summarize(userContent) {
           if (e instanceof ApiError && e.status === 404) missingModels.add(model);
           if (overloaded(e) || timedOut(e)) continue; // przeciążony / limit / za długo – następny model
           if (!(e instanceof ApiError) && e.status === 502) continue; // ucięta / nieczytelna odpowiedź (JSON) – następny model
+          if (e instanceof ApiError && e.status === 400 && !keyRejected(e)) continue; // ogólny „invalid argument” – następny model
           if (!retryable(e)) throw e;
           if (e.status !== 404) break; // klucz odrzucony przez tę usługę – następna usługa
         }
@@ -403,7 +404,9 @@ async function generate(client, model, userContent, deadline = Date.now() + 4500
   try {
     return await call({ ...base, thinkingConfig: { thinkingBudget: 0 } });
   } catch (e) {
-    if (!(e instanceof ApiError && e.status === 400 && /think/i.test(e.message || ''))) throw e;
+    // Model nie przyjmuje wyłączenia „myślenia” – Google odpowiada ogólnym 400 („Request contains an invalid
+    // argument”), więc każdy 400 niezwiązany z kluczem → to samo zapytanie bez thinkingConfig
+    if (!(e instanceof ApiError && e.status === 400 && !/api key|api_key|credential|auth/i.test(e.message || ''))) throw e;
     noThinking.add(model);
     return call(base);
   }
@@ -582,6 +585,7 @@ ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.t
       if (e.status === 400 && /api key|api_key|credential/i.test(e.message || '')) return send(res, 503, { error: `Nieprawidłowy klucz GEMINI_API_KEY (${kind})`, detail });
       if (e.status === 401 || e.status === 403) return send(res, 503, { error: `Klucz odrzucony przez Google (${kind}) – sprawdź klucz w Google AI Studio`, detail });
       if (e.status === 404) return send(res, 503, { error: `Żaden model Gemini nie jest dostępny dla tego klucza (${kind}; próbowane: ${modelChain().join(', ')})`, detail });
+      if (e.status === 400) return send(res, 502, { error: 'Model Gemini odrzucił zapytanie (nieobsługiwana opcja) – spróbuj ponownie; jeśli się powtarza, ustaw zmienną GEMINI_MODEL (np. gemini-flash-lite-latest)', detail });
       return send(res, 502, { error: `Błąd usługi AI (${e.status ?? 'sieć'})`, detail });
     }
     if (timedOut(e)) return send(res, 503, { error: 'Google nie zdążył przygotować podsumowania (przeciążenie modeli Gemini) – spróbuj za chwilę' });
