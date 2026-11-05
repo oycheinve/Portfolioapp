@@ -297,9 +297,11 @@ const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemin
 // Modele, które zwróciły 404 (wycofane / niedostępne dla klucza) – pomijane w kolejnych zapytaniach tej instancji
 const missingModels = new Set();
 // Łączny czas prób w jednym zapytaniu (Vercel przerywa funkcję po czasie → HTTP 504)
-const TIME_BUDGET_MS = 22000;
+const TIME_BUDGET_MS = 50000; // funkcja ma maxDuration 60 s
 const overloaded = (e) => e instanceof ApiError && [429, 500, 503, 504].includes(e.status);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Próba przerwana po naszej stronie (limit czasu) – jak przeciążenie: kolejny model
+const timedOut = (e) => e?.name === 'TimeoutError' || e?.name === 'AbortError' || /aborted|timed? ?out/i.test(e?.message || '');
 const retryable = (e) => e instanceof ApiError && [400, 401, 403, 404].includes(e.status) && (e.status !== 400 || /api key|api_key|credential|auth/i.test(e.message || ''));
 
 const clients = new Map();
@@ -347,21 +349,22 @@ export async function summarize(userContent) {
         try {
           let response;
           try {
-            response = await generate(client, model, userContent);
+            response = await generate(client, model, userContent, deadline);
           } catch (e) {
-            if (!(overloaded(e) && e.status !== 429 && e.status !== 504)) throw e;
+            if (timedOut(e) || !(overloaded(e) && e.status !== 429 && e.status !== 504)) throw e;
             if (Date.now() > deadline - 8000) throw e;
             await sleep(1500); // chwilowe przeciążenie – jedna ponowna próba tego samego modelu
-            response = await generate(client, model, userContent);
+            response = await generate(client, model, userContent, deadline);
           }
           Object.assign(lastRoute, { backend, model });
           return parseResponse(response, model);
         } catch (e) {
           // ostatni „ważny” błąd: przeciążenie/limit nie przykrywa wcześniejszego braku modelu i odwrotnie
           lastError = e;
-          lastRoute.attempts.push(`${backend}:${model} → ${e.status ?? 'błąd'}`);
+          lastRoute.attempts.push(`${backend}:${model} → ${timedOut(e) ? 'limit czasu' : e.status ?? 'błąd'}`);
           if (e instanceof ApiError && e.status === 404) missingModels.add(model);
-          if (overloaded(e)) continue; // przeciążony / limit – następny model
+          if (overloaded(e) || timedOut(e)) continue; // przeciążony / limit / za długo – następny model
+          if (!(e instanceof ApiError) && e.status === 502) continue; // ucięta / nieczytelna odpowiedź (JSON) – następny model
           if (!retryable(e)) throw e;
           if (e.status !== 404) break; // klucz odrzucony przez tę usługę – następna usługa
         }
@@ -376,19 +379,34 @@ export async function summarize(userContent) {
   throw firstError;
 }
 
-function generate(client, model, userContent) {
-  return client.models.generateContent({
-    model,
-    contents: [{ role: 'user', parts: [{ text: userContent }] }],
-    config: {
-      systemInstruction: SYSTEM,
-      responseMimeType: 'application/json',
-      responseJsonSchema: SCHEMA,
-      temperature: 0.2, // rzeczowe podsumowanie bez „twórczości”
-      maxOutputTokens: 4096,
-      httpOptions: { timeout: 15000 },
-    },
-  });
+// Bez httpOptions.timeout: SDK wysyła go do Google jako nagłówek X-Server-Timeout i Google przerywa generowanie
+// błędem 504 DEADLINE_EXCEEDED („Deadline expired before operation could complete”). Limit czasu tylko po naszej
+// stronie (abortSignal). „Myślenie” modelu wyłączone (proste podsumowanie, a znacząco wydłuża odpowiedź); model,
+// który nie przyjmuje tej opcji (400), dostaje zapytanie bez niej – zapamiętane dla instancji.
+const noThinking = new Set();
+async function generate(client, model, userContent, deadline = Date.now() + 45000) {
+  const base = {
+    systemInstruction: SYSTEM,
+    responseMimeType: 'application/json',
+    responseJsonSchema: SCHEMA,
+    temperature: 0.2, // rzeczowe podsumowanie bez „twórczości”
+    maxOutputTokens: 4096,
+  };
+  const call = (config) =>
+    client.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: userContent }] }],
+      // jedna próba najwyżej 28 s – zostaje czas na model zapasowy w ramach budżetu zapytania
+      config: { ...config, abortSignal: AbortSignal.timeout(Math.max(5000, Math.min(28000, deadline - Date.now() - 1000))) },
+    });
+  if (noThinking.has(model)) return call(base);
+  try {
+    return await call({ ...base, thinkingConfig: { thinkingBudget: 0 } });
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 400 && /think/i.test(e.message || ''))) throw e;
+    noThinking.add(model);
+    return call(base);
+  }
 }
 
 function parseResponse(response, model) {
@@ -566,6 +584,7 @@ ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.t
       if (e.status === 404) return send(res, 503, { error: `Żaden model Gemini nie jest dostępny dla tego klucza (${kind}; próbowane: ${modelChain().join(', ')})`, detail });
       return send(res, 502, { error: `Błąd usługi AI (${e.status ?? 'sieć'})`, detail });
     }
+    if (timedOut(e)) return send(res, 503, { error: 'Google nie zdążył przygotować podsumowania (przeciążenie modeli Gemini) – spróbuj za chwilę' });
     return send(res, e.status || 500, { error: e.message || 'Błąd podsumowania' });
   }
 }

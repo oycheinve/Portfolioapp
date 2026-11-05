@@ -64,14 +64,39 @@ export function requestSummary(key, payload, { force = false } = {}) {
   return p;
 }
 
-async function fetchSummary(key, payload) {
-  const token = await sessionToken();
+// Kolejka: najwyżej 2 zapytania naraz (kilka rozwiniętych artykułów nie przeciąża limitu Gemini na minutę)
+const MAX_PARALLEL = 2;
+let running = 0;
+const waiting = [];
+async function slot(fn) {
+  if (running >= MAX_PARALLEL) await new Promise((r) => waiting.push(r));
+  running += 1;
+  try {
+    return await fn();
+  } finally {
+    running -= 1;
+    waiting.shift()?.();
+  }
+}
+const busyAnswer = (res, body) => res.status === 504 || (res.status === 503 && /przeciąż|nie zdążył/i.test(body?.error || ''));
+
+async function post(payload, token) {
   const res = await fetch('/api/news-summary', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(payload),
   });
-  const body = await res.json().catch(() => ({}));
+  return { res, body: await res.json().catch(() => ({})) };
+}
+
+async function fetchSummary(key, payload) {
+  const token = await sessionToken();
+  let { res, body } = await slot(() => post(payload, token));
+  // Chwilowe przeciążenie / przekroczony czas po stronie Google – jedna cicha ponowna próba po chwili
+  if (busyAnswer(res, body)) {
+    await new Promise((r) => setTimeout(r, 3000));
+    ({ res, body } = await slot(() => post(payload, token)));
+  }
   if (!res.ok || !body.summary) throw new Error(body.error ? `${body.error}${body.detail ? ` – Google: ${body.detail}` : ''}` : (res.status === 404 ? 'Podsumowania AI są dostępne po wdrożeniu na serwerze (Vercel)' : res.status === 504 ? 'Serwer AI nie odpowiedział na czas – spróbuj ponownie za chwilę' : `HTTP ${res.status}`));
   const value = { summary: body.summary, basis: body.basis, ...(body.period ? { period: body.period } : {}), ...(body.note ? { note: body.note } : {}), ...(body.via ? { via: body.via } : {}) };
   writeCache(key, value);
