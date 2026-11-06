@@ -7,6 +7,7 @@ import { GENERAL_ID, classifyArticle } from '../lib/newsSubject.js';
 import { Card, EmptyState } from '../components/ui.jsx';
 import AiSummary from '../components/news/AiSummary.jsx';
 import { articleKey, digestKey } from '../lib/newsAi.js';
+import { portfolioContext, portfolioKey } from '../lib/aiContext.js';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
 const LIST_LIMIT = 60;
@@ -28,6 +29,9 @@ const searchName = (inst) =>
 // zaznaczonych tematów od najnowszych; wybór zapamiętany (lista odznaczonych – nowe tematy domyślnie włączone)
 export default function NewsView() {
   const { state } = useApp();
+  // Spółki z portfela dla podsumowań AI (wpływ newsa na posiadane aktywa); klucz pamięci zależy od składu portfela
+  const aiPortfolio = useMemo(() => portfolioContext(state), [state.trades, state.instruments, state.accounts, state.prices, state.dividendSchedule]); // eslint-disable-line react-hooks/exhaustive-deps
+  const aiKeySuffix = aiPortfolio.length ? `|p${portfolioKey(aiPortfolio)}` : '';
   const held = useMemo(() => {
     const ids = new Set(computeHoldings(state, isoDay(new Date()), null).filter((h) => h.quantity > 1e-9).map((h) => h.instrumentId));
     return state.instruments
@@ -330,9 +334,10 @@ export default function NewsView() {
             <div id="news-digest-body" hidden={digestCollapsed} className="mt-1.5">
               <AiSummary
                 allowRefresh
-                cacheKey={digestKey(today, dayItems)}
+                cacheKey={`${digestKey(today, dayItems)}${aiKeySuffix}`}
                 payload={() => ({
                   mode: 'digest',
+                  portfolio: aiPortfolio,
                   label: 'wczoraj i dziś',
                   period: { from: startOfYesterday().toISOString(), to: new Date().toISOString() },
                   items: dayItems.map((it) => ({ title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag })),
@@ -387,8 +392,8 @@ export default function NewsView() {
               <AiSummary
                 className="mt-2"
                 autoLoad
-                cacheKey={articleKey(it.link)}
-                payload={{ mode: 'article', link: it.link, title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag }}
+                cacheKey={`${articleKey(it.link)}${aiKeySuffix}`}
+                payload={{ mode: 'article', link: it.link, title: it.title, source: it.source, pubDate: it.pubDate, topic: it.tag, portfolio: aiPortfolio }}
               />
             )}
           </article>

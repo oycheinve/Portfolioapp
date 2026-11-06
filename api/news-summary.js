@@ -34,6 +34,12 @@ Zwróć podsumowanie w trzech częściach:
 3. impact – „Wpływ na spółkę / inwestora”: 2–4 krótkie punkty, dlaczego to ważne dla akcjonariuszy: wpływ na wyniki, wycenę, dywidendę, ryzyko, pozycję konkurencyjną, płynność, nastroje. Wnioski muszą wynikać z faktów w tekście; jeśli wpływ jest niepewny, napisz to wprost i wskaż, od czego zależy.
 
 Pole sentiment: wydźwięk dla akcjonariuszy – „pozytywny”, „negatywny”, „neutralny” albo „mieszany”.
+4. portfolio – „Wpływ na Twój portfel” (gdy w zapytaniu jest sekcja <portfel> ze spółkami i ETF-ami inwestora: ticker, nazwa, sektor, udział w portfelu, stopa dywidendy, najbliższa dywidenda):
+- relevance: „bezpośredni” – tekst dotyczy wprost spółki z portfela; „pośredni” – dotyczy jej otoczenia: konkurencji, dostawców, odbiorców, sektora, regulacji, surowców, kursów walut, stóp procentowych, koniunktury (ETF-y – rynku lub regionu, który odzwierciedlają); „brak” – brak istotnego związku z posiadanymi aktywami.
+- affected: spółki z portfela, których to dotyczy (wyłącznie tickery z sekcji <portfel>, najważniejsze i o największym udziale najpierw): ticker, direction („pozytywny”, „negatywny”, „neutralny” albo „niepewny”) i effect – jedno konkretne zdanie, jak wiadomość wpływa na tę spółkę: wyniki, kurs, wycenę, dywidendę (uwzględnij podaną stopę i najbliższą dywidendę, jeśli ma to związek) albo ryzyko; przy wpływie pośrednim nazwij mechanizm (np. „wyższe ceny aluminium podnoszą marże segmentu wyrobów aluminiowych”).
+- note: jedno zdanie podsumowania dla posiadacza tego portfela; przy „brak” – krótko, że wiadomość nie ma istotnego znaczenia dla posiadanych spółek, ewentualnie jaka ogólna implikacja rynkowa jest warta uwagi.
+Gdy sekcja <portfel> jest dostępna, w „impact” najpierw punkty o spółkach z portfela, potem ogólne. Bez sekcji <portfel>: relevance „brak”, affected – pusta lista, note – pusty tekst.
+Nie wymyślaj powiązań: wpływ pośredni tylko wtedy, gdy mechanizm wynika z tekstu albo z oczywistego profilu działalności spółki (sektor); w razie wątpliwości – „niepewny” i od czego zależy.
 
 Zasady:
 - Bez ogólników i „lania wody” (żadnych zdań w rodzaju „sytuacja jest dynamiczna”, „warto obserwować rynek”, „inwestorzy powinni zachować ostrożność”).
@@ -48,8 +54,27 @@ const SCHEMA = {
     numbers: { type: 'array', items: { type: 'string' }, description: 'Kluczowe liczby i dane – punkty „Nazwa: wartość (kontekst)”' },
     impact: { type: 'array', items: { type: 'string' }, description: 'Wpływ na spółkę / inwestora – 2–4 punkty (w podsumowaniu dnia 3–6)' },
     sentiment: { type: 'string', enum: ['pozytywny', 'negatywny', 'neutralny', 'mieszany'] },
+    portfolio: {
+      type: 'object',
+      description: 'Wpływ na spółki z portfela inwestora (sekcja <portfel>)',
+      properties: {
+        relevance: { type: 'string', enum: ['bezpośredni', 'pośredni', 'brak'] },
+        affected: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { ticker: { type: 'string' }, direction: { type: 'string', enum: ['pozytywny', 'negatywny', 'neutralny', 'niepewny'] }, effect: { type: 'string' } },
+            required: ['ticker', 'direction', 'effect'],
+            additionalProperties: false,
+          },
+        },
+        note: { type: 'string' },
+      },
+      required: ['relevance', 'affected', 'note'],
+      additionalProperties: false,
+    },
   },
-  required: ['event', 'numbers', 'impact', 'sentiment'],
+  required: ['event', 'numbers', 'impact', 'sentiment', 'portfolio'],
   additionalProperties: false,
 };
 
@@ -431,6 +456,14 @@ function parseResponse(response, model) {
       numbers: (s.numbers || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 20),
       impact: (s.impact || []).map((x) => String(x).trim()).filter(Boolean).slice(0, 6),
       sentiment: ['pozytywny', 'negatywny', 'neutralny', 'mieszany'].includes(s.sentiment) ? s.sentiment : 'neutralny',
+      portfolio: {
+        relevance: ['bezpośredni', 'pośredni', 'brak'].includes(s.portfolio?.relevance) ? s.portfolio.relevance : 'brak',
+        affected: (Array.isArray(s.portfolio?.affected) ? s.portfolio.affected : [])
+          .map((a) => ({ ticker: String(a?.ticker || '').trim().toUpperCase().slice(0, 12), direction: ['pozytywny', 'negatywny', 'neutralny', 'niepewny'].includes(a?.direction) ? a.direction : 'niepewny', effect: String(a?.effect || '').trim().slice(0, 400) }))
+          .filter((a) => a.ticker && a.effect)
+          .slice(0, 8),
+        note: String(s.portfolio?.note || '').trim().slice(0, 400),
+      },
     },
     model: response.modelVersion || model,
   };
@@ -500,6 +533,37 @@ async function checkConfig(req, res) {
   }
 }
 
+// Kontekst portfela z aplikacji (spółki / ETF-y inwestora) – walidacja i blok <portfel> do zapytania
+function portfolioList(raw) {
+  const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 10) / 10 : null);
+  const txt = (v, n) => String(v ?? '').replace(/[<>\n\r]/g, ' ').trim().slice(0, n);
+  return (Array.isArray(raw) ? raw : [])
+    .map((p) => ({ ticker: txt(p?.ticker, 12).toUpperCase(), name: txt(p?.name, 60), sector: txt(p?.sector, 40), kind: txt(p?.kind, 10), weight: num(p?.weight), dividendYield: num(p?.dividendYield), nextDividend: txt(p?.nextDividend, 80) }))
+    .filter((p) => /^[A-Z0-9.\-]{1,12}$/.test(p.ticker))
+    .slice(0, 30);
+}
+function portfolioBlock(list) {
+  if (!list.length) return '';
+  return `\n<portfel>\n${list
+    .map((p) => `- ${p.ticker} – ${p.name || p.ticker}${p.sector ? `; sektor: ${p.sector}` : ''}${p.kind === 'ETF' ? '; ETF' : ''}${p.weight !== null ? `; udział w portfelu: ${String(p.weight).replace('.', ',')}%` : ''}${p.dividendYield ? `; stopa dywidendy: ${String(p.dividendYield).replace('.', ',')}%` : ''}${p.nextDividend ? `; najbliższa dywidenda: ${p.nextDividend}` : ''}`)
+    .join('\n')}\n</portfel>`;
+}
+const portfolioHash = (list) => {
+  const s = list.map((p) => p.ticker).sort().join(',');
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 1) h = (h * 33 + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+};
+// Spółki w odpowiedzi wyłącznie z portfela (model nie dopisuje spółek spoza listy); bez portfela – brak wpływu
+function scopePortfolio(out, list) {
+  const p = out.summary?.portfolio;
+  if (!p) return out;
+  if (!list.length) return { ...out, summary: { ...out.summary, portfolio: { relevance: 'brak', affected: [], note: '' } } };
+  const allowed = new Set(list.map((x) => x.ticker));
+  const affected = p.affected.filter((a) => allowed.has(a.ticker));
+  return { ...out, summary: { ...out.summary, portfolio: { ...p, affected, relevance: p.relevance !== 'brak' && !affected.length && !p.note ? 'brak' : p.relevance } } };
+}
+
 export default async function handler(req, res) {
   // GET /api/news-summary?check=1 – test konfiguracji (rodzaj klucza, model) krótkim zapytaniem do Gemini
   if (req.method === 'GET' && new URL(req.url || '/', 'http://x').searchParams.get('check') === '1') return checkConfig(req, res);
@@ -510,6 +574,8 @@ export default async function handler(req, res) {
     if (!auth.ok) return send(res, auth.status, { error: auth.error });
     const body = await readBody(req);
     const mode = body.mode === 'digest' ? 'digest' : 'article';
+    const holdings = portfolioList(body.portfolio);
+    const pkey = holdings.length ? `|p${portfolioHash(holdings)}` : '';
     let key;
     let content;
     let basis;
@@ -518,7 +584,7 @@ export default async function handler(req, res) {
     let fetchedVia = '';
     if (mode === 'article') {
       if (!/^https?:\/\//.test(body.link || '')) return send(res, 400, { error: 'Brak adresu artykułu' });
-      key = `a|${body.link}`;
+      key = `a|${body.link}${pkey}`;
       if (cache.has(key)) return send(res, 200, { ...cache.get(key), cached: true });
       let fetched = null;
       let blocked = '';
@@ -558,7 +624,7 @@ ${fetched.text}
       const items = (Array.isArray(body.items) ? body.items : []).filter((it) => it?.title).slice(0, 60);
       if (!items.length) return send(res, 400, { error: 'Brak artykułów do podsumowania' });
       period = digestPeriod(body.period, items);
-      key = `d|${period.label}|${items.map((it) => it.title).join('|')}`;
+      key = `d|${period.label}|${items.map((it) => it.title).join('|')}${pkey}`;
       if (cache.has(key)) return send(res, 200, { ...cache.get(key), cached: true });
       basis = 'headlines';
       content = `Podsumowanie okresu ${period.label} (${String(body.label || 'wczoraj i dziś').slice(0, 40)}) na podstawie ${items.length} nagłówków wiadomości o spółkach z portfela inwestora.
@@ -571,7 +637,8 @@ Opieraj się wyłącznie na nagłówkach – bez domysłów co do treści artyku
 ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.title).slice(0, 300)} (${String(it.source || '').slice(0, 60)}, ${fmtDate(it.pubDate)})`).join('\n')}
 </naglowki>`;
     }
-    const out = { ...(await summarize(content)), basis, ...(period ? { period } : {}), ...(note ? { note } : {}), ...(fetchedVia ? { via: fetchedVia } : {}) };
+    if (holdings.length) content += `${portfolioBlock(holdings)}\nOceń wpływ na spółki z sekcji <portfel> (pole „portfolio”) i zacznij „impact” od nich.`;
+    const out = { ...scopePortfolio(await summarize(content), holdings), basis, ...(period ? { period } : {}), ...(note ? { note } : {}), ...(fetchedVia ? { via: fetchedVia } : {}) };
     if (cache.size > 300) cache.delete(cache.keys().next().value);
     cache.set(key, out);
     return send(res, 200, { ...out, cached: false });

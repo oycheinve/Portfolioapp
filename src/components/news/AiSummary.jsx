@@ -8,6 +8,46 @@ const SENTIMENT = {
   mieszany: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
   neutralny: 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300',
 };
+const DIRECTION = {
+  pozytywny: { label: '▲ pozytywny', cls: 'text-emerald-700 dark:text-emerald-300' },
+  negatywny: { label: '▼ negatywny', cls: 'text-red-700 dark:text-red-300' },
+  neutralny: { label: '• neutralny', cls: 'text-stone-500 dark:text-stone-400' },
+  niepewny: { label: '? niepewny', cls: 'text-amber-700 dark:text-amber-300' },
+};
+const RELEVANCE = {
+  bezpośredni: { label: 'Bezpośredni wpływ', cls: 'border-violet-300 bg-violet-50/80 dark:border-violet-400/30 dark:bg-violet-500/10' },
+  pośredni: { label: 'Pośredni wpływ', cls: 'border-blue-200 bg-blue-50/70 dark:border-blue-400/25 dark:bg-blue-500/10' },
+  brak: { label: 'Brak istotnego wpływu', cls: 'border-stone-200 bg-stone-50 dark:border-white/10 dark:bg-white/[0.03]' },
+};
+
+// Wpływ wiadomości na spółki z portfela (gdy podsumowanie powstało z kontekstem portfela)
+function PortfolioImpact({ p }) {
+  if (!p || (p.relevance === 'brak' && !p.note && !p.affected?.length)) return null;
+  const r = RELEVANCE[p.relevance] || RELEVANCE.brak;
+  return (
+    <div className={`rounded-xl border px-3 py-2.5 ${r.cls}`} aria-label="Wpływ na Twój portfel">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <h4 className="text-[11px] font-bold tracking-wide text-violet-700 uppercase dark:text-violet-300">Wpływ na Twój portfel</h4>
+        <span className="rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold text-stone-700 dark:bg-white/10 dark:text-stone-200">{r.label}</span>
+      </div>
+      {p.affected?.length > 0 && (
+        <ul className="space-y-1.5">
+          {p.affected.map((a) => (
+            <li key={`${a.ticker}-${a.effect}`} className="flex gap-2">
+              <span className="mt-px shrink-0 self-start rounded-md bg-stone-800 px-1.5 py-0.5 text-[10px] font-bold text-white dark:bg-white/15">{a.ticker}</span>
+              <span className="min-w-0">
+                <span className={`mr-1 text-[11px] font-semibold ${(DIRECTION[a.direction] || DIRECTION.niepewny).cls}`}>{(DIRECTION[a.direction] || DIRECTION.niepewny).label}</span>
+                {a.effect}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {p.note && <p className={`${p.affected?.length ? 'mt-1.5' : ''} text-[12px] text-stone-600 dark:text-stone-300`}>{p.note}</p>}
+    </div>
+  );
+}
+
 const BASIS = { lead: 'na podstawie zajawki artykułu', headlines: 'na podstawie nagłówków z wczoraj i dziś', title: 'tylko na podstawie tytułu' };
 
 // „Nazwa: wartość (kontekst)” – nazwa pogrubiona dla szybkiego czytania na telefonie
@@ -45,6 +85,7 @@ export function SummaryBody({ value }) {
           Podsumowanie z okresu: <span className="font-normal text-stone-600 tabular dark:text-stone-300">{period.label}</span>
         </p>
       )}
+      <PortfolioImpact p={summary.portfolio} />
       <Section title="Główne wydarzenie">
         <p className="font-medium text-stone-800 dark:text-stone-100">{summary.event}</p>
       </Section>
