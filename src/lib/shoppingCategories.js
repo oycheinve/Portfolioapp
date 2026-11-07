@@ -49,42 +49,114 @@ const DICT = [
   ['Apteka', ['tabletki przeciw', 'paracetamol', 'ibuprofen', 'apap', 'witamin', 'plastry', 'syrop', 'krople do']],
 ];
 
+// Dopasowanie tylko do początku nazwy (rzeczownik główny: „kombucha imbirowa” to napój, nie imbir);
+// dłuższe frazy pierwsze („papryka słodka” → przyprawy przed „papryka” → warzywa)
+// Krótkie słowa (≤ 3 litery, np. ser, sól, sok) i hasła ze spacją na końcu – tylko całe słowo („serwetki” ≠ „ser”)
+const DICT_FLAT = DICT.flatMap(([cat, words]) => words.map((w) => ({ w: w.trim(), cat, whole: w.endsWith(' ') || w.trim().length <= 3 }))).sort((a, b) => b.w.length - a.w.length);
 export function guessCategory(title) {
-  const t = ` ${normProduct(title)} `;
-  for (const [cat, words] of DICT) if (words.some((w) => t.includes(` ${w}`) || t.startsWith(` ${w}`))) return cat;
+  const t = normProduct(title);
+  for (const { w, cat, whole } of DICT_FLAT) if (t === w || t.startsWith(whole ? `${w} ` : w)) return cat;
   return null;
 }
 
+// ── Ucząca się pamięć produktów ──
+// Wpis: { c: kategoria, n: nazwa do wyświetlenia, u: liczba dodań, t: ostatnie dodanie (ms), s: źródło 'ai' | 'dict' | 'learned' }.
+// Zgodność wstecz: dawne wpisy w postaci samej nazwy kategorii (string) są odczytywane jako { c }.
 export function readCats() {
   try {
     const v = JSON.parse(localStorage.getItem(CATS_KEY) || '{}');
-    return v && typeof v === 'object' ? v : {};
+    if (!v || typeof v !== 'object') return {};
+    const out = {};
+    for (const [k, e] of Object.entries(v)) {
+      if (typeof e === 'string') out[k] = { c: e, n: k, u: 0, t: 0, s: 'ai' };
+      else if (e && typeof e === 'object') out[k] = { n: k, u: 0, t: 0, ...e };
+    }
+    return out;
   } catch {
     return {};
   }
 }
 export function writeCats(map) {
   try {
-    // najwyżej 1000 ostatnich produktów
-    const entries = Object.entries(map).slice(-1000);
+    // najwyżej 1000 produktów – najrzadziej / najdawniej używane odpadają pierwsze
+    const entries = Object.entries(map)
+      .sort((a, b) => (b[1].u || 0) - (a[1].u || 0) || (b[1].t || 0) - (a[1].t || 0))
+      .slice(0, 1000);
     localStorage.setItem(CATS_KEY, JSON.stringify(Object.fromEntries(entries)));
     window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key: CATS_KEY } }));
   } catch {
-    // brak localStorage – kategorie tylko do końca sesji
+    // brak localStorage – pamięć tylko do końca sesji
   }
 }
 
-// Kategoria pozycji: AI (zapamiętana) → słownik → „Dom i inne”
-export function categoryOf(title, aiMap) {
-  const ai = aiMap[normProduct(title)];
-  if (ai && VALID.has(ai)) return { category: ai, source: 'ai' };
+// Nauczone słowa kluczowe: znany produkt, którego nazwa jest początkiem nowej („pomidory” → „pomidory koktajlowe”),
+// albo ten sam pierwszy wyraz (min. 4 litery) u kilku znanych produktów jednej kategorii
+function learnedCategory(key, mem) {
+  let best = null;
+  for (const [k, e] of Object.entries(mem)) {
+    if (!e.c || !VALID.has(e.c) || k === key) continue;
+    if (key.startsWith(`${k} `) && (!best || k.length > best.k.length)) best = { k, c: e.c };
+  }
+  if (best) return best.c;
+  const first = key.split(' ')[0];
+  if (first.length < 4 || first === key) return null;
+  const cats = new Set(Object.entries(mem).filter(([k, e]) => e.c && k.split(' ')[0] === first).map(([, e]) => e.c));
+  return cats.size === 1 ? [...cats][0] : null;
+}
+
+// Rozpoznanie lokalne (koszt AI = 0): pamięć → nauczone słowo kluczowe → słownik; null – produkt nowy (pytamy AI)
+export function resolveLocal(title, mem) {
+  const key = normProduct(title);
+  if (!key) return null;
+  const e = mem[key];
+  if (e?.c && VALID.has(e.c)) return { category: e.c, source: 'memory' };
+  const l = learnedCategory(key, mem);
+  if (l) return { category: l, source: 'learned' };
   const g = guessCategory(title);
-  return g ? { category: g, source: 'guess' } : { category: OTHER, source: 'none' };
+  return g ? { category: g, source: 'dict' } : null;
+}
+
+// Zapis do pamięci (kategoria i / lub użycie); zwraca nową mapę
+export function remember(mem, title, { category, source, used = false } = {}) {
+  const key = normProduct(title);
+  if (!key) return mem;
+  const prev = mem[key] || { n: String(title).trim(), u: 0, t: 0 };
+  const next = { ...prev, n: prev.n || String(title).trim() };
+  if (category && VALID.has(category) && (source === 'ai' || !prev.c)) {
+    next.c = category;
+    next.s = source;
+  }
+  if (used) {
+    next.u = (prev.u || 0) + 1;
+    next.t = Date.now();
+  }
+  return { ...mem, [key]: next };
+}
+
+// Podpowiedzi od 3 znaków: produkty z pamięci (z kategorią); najpierw początek nazwy, potem częstość i świeżość
+export function suggestProducts(mem, query, { exclude = new Set(), limit = 6 } = {}) {
+  const q = normProduct(query);
+  if (q.length < 3) return [];
+  const out = [];
+  for (const [k, e] of Object.entries(mem)) {
+    if (exclude.has(k) || k === q) continue;
+    const idx = k.indexOf(q);
+    if (idx < 0) continue;
+    const r = resolveLocal(e.n || k, mem);
+    out.push({ key: k, name: e.n || k, category: r?.category || null, rank: (idx === 0 ? 0 : k.includes(` ${q}`) ? 1 : 2), u: e.u || 0, t: e.t || 0 });
+  }
+  return out.sort((a, b) => a.rank - b.rank || b.u - a.u || b.t - a.t || a.name.localeCompare(b.name, 'pl')).slice(0, limit);
+}
+
+// Kategoria pozycji: rozpoznanie lokalne → „Dom i inne” (do czasu odpowiedzi AI)
+export function categoryOf(title, mem) {
+  const r = resolveLocal(title, mem);
+  return r || { category: OTHER, source: 'none' };
 }
 
 // Grupy w kolejności sklepu (tylko niepuste)
-export function groupByCategory(items, aiMap) {
+export function groupByCategory(items, mem) {
   const groups = new Map(SHOPPING_CATEGORIES.map((c) => [c.id, []]));
-  for (const it of items) groups.get(categoryOf(it.title, aiMap).category).push(it);
+  for (const it of items) groups.get(categoryOf(it.title, mem).category).push(it);
   return SHOPPING_CATEGORIES.filter((c) => groups.get(c.id).length).map((c) => ({ ...c, items: groups.get(c.id) }));
 }

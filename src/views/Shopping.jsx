@@ -3,7 +3,7 @@ import { Check, Eraser, ListPlus, Pencil, Plus, ShoppingCart, Sparkles, Trash2, 
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortItems, sortLists } from '../lib/shopping.js';
 import { BetaBadge, EmptyState } from '../components/ui.jsx';
-import { groupByCategory, normProduct, readCats, writeCats } from '../lib/shoppingCategories.js';
+import { SHOPPING_CATEGORIES, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
 import { requestShoppingCategories } from '../lib/newsAi.js';
 
 const SELECTED_KEY = 'fintrack-shopping-selected';
@@ -122,14 +122,26 @@ export default function ShoppingView() {
   const [title, setTitle] = useState('');
   const [qty, setQty] = useState('');
   const titleRef = useRef(null);
-  const addItem = (e) => {
-    e.preventDefault();
-    if (!current || !title.trim()) return;
-    const item = makeItem(current.id, title, qty);
+  // Dodanie produktu (z pola albo z podpowiedzi): zapis w uczącej się pamięci – użycie i kategoria rozpoznana
+  // lokalnie (pamięć / słowo kluczowe / słownik); produkt nowy dostanie kategorię od AI (efekt poniżej)
+  const addProduct = (name) => {
+    const t = String(name || '').trim();
+    if (!current || !t) return;
+    const item = makeItem(current.id, t, qty);
     run((d) => ({ ...d, items: [...d.items, item] }), () => store.addItem(item));
+    setAiCats((prev) => {
+      const r = resolveLocal(t, prev);
+      const next = remember(prev, t, { category: r?.category, source: r?.source === 'memory' ? undefined : r?.source, used: true });
+      writeCats(next);
+      return next;
+    });
     setTitle('');
     setQty('');
     titleRef.current?.focus();
+  };
+  const addItem = (e) => {
+    e.preventDefault();
+    addProduct(title);
   };
   const toggle = (item) => {
     const done = !item.done;
@@ -167,7 +179,8 @@ export default function ShoppingView() {
       .map((i) => i.title)
       .filter((t) => {
         const k = normProduct(t);
-        if (!k || aiCats[k] || attempted.current.has(k) || seen.has(k)) return false;
+        // AI tylko dla produktów nieznanych lokalnie (pamięć, nauczone słowa kluczowe, słownik)
+        if (!k || resolveLocal(t, aiCats) || attempted.current.has(k) || seen.has(k)) return false;
         seen.add(k);
         return true;
       });
@@ -181,8 +194,8 @@ export default function ShoppingView() {
       try {
         const res = await requestShoppingCategories(batch);
         setAiCats((prev) => {
-          const next = { ...prev };
-          for (const [name, cat] of Object.entries(res)) next[normProduct(name)] = cat;
+          let next = prev;
+          for (const [name, cat] of Object.entries(res)) next = remember(next, name, { category: cat, source: 'ai' });
           writeCats(next);
           return next;
         });
@@ -196,6 +209,9 @@ export default function ShoppingView() {
   const openItems = items.filter((i) => !i.done);
   const doneItems = items.filter((i) => i.done);
   const groups = useMemo(() => (grouped ? groupByCategory(openItems, aiCats) : []), [grouped, openItems, aiCats]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Podpowiedzi od 3 znaków: produkty z pamięci (bez tych, które już czekają na tej liście)
+  const suggestions = useMemo(() => suggestProducts(aiCats, title, { exclude: new Set(openItems.map((i) => normProduct(i.title))) }), [aiCats, title, openItems]); // eslint-disable-line react-hooks/exhaustive-deps
+  const emojiOf = (c) => SHOPPING_CATEGORIES.find((x) => x.id === c)?.emoji || '🏠';
   const pill = (on) =>
     `inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border px-3 text-sm font-semibold transition-colors ${
       on ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-300 dark:hover:bg-neutral-700'
@@ -296,13 +312,30 @@ export default function ShoppingView() {
           </header>
 
           <form onSubmit={addItem} className="flex gap-2 px-3 pt-3 sm:px-4" aria-label="Nowa pozycja">
-            <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Dodaj produkt, np. Mleko" aria-label="Nazwa produktu" className={`${inputCls} flex-1`} />
+            <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Dodaj produkt, np. Mleko" aria-label="Nazwa produktu" autoComplete="off" className={`${inputCls} flex-1`} />
             <input value={qty} onChange={(e) => setQty(e.target.value)} maxLength={30} placeholder="Ilość" aria-label="Ilość" className={`${inputCls} w-20 sm:w-28`} />
             <button type="submit" disabled={!title.trim()} aria-label="Dodaj produkt" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:px-3 dark:bg-blue-500 dark:text-neutral-950">
               <Plus size={18} /> <span className="hidden sm:ml-1 sm:inline sm:text-sm sm:font-semibold">Dodaj</span>
             </button>
           </form>
 
+          {suggestions.length > 0 && (
+            <ul className="mx-3 mt-1.5 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:mx-4 dark:border-white/10 dark:bg-neutral-800" aria-label="Podpowiedzi produktów">
+              {suggestions.map((sg) => (
+                <li key={sg.key}>
+                  <button type="button" onClick={() => addProduct(sg.name)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-stone-50 dark:hover:bg-white/5" aria-label={`Dodaj ${sg.name}`}>
+                    <Plus size={14} className="shrink-0 text-blue-600 dark:text-blue-400" />
+                    <span className="min-w-0 flex-1 truncate font-medium">{sg.name}</span>
+                    {sg.category && (
+                      <span className="shrink-0 rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 dark:bg-white/[0.06] dark:text-stone-300">
+                        {emojiOf(sg.category)} {sg.category}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           {items.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2 sm:px-4">
               <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-300">
@@ -313,7 +346,7 @@ export default function ShoppingView() {
               {grouped && (
                 <span className="inline-flex items-center gap-1 text-[11px] text-stone-400" aria-live="polite">
                   <Sparkles size={12} className={aiStatus === 'working' ? 'animate-pulse text-violet-500' : 'text-violet-400'} />
-                  {aiStatus === 'working' ? 'AI porządkuje produkty…' : aiStatus === 'error' ? 'AI niedostępne – kategorie ze słownika' : 'Kategorie: AI'}
+                  {aiStatus === 'working' ? 'AI rozpoznaje nowe produkty…' : aiStatus === 'error' ? 'AI niedostępne – kategorie z pamięci i słownika' : 'Kategorie: pamięć + AI'}
                 </span>
               )}
             </div>
