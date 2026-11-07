@@ -102,3 +102,18 @@ async function fetchSummary(key, payload) {
   writeCache(key, value);
   return value;
 }
+
+// Lista zakupów: kategorie produktów przez ten sam punkt AI (tryb „shopping”), w tej samej kolejce zapytań
+// i z jedną cichą ponowną próbą przy przeciążeniu. Zwraca { 'nazwa produktu': 'Kategoria' }.
+export async function requestShoppingCategories(titles) {
+  const items = [...new Set(titles.map((t) => String(t || '').trim()).filter(Boolean))].slice(0, 80);
+  if (!items.length) return {};
+  const token = await sessionToken();
+  let { res, body } = await slot(() => post({ mode: 'shopping', items }, token));
+  if (busyAnswer(res, body)) {
+    await new Promise((r) => setTimeout(r, 3000));
+    ({ res, body } = await slot(() => post({ mode: 'shopping', items }, token)));
+  }
+  if (!res.ok || !body.categories) throw new Error(body.error || (res.status === 404 ? 'AI dostępne po wdrożeniu na serwerze (Vercel)' : `HTTP ${res.status}`));
+  return body.categories;
+}

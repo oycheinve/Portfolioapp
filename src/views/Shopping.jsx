@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Eraser, ListPlus, Pencil, Plus, ShoppingCart, Trash2, X } from 'lucide-react';
+import { Check, Eraser, ListPlus, Pencil, Plus, ShoppingCart, Sparkles, Trash2, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortItems, sortLists } from '../lib/shopping.js';
-import { EmptyState } from '../components/ui.jsx';
+import { BetaBadge, EmptyState } from '../components/ui.jsx';
+import { groupByCategory, normProduct, readCats, writeCats } from '../lib/shoppingCategories.js';
+import { requestShoppingCategories } from '../lib/newsAi.js';
 
 const SELECTED_KEY = 'fintrack-shopping-selected';
 const readSelected = () => {
@@ -17,6 +19,15 @@ const saveSelected = (id) => {
     localStorage.setItem(SELECTED_KEY, id);
   } catch {
     // brak localStorage
+  }
+};
+
+const GROUP_KEY = 'fintrack-shopping-group';
+const readGroup = () => {
+  try {
+    return localStorage.getItem(GROUP_KEY) !== '0';
+  } catch {
+    return true;
   }
 };
 
@@ -134,10 +145,74 @@ export default function ShoppingView() {
 
   const openCount = items.filter((i) => !i.done).length;
   const doneCount = items.length - openCount;
+
+  // Kategorie (BETA): AI przypisuje nowe produkty (wszystkie listy, w tle, po krótkiej przerwie w pisaniu);
+  // wynik zapamiętany per nazwa produktu i synchronizowany; do odpowiedzi – dopasowanie ze słownika
+  const [aiCats, setAiCats] = useState(readCats);
+  const [aiStatus, setAiStatus] = useState('idle'); // idle | working | error
+  const [grouped, setGroupedState] = useState(readGroup);
+  const setGrouped = (v) => {
+    setGroupedState(v);
+    try {
+      localStorage.setItem(GROUP_KEY, v ? '1' : '0');
+    } catch {
+      // brak localStorage
+    }
+  };
+  const attempted = useRef(new Set());
+  const pendingTitles = useMemo(() => {
+    const seen = new Set();
+    return data.items
+      .filter((i) => !i.done)
+      .map((i) => i.title)
+      .filter((t) => {
+        const k = normProduct(t);
+        if (!k || aiCats[k] || attempted.current.has(k) || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+  }, [data.items, aiCats]);
+  useEffect(() => {
+    if (!grouped || !pendingTitles.length) return undefined;
+    const t = setTimeout(async () => {
+      const batch = pendingTitles.slice(0, 80);
+      for (const x of batch) attempted.current.add(normProduct(x));
+      setAiStatus('working');
+      try {
+        const res = await requestShoppingCategories(batch);
+        setAiCats((prev) => {
+          const next = { ...prev };
+          for (const [name, cat] of Object.entries(res)) next[normProduct(name)] = cat;
+          writeCats(next);
+          return next;
+        });
+        setAiStatus('idle');
+      } catch {
+        setAiStatus('error'); // grupowanie ze słownika; ponowna próba przy kolejnym otwarciu listy
+      }
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [pendingTitles, grouped]);
+  const openItems = items.filter((i) => !i.done);
+  const doneItems = items.filter((i) => i.done);
+  const groups = useMemo(() => (grouped ? groupByCategory(openItems, aiCats) : []), [grouped, openItems, aiCats]); // eslint-disable-line react-hooks/exhaustive-deps
   const pill = (on) =>
     `inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border px-3 text-sm font-semibold transition-colors ${
       on ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-300 dark:hover:bg-neutral-700'
     }`;
+
+  const renderRow = (it) => (
+    <div className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
+      <button type="button" role="checkbox" aria-checked={it.done} onClick={() => toggle(it)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left">
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${it.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>{it.done && <Check size={15} strokeWidth={3} />}</span>
+        <span className={`min-w-0 flex-1 text-sm break-words ${it.done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{it.title}</span>
+        {it.quantity && <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular ${it.done ? 'text-stone-400 dark:text-stone-500' : 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300'}`}>{it.quantity}</span>}
+      </button>
+      <button type="button" onClick={() => removeItem(it)} aria-label={`Usuń ${it.title}`} title="Usuń pozycję" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10">
+        <Trash2 size={15} />
+      </button>
+    </div>
+  );
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -228,23 +303,47 @@ export default function ShoppingView() {
             </button>
           </form>
 
+          {items.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2 sm:px-4">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-300">
+                <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="h-4 w-4 accent-blue-600" aria-label="Grupuj według kategorii" />
+                Grupuj wg kategorii
+                <BetaBadge />
+              </label>
+              {grouped && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-stone-400" aria-live="polite">
+                  <Sparkles size={12} className={aiStatus === 'working' ? 'animate-pulse text-violet-500' : 'text-violet-400'} />
+                  {aiStatus === 'working' ? 'AI porządkuje produkty…' : aiStatus === 'error' ? 'AI niedostępne – kategorie ze słownika' : 'Kategorie: AI'}
+                </span>
+              )}
+            </div>
+          )}
           <ul className="space-y-0.5 p-2 sm:p-3" aria-label="Pozycje listy">
             {!items.length && <li className="px-2 py-6 text-center text-sm text-stone-500 dark:text-stone-400">Dodaj pierwszy produkt w polu powyżej.</li>}
-            {items.map((it, idx) => (
-              <li key={it.id}>
-                {it.done && idx > 0 && !items[idx - 1].done && <div className="mx-2 my-2 border-t border-dashed border-stone-200 pt-1 text-[11px] font-semibold tracking-wide text-stone-400 uppercase dark:border-white/10 dark:text-stone-500">Kupione</div>}
-                <div className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
-                  <button type="button" role="checkbox" aria-checked={it.done} onClick={() => toggle(it)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left">
-                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${it.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>{it.done && <Check size={15} strokeWidth={3} />}</span>
-                    <span className={`min-w-0 flex-1 text-sm break-words ${it.done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{it.title}</span>
-                    {it.quantity && <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular ${it.done ? 'text-stone-400 dark:text-stone-500' : 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300'}`}>{it.quantity}</span>}
-                  </button>
-                  <button type="button" onClick={() => removeItem(it)} aria-label={`Usuń ${it.title}`} title="Usuń pozycję" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10">
-                    <Trash2 size={15} />
-                  </button>
-                </div>
+            {grouped && openItems.length > 0
+              ? groups.map((g) => (
+                  <li key={g.id} aria-label={`Kategoria ${g.id}`}>
+                    <div className="mx-2 mt-2 mb-0.5 flex items-center gap-1.5 text-[11px] font-bold tracking-wide text-stone-500 uppercase dark:text-stone-400">
+                      <span aria-hidden="true">{g.emoji}</span> {g.id} <span className="font-semibold text-stone-400 dark:text-stone-500">{g.items.length}</span>
+                    </div>
+                    <ul className="space-y-0.5">
+                      {g.items.map((it) => (
+                        <li key={it.id}>{renderRow(it)}</li>
+                      ))}
+                    </ul>
+                  </li>
+                ))
+              : openItems.map((it) => <li key={it.id}>{renderRow(it)}</li>)}
+            {doneItems.length > 0 && (
+              <li>
+                {openItems.length > 0 && <div className="mx-2 my-2 border-t border-dashed border-stone-200 pt-1 text-[11px] font-semibold tracking-wide text-stone-400 uppercase dark:border-white/10 dark:text-stone-500">Kupione</div>}
+                <ul className="space-y-0.5">
+                  {doneItems.map((it) => (
+                    <li key={it.id}>{renderRow(it)}</li>
+                  ))}
+                </ul>
               </li>
-            ))}
+            )}
           </ul>
           {doneCount > 0 && (
             <div className="flex justify-end border-t border-stone-100 px-3 py-2 dark:border-white/5">
