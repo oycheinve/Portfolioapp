@@ -13,6 +13,47 @@
   color-scheme: dark;
 }
 
+/* Motyw różowy (jasny wariant): podmiana palety Tailwind dla całej aplikacji – neutralne tła, ramki i teksty
+   w odcieniach pudrowego różu, akcenty (dawniej niebieskie) w różu i magencie; zieleń (zysk), czerwień (strata),
+   fiolet (AI) i plakietki BETA bez zmian – zachowują znaczenie */
+:root.theme-pink {
+  color-scheme: light;
+  --color-white: #fffafc;
+  --color-stone-50: #fdf2f6;
+  --color-stone-100: #fbe6ee;
+  --color-stone-200: #f4cfdd;
+  --color-stone-300: #e8b4c8;
+  --color-stone-400: #c98ba5;
+  --color-stone-500: #a2667f;
+  --color-stone-600: #814b62;
+  --color-stone-700: #663b4e;
+  --color-stone-800: #4b2a39;
+  --color-stone-900: #2f1823;
+  --color-stone-950: #1d0e15;
+  --color-blue-50: #fdf2f8;
+  --color-blue-100: #fce7f3;
+  --color-blue-200: #fbcfe8;
+  --color-blue-300: #f9a8d4;
+  --color-blue-400: #f472b6;
+  --color-blue-500: #ec4899;
+  --color-blue-600: #db2777;
+  --color-blue-700: #be185d;
+  --color-blue-800: #9d174d;
+  --color-blue-900: #831843;
+  --color-blue-950: #500724;
+  --color-sky-50: #fff1f5;
+  --color-sky-100: #ffe4ec;
+  --color-sky-200: #fecdd9;
+  --color-sky-300: #fda4bb;
+  --color-sky-400: #fb7196;
+  --color-sky-500: #f43f72;
+  --color-sky-600: #e11d5c;
+  --color-sky-700: #be124d;
+}
+:root.theme-pink ::selection {
+  background: #fbcfe8;
+}
+
 html,
 body,
 #root {
@@ -92,4 +133,25 @@ html {
 }
 .slider:focus-visible::-webkit-slider-thumb {
   box-shadow: 0 0 0 4px rgb(42 120 214 / 0.3);
+}
+
+/* Motyw różowy: granatowe akcenty wpisane na stałe (nagłówki tabeli Portfela i Budżetu – wzór z XTB / Excela)
+   w odcieniach śliwki i różu */
+:root.theme-pink .bg-\[\#0d1b2e\] {
+  background-color: #4a1832;
+}
+:root.theme-pink .bg-\[\#1f3864\] {
+  background-color: #9d174d;
+}
+:root.theme-pink .hover\:bg-\[\#2a4a80\]:hover {
+  background-color: #be185d;
+}
+:root.theme-pink .text-\[\#1f3864\] {
+  color: #9d174d;
+}
+:root.theme-pink .border-\[\#1f3864\] {
+  border-color: #9d174d;
+}
+:root.theme-pink .bg-\[\#dce6f2\] {
+  background-color: #fce7f3;
 }

@@ -24,11 +24,13 @@
         var t = (s.settings && s.settings.theme) || 'system';
         var dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         if (dark) document.documentElement.classList.add('dark');
+        if (t === 'pink') document.documentElement.classList.add('theme-pink');
       } catch (e) {}
       // Kolor paska stanu zgodny z motywem wybranym w aplikacji (także przy zmianie motywu w trakcie pracy)
       try {
         var syncThemeColor = function () {
-          var c = document.documentElement.classList.contains('dark') ? '#0a0a0a' : '#fafaf9';
+          var cl = document.documentElement.classList;
+          var c = cl.contains('dark') ? '#0a0a0a' : cl.contains('theme-pink') ? '#fdf2f6' : '#fafaf9';
           document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
             m.setAttribute('content', c);
           });

@@ -5,8 +5,17 @@ export const SERIES = {
   dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
 };
 
+// Motyw różowy: ustawiany przez AppProvider przed renderem widoków (setActiveTheme) – te same wywołania
+// seriesColor / chartChrome dają różową paletę bez zmian w komponentach
+SERIES.pink = ['#db2777', '#f97316', '#0f9f8a', '#d99a00', '#9333ea', '#3f8f2f', '#6366f1', '#e11d48'];
+let activeTheme = 'light';
+export function setActiveTheme(theme) {
+  activeTheme = theme;
+}
+const pinkActive = (isDark) => !isDark && activeTheme === 'pink';
+
 export function seriesColor(index, isDark) {
-  const p = isDark ? SERIES.dark : SERIES.light;
+  const p = isDark ? SERIES.dark : pinkActive(isDark) ? SERIES.pink : SERIES.light;
   return p[index % p.length];
 }
 
@@ -18,6 +27,7 @@ export function assetClassColor(cls, isDark) {
 }
 
 export function chartChrome(isDark) {
+  if (pinkActive(isDark)) return { grid: '#f4d6e2', axis: '#e8b4c8', muted: '#a2667f', text: '#663b4e', surface: '#fffafc', primary: '#2f1823' };
   return isDark
     ? { grid: '#2c2c2a', axis: '#383835', muted: '#898781', text: '#c3c2b7', surface: '#1a1a19', primary: '#f0efec' }
     : { grid: '#e1e0d9', axis: '#c3c2b7', muted: '#898781', text: '#52514e', surface: '#fcfcfb', primary: '#0b0b0b' };

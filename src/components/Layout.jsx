@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ClipboardList, Cloud, CloudOff, Coins, FileText, Gem, Flame, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, Waves, X } from 'lucide-react';
+import { ClipboardList, Cloud, CloudOff, Coins, FileText, Gem, Flame, Heart, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, Waves, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -49,9 +49,9 @@ export function navLabel(item, settings, long = true) {
   return long ? item?.longLabel : item?.label;
 }
 
-const THEME_CYCLE = { light: 'dark', dark: 'system', system: 'light' };
-const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
-const THEME_LABEL = { light: 'Motyw jasny', dark: 'Motyw ciemny', system: 'Motyw systemowy' };
+const THEME_CYCLE = { light: 'dark', dark: 'pink', pink: 'system', system: 'light' };
+const THEME_ICON = { light: Sun, dark: Moon, pink: Heart, system: Monitor };
+const THEME_LABEL = { light: 'Motyw jasny', dark: 'Motyw ciemny', pink: 'Motyw różowy', system: 'Motyw systemowy' };
 
 function PriceStatus() {
   const { state } = useApp();
@@ -321,7 +321,7 @@ export function Layout({ view, onNavigate, children }) {
               <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-[22px] bg-stone-100/80 py-2.5 pr-2.5 pl-4 dark:bg-white/[0.06]">
                 <span className="truncate text-[15px] font-semibold">Motyw</span>
                 <div className="flex items-center gap-1 rounded-full bg-white/70 p-1 dark:bg-white/10" role="radiogroup" aria-label="Motyw aplikacji">
-                  {['light', 'dark', 'system'].map((t) => {
+                  {['light', 'dark', 'pink', 'system'].map((t) => {
                     const TIcon = THEME_ICON[t];
                     const on = theme === t;
                     return (

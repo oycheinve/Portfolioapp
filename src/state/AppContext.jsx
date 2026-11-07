@@ -11,6 +11,7 @@ import { pendingSavingsInterest } from '../lib/savings.js';
 import { computeLimitsForYear } from '../lib/tax.js';
 import { uid } from '../lib/format.js';
 import { reconcileDividends } from '../lib/dividends.js';
+import { setActiveTheme } from '../lib/colors.js';
 import { fixedDividendPlan } from '../lib/dividendFacts.js';
 import { runDividendSync } from '../lib/dividendSync.js';
 import { MARKET_OPEN_MIN, isWarsawMarketOpen, mayAutoFetch, warsawClock } from '../lib/marketHours.js';
@@ -89,11 +90,14 @@ export function AppProvider({ children, cloud = null }) {
     return () => clearTimeout(saveTimer.current);
   }, [state]);
 
-  // Motyw jasny / ciemny
+  // Motyw jasny / ciemny / różowy (różowy – jasny wariant z własną paletą: klasa theme-pink na <html>)
   const isDark = state.settings.theme === 'dark' || (state.settings.theme === 'system' && systemDark);
+  const isPink = state.settings.theme === 'pink';
+  setActiveTheme(isPink ? 'pink' : isDark ? 'dark' : 'light'); // przed renderem widoków – kolory wykresów
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
-  }, [isDark]);
+    document.documentElement.classList.toggle('theme-pink', isPink);
+  }, [isDark, isPink]);
 
   // Dzienna migawka wartości kont (aktualizowana przy zmianach danych i cen)
   useEffect(() => {

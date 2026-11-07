@@ -56,7 +56,7 @@ export function defaultFire() {
 
 export function defaultSettings() {
   return {
-    theme: 'system', // 'light' | 'dark' | 'system'
+    theme: 'system', // 'light' | 'dark' | 'pink' | 'system'
     baseCurrency: 'PLN',
     includeOtherAssets: true,
     taxBracket: 'SCALE_12',
