@@ -3,30 +3,34 @@ import { Cloud, KeyRound, Loader2, LogIn, Mail, UserPlus, Wallet } from 'lucide-
 import { STORAGE_KEY, createEmptyState } from '../../state/schema.js';
 import {
   OWNER_KEY,
+  SCOPE_OWNER_KEY,
   SYNCED_AT_KEY,
   chooseInitialData,
   cloudConfig,
   cloudError,
   fetchCloud,
   getSession,
-  isLocalMode,
   onAuthChange,
   resetPassword,
-  setLocalMode,
+  saveCloudConfig,
   signIn,
   signUp,
   storage,
 } from '../../lib/cloud.js';
 import { Button, Field, Input } from '../ui.jsx';
+import { activateUserScope } from '../../lib/userStorage.js';
 
 // Przygotowanie danych zalogowanego użytkownika przed startem aplikacji: wersja z chmury (albo lokalna do wysłania)
 // trafia do localStorage, skąd AppProvider wczytuje stan jak dotąd.
 async function prepareUser(user) {
+  // Przestrzeń localStorage użytkownika (u:<id>:…) – dane różnych osób na jednym urządzeniu się nie mieszają
+  activateUserScope(user.id);
   const remote = await fetchCloud(user.id);
   const pick = chooseInitialData(user.id, remote);
   const data = pick.data || createEmptyState();
   storage(STORAGE_KEY, JSON.stringify(data));
   storage(OWNER_KEY, user.id);
+  storage(SCOPE_OWNER_KEY, user.id);
   if (pick.syncedAt) storage(SYNCED_AT_KEY, pick.syncedAt);
   if (pick.uiPrefs) {
     for (const [k, v] of Object.entries(pick.uiPrefs)) if (k.startsWith('wealth-app-') && k !== STORAGE_KEY && typeof v === 'string') storage(k, v);
@@ -38,7 +42,9 @@ async function prepareUser(user) {
 // z konfiguracją – ekran logowania, potem pobranie danych z chmury. children(cloud) – cloud = null w trybie lokalnym.
 export default function AuthGate({ children }) {
   const configured = !!cloudConfig();
-  const [phase, setPhase] = useState(() => (!configured || isLocalMode() ? 'local' : 'checking'));
+  // Wieloużytkowość: przy skonfigurowanym Supabase logowanie jest obowiązkowe (bez trybu „bez konta”);
+  // bez konfiguracji – w wersji produkcyjnej ekran konfiguracji, w trybie deweloperskim praca lokalna jak dotąd
+  const [phase, setPhase] = useState(() => (configured ? 'checking' : import.meta.env.PROD ? 'setup' : 'local'));
   const [cloud, setCloud] = useState(null);
   const [error, setError] = useState(null);
 
@@ -80,6 +86,7 @@ export default function AuthGate({ children }) {
   }, [phase]);
 
   if (phase === 'local') return children(null);
+  if (phase === 'setup') return <SetupScreen />;
   if (phase === 'ready') return children(cloud);
   if (phase === 'checking' || phase === 'loading') {
     return (
@@ -93,15 +100,11 @@ export default function AuthGate({ children }) {
     <AuthScreen
       initialError={error}
       onSignedIn={enter}
-      onLocal={() => {
-        setLocalMode(true);
-        setPhase('local');
-      }}
     />
   );
 }
 
-function AuthScreen({ initialError, onSignedIn, onLocal }) {
+function AuthScreen({ initialError, onSignedIn }) {
   const [mode, setMode] = useState('login'); // login | register | reset
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -230,12 +233,44 @@ function AuthScreen({ initialError, onSignedIn, onLocal }) {
           <Cloud size={14} className="mt-0.5 shrink-0" />
           Po zalogowaniu portfel zapisuje się na Twoim koncie i synchronizuje między urządzeniami. Dane z tej przeglądarki zostaną przeniesione na nowe konto.
         </p>
-        <div className="mt-3 text-center">
-          <Button variant="ghost" size="sm" onClick={onLocal}>
-            Kontynuuj bez konta (dane tylko na tym urządzeniu)
-          </Button>
-        </div>
+        <p className="mt-2 text-center text-[11px] text-stone-400 dark:text-stone-500">Każde konto ma własne, odizolowane dane – inni użytkownicy ich nie widzą.</p>
       </div>
+    </div>
+  );
+}
+
+// Brak konfiguracji Supabase w wersji produkcyjnej – aplikacja wymaga kont, więc najpierw adres projektu i klucz
+function SetupScreen() {
+  const [url, setUrl] = useState('');
+  const [key, setKey] = useState('');
+  const [error, setError] = useState(null);
+  const save = (e) => {
+    e.preventDefault();
+    try {
+      saveCloudConfig({ url, anonKey: key });
+      window.location.reload();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-stone-50 px-4 py-10 dark:bg-neutral-950">
+      <form onSubmit={save} className="w-full max-w-sm space-y-3 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-neutral-900" aria-label="Konfiguracja Supabase">
+        <h1 className="flex items-center gap-2 text-lg font-semibold">
+          <Wallet size={20} /> Konfiguracja kont
+        </h1>
+        <p className="text-sm text-stone-600 dark:text-stone-300">Aplikacja wymaga logowania. Uzupełnij dane projektu Supabase (albo ustaw zmienne VITE_SUPABASE_URL i VITE_SUPABASE_ANON_KEY w Vercel i wdroż ponownie).</p>
+        <Field label="Adres projektu (Project URL)">
+          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://xxxx.supabase.co" aria-label="Adres projektu Supabase" />
+        </Field>
+        <Field label="Klucz anon public">
+          <Input value={key} onChange={(e) => setKey(e.target.value)} placeholder="eyJ…" aria-label="Klucz anon Supabase" />
+        </Field>
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        <Button type="submit" variant="primary" className="w-full">
+          Zapisz i przejdź do logowania
+        </Button>
+      </form>
     </div>
   );
 }

@@ -97,7 +97,12 @@ export function AppProvider({ children, cloud = null }) {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
     document.documentElement.classList.toggle('theme-pink', isPink);
-  }, [isDark, isPink]);
+    try {
+      localStorage.setItem('portfolio-theme', state.settings.theme || 'system'); // globalna podpowiedź dla index.html (przed logowaniem)
+    } catch {
+      // brak localStorage
+    }
+  }, [isDark, isPink, state.settings.theme]);
 
   // Dzienna migawka wartości kont (aktualizowana przy zmianach danych i cen)
   useEffect(() => {

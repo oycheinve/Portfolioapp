@@ -12,6 +12,8 @@ export const OWNER_KEY = 'portfolio-cloud-owner'; // id użytkownika, którego d
 export const PENDING_KEY = 'portfolio-cloud-pending'; // id użytkownika z niewysłanymi zmianami
 export const SYNCED_AT_KEY = 'portfolio-cloud-synced-at'; // updated_at ostatnio zsynchronizowanej wersji
 export const CONFLICT_KEY = 'portfolio-cloud-conflict-backup'; // lokalna wersja odrzucona przy konflikcie
+// Właściciel danych w przestrzeni użytkownika (userStorage.js) – dane w tej przestrzeni należą zawsze do niego
+export const SCOPE_OWNER_KEY = 'portfolio-cloud-scope-owner';
 const TABLE = 'portfolios';
 
 function ls(key, value) {
@@ -170,7 +172,7 @@ const time = (iso) => (iso ? new Date(iso).getTime() || 0 : 0);
 // (wersja w chmurze bez zmian od ostatniej synchronizacji) oraz nowe konto – wtedy dane lokalne tego urządzenia (bez właściciela albo tego samego użytkownika) trafiają do chmury.
 export function chooseInitialData(userId, remote) {
   const rawLocal = ls(STORAGE_KEY);
-  const owner = ls(OWNER_KEY);
+  const owner = ls(SCOPE_OWNER_KEY) || ls(OWNER_KEY);
   const pending = ls(PENDING_KEY) === userId;
   const syncedAt = ls(SYNCED_AT_KEY);
   const localIsMine = !!rawLocal && (owner === userId || (!owner && !remote));
