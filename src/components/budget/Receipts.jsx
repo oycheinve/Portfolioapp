@@ -110,6 +110,8 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
   const [r, setR] = useState(() => assignBudgetRows(receipt, rows));
   // Podział 50/50 (Ustawienia, domyślnie wyłączony); przy edycji paragonu już podzielonego – zawsze widoczny
   const canSplit = state.settings.receiptSplit === true || receipt.items.some((it) => it.half);
+  // Opcje podziału ukryte za małym przyciskiem „½” w nagłówku (widok minimalistyczny); otwarte, gdy paragon już ma podział
+  const [splitMode, setSplitMode] = useState(() => receipt.items.some((it) => it.half));
   const allHalf = r.items.length > 0 && r.items.every((it) => it.half);
   const setAllHalf = (half) => setR((x) => ({ ...x, items: x.items.map((it) => ({ ...it, half })) }));
   const [editing, setEditing] = useState(false);
@@ -127,6 +129,18 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
           {title}
           <BetaBadge />
         </h2>
+        {canSplit && (
+          <button
+            type="button"
+            onClick={() => setSplitMode((v) => !v)}
+            aria-pressed={splitMode}
+            aria-label="Podział 50/50"
+            title="Podziel pozycje na pół (np. ze współlokatorem / partnerem)"
+            className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition-colors ${splitMode ? 'border-violet-500 bg-violet-100 text-violet-900 dark:border-violet-400 dark:bg-violet-500/20 dark:text-violet-200' : 'border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-white/10 dark:text-stone-300 dark:hover:bg-white/5'}`}
+          >
+            <Split size={13} /> 50/50
+          </button>
+        )}
         <button type="button" onClick={onCancel} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 dark:hover:bg-white/5" aria-label="Zamknij bez zapisu">
           <X size={18} />
         </button>
@@ -197,7 +211,7 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
                   </select>
                   <span className="shrink-0 font-sans text-[10px] text-neutral-500">{SOURCE_LABEL[it.budgetSource] || 'z pamięci'}</span>
                 </div>
-                {canSplit && (
+                {canSplit && splitMode && (
                   <button
                     type="button"
                     onClick={() => setItem(it.id, { half: !it.half })}
@@ -216,7 +230,7 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
               <Plus size={14} /> Dodaj pozycję
             </button>
           )}
-          {canSplit && r.items.length > 1 && (
+          {canSplit && splitMode && r.items.length > 1 && (
             <button type="button" onClick={() => setAllHalf(!allHalf)} aria-pressed={allHalf} className={`mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed font-sans text-xs font-semibold ${allHalf ? 'border-violet-500 bg-violet-100 text-violet-900' : 'border-neutral-400 text-neutral-700 hover:bg-white'}`}>
               <Split size={14} /> {allHalf ? 'Cofnij podział całego paragonu' : 'Podziel cały paragon na pół (50/50)'}
             </button>
