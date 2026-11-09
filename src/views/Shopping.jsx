@@ -217,27 +217,30 @@ export default function ShoppingView() {
       on ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-300 dark:hover:bg-neutral-700'
     }`;
 
-  const renderRow = (it) => (
-    <div className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
-      <button type="button" role="checkbox" aria-checked={it.done} onClick={() => toggle(it)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left">
-        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${it.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>{it.done && <Check size={15} strokeWidth={3} />}</span>
-        <span className={`min-w-0 flex-1 text-sm break-words ${it.done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{it.title}</span>
-        {it.quantity && <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular ${it.done ? 'text-stone-400 dark:text-stone-500' : 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300'}`}>{it.quantity}</span>}
-      </button>
-      {grouped && !it.done && (
-        // Zmiana kategorii produktu – zapamiętana jako poprawka użytkownika (samouczenie, ma pierwszeństwo przed AI)
-        <label className="relative inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-base hover:bg-stone-100 dark:hover:bg-white/5" title="Zmień kategorię">
-          <span aria-hidden="true">{emojiOf(categoryOf(it.title, aiCats).category)}</span>
+  // Tryb edycji listy (przycisk „Edytuj” przy nazwie listy): zmiana kategorii produktów (zapamiętywana od razu
+  // jako poprawka użytkownika – samouczenie, pierwszeństwo przed AI), usuwanie pozycji, nazwa i usunięcie listy.
+  // Poza trybem edycji lista jest czysta: tylko odhaczanie produktów.
+  const [editing, setEditing] = useState(false);
+  useEffect(() => setEditing(false), [current?.id]);
+  const setCategory = (it, category) =>
+    setAiCats((prev) => {
+      const next = remember(prev, it.title, { category, source: 'user' });
+      writeCats(next);
+      return next;
+    });
+
+  const renderRow = (it) => {
+    const qtyBadge = it.quantity && <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular ${it.done ? 'text-stone-400 dark:text-stone-500' : 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300'}`}>{it.quantity}</span>;
+    if (editing) {
+      const cat = categoryOf(it.title, aiCats).category;
+      return (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl px-2 py-1.5">
+          <span className={`min-w-0 flex-1 text-sm break-words ${it.done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{it.title}</span>
+          {qtyBadge}
           <select
-            className="absolute inset-0 cursor-pointer opacity-0"
-            value={categoryOf(it.title, aiCats).category}
-            onChange={(e) =>
-              setAiCats((prev) => {
-                const next = remember(prev, it.title, { category: e.target.value, source: 'user' });
-                writeCats(next);
-                return next;
-              })
-            }
+            className="h-8 max-w-[11.5rem] min-w-0 rounded-lg border border-stone-200 bg-white px-1.5 text-xs text-stone-700 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-200"
+            value={cat}
+            onChange={(e) => setCategory(it, e.target.value)}
             aria-label={`Kategoria ${it.title}`}
           >
             {SHOPPING_CATEGORIES.map((c) => (
@@ -246,13 +249,22 @@ export default function ShoppingView() {
               </option>
             ))}
           </select>
-        </label>
-      )}
-      <button type="button" onClick={() => removeItem(it)} aria-label={`Usuń ${it.title}`} title="Usuń pozycję" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10">
-        <Trash2 size={15} />
-      </button>
-    </div>
-  );
+          <button type="button" onClick={() => removeItem(it)} aria-label={`Usuń ${it.title}`} title="Usuń pozycję" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10">
+            <Trash2 size={15} />
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
+        <button type="button" role="checkbox" aria-checked={it.done} onClick={() => toggle(it)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left">
+          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${it.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>{it.done && <Check size={15} strokeWidth={3} />}</span>
+          <span className={`min-w-0 flex-1 text-sm break-words ${it.done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{it.title}</span>
+          {qtyBadge}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -323,7 +335,7 @@ export default function ShoppingView() {
                 </p>
               </div>
             )}
-            {renaming === null && (
+            {renaming === null && editing && (
               <>
                 <button type="button" onClick={() => setRenaming(current.name)} aria-label="Zmień nazwę listy" title="Zmień nazwę" className={iconBtn}>
                   <Pencil size={15} />
@@ -332,6 +344,17 @@ export default function ShoppingView() {
                   <Trash2 size={15} />
                 </button>
               </>
+            )}
+            {renaming === null && (
+              <button
+                type="button"
+                onClick={() => setEditing((v) => !v)}
+                aria-pressed={editing}
+                aria-label={editing ? 'Zakończ edycję listy' : 'Edytuj listę'}
+                className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors ${editing ? 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-neutral-950' : 'border border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-white/10 dark:text-stone-200 dark:hover:bg-white/5'}`}
+              >
+                {editing ? <Check size={14} /> : <Pencil size={14} />} {editing ? 'Gotowe' : 'Edytuj'}
+              </button>
             )}
           </header>
 
@@ -375,6 +398,7 @@ export default function ShoppingView() {
               )}
             </div>
           )}
+          {editing && items.length > 0 && <p className="mx-3 mt-2 rounded-lg bg-blue-50 px-3 py-2 text-[11px] text-blue-900 sm:mx-4 dark:bg-blue-500/10 dark:text-blue-200">Tryb edycji: zmień kategorię produktu (zapamiętam ją na przyszłość) albo usuń pozycję. „Gotowe” wraca do listy.</p>}
           <ul className="space-y-0.5 p-2 sm:p-3" aria-label="Pozycje listy">
             {!items.length && <li className="px-2 py-6 text-center text-sm text-stone-500 dark:text-stone-400">Dodaj pierwszy produkt w polu powyżej.</li>}
             {grouped && openItems.length > 0
