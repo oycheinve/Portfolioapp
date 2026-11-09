@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
-import { Camera, Check, ChevronDown, Loader2, Pencil, Plus, Receipt, Trash2, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, Loader2, Pencil, Plus, Receipt, Split, Trash2, X } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { applyMemory, assignBudgetRows, cacheReceipt, cachedReceipt, compressImage, imageHash, learnBudget, learnFromReceipt, readReceipts, receiptParts, receiptRows, receiptTotals, writeReceipts } from '../../lib/receipts.js';
+import { applyMemory, assignBudgetRows, itemShare, cacheReceipt, cachedReceipt, compressImage, imageHash, learnBudget, learnFromReceipt, readReceipts, receiptParts, receiptRows, receiptTotals, writeReceipts } from '../../lib/receipts.js';
 import { requestReceipt } from '../../lib/newsAi.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
 import { BetaBadge } from '../ui.jsx';
@@ -9,7 +9,7 @@ import { BetaBadge } from '../ui.jsx';
 const inputCls = 'h-9 min-w-0 rounded-lg border border-stone-200 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-white/10 dark:bg-neutral-800';
 const named = (rows) => rows.filter((r) => String(r.name || '').trim());
 const SOURCE_LABEL = { user: 'poprawione – zapamiętam', memory: 'z pamięci', ai: 'AI', rule: 'dopasowane' };
-const toStored = (rows) => (it) => ({ name: it.name, quantity: it.quantity, price: it.price, category: it.category, rowId: it.rowId, rowName: rows.find((r) => r.id === it.rowId)?.name || it.rowName || '' });
+const toStored = (rows) => (it) => ({ name: it.name, quantity: it.quantity, price: it.price, category: it.category, rowId: it.rowId, rowName: rows.find((r) => r.id === it.rowId)?.name || it.rowName || '', ...(it.half ? { half: true } : {}) });
 
 // Skanowanie paragonu → (weryfikacja) → wydatki w budżecie + historia. rows – kategorie budżetu miesiąca; każda
 // pozycja trafia wyłącznie do jednej z nich (bez nowych podgrup). onSave(receipt, parts) – parts: [{ id, amount }].
@@ -25,11 +25,11 @@ export function ReceiptScanner({ rows, onSave, month }) {
     learnBudget(receipt, rows);
     const t = receiptTotals(receipt, rows);
     const parts = receiptParts(receipt);
-    const res = onSave({ ...receipt, total: t.sum }, parts);
-    const saved = { id: receipt.id || `rc${Date.now().toString(36)}`, shop: receipt.shop, date: receipt.date, time: receipt.time || '', items: receipt.items.map(toStored(rows)), total: t.sum, printedTotal: t.printed, rowId: parts[0]?.id || '', month, savedAt: new Date().toISOString(), auto };
+    const res = onSave({ ...receipt, total: t.share, halved: t.halved }, parts);
+    const saved = { id: receipt.id || `rc${Date.now().toString(36)}`, shop: receipt.shop, date: receipt.date, time: receipt.time || '', items: receipt.items.map(toStored(rows)), total: t.share, fullTotal: t.sum, ...(t.halved > 0 ? { halved: t.halved } : {}), printedTotal: t.printed, rowId: parts[0]?.id || '', month, savedAt: new Date().toISOString(), auto };
     writeReceipts([saved, ...readReceipts().filter((r) => r.id !== saved.id)]);
     const split = (res?.parts || []).map((p) => `${p.name} ${formatPLN(p.amount)}`).join(', ');
-    actions.notify(`Paragon ${receipt.shop || ''} zapisany: ${formatPLN(t.sum)}${split ? ` → ${split}` : ''}${auto ? ' (zapis automatyczny)' : ''}`, 'success');
+    actions.notify(`Paragon ${receipt.shop || ''} zapisany: ${formatPLN(t.share)}${t.halved > 0 ? ` (Twoja część – podział 50/50, druga osoba ${formatPLN(t.halved)})` : ''}${split ? ` → ${split}` : ''}${auto ? ' (zapis automatyczny)' : ''}`, 'success');
     return saved;
   };
 
@@ -106,7 +106,12 @@ const tear = (pos) => ({
 });
 
 export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfikacja paragonu', saveLabel = 'Zatwierdź i zapisz' }) {
+  const { state } = useApp();
   const [r, setR] = useState(() => assignBudgetRows(receipt, rows));
+  // Podział 50/50 (Ustawienia, domyślnie wyłączony); przy edycji paragonu już podzielonego – zawsze widoczny
+  const canSplit = state.settings.receiptSplit === true || receipt.items.some((it) => it.half);
+  const allHalf = r.items.length > 0 && r.items.every((it) => it.half);
+  const setAllHalf = (half) => setR((x) => ({ ...x, items: x.items.map((it) => ({ ...it, half })) }));
   const [editing, setEditing] = useState(false);
   const t = useMemo(() => receiptTotals(r, rows), [r, rows]);
   const options = receiptRows(rows);
@@ -162,7 +167,13 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
                       {it.name}
                       {Number(it.quantity) > 0 && Number(it.quantity) !== 1 && <span className="text-neutral-500"> {String(it.quantity).replace('.', ',')}×</span>}
                     </span>
-                    <span className="shrink-0 tabular">{money(it.price)}</span>
+                    {it.half ? (
+                      <span className="shrink-0 text-right tabular">
+                        <span className="text-neutral-400 line-through">{money(it.price)}</span> <span className="font-bold">{money(itemShare(it))}</span>
+                      </span>
+                    ) : (
+                      <span className="shrink-0 tabular">{money(it.price)}</span>
+                    )}
                   </div>
                 )}
                 <div className="mt-1 flex items-center gap-1.5">
@@ -186,6 +197,17 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
                   </select>
                   <span className="shrink-0 font-sans text-[10px] text-neutral-500">{SOURCE_LABEL[it.budgetSource] || 'z pamięci'}</span>
                 </div>
+                {canSplit && (
+                  <button
+                    type="button"
+                    onClick={() => setItem(it.id, { half: !it.half })}
+                    aria-pressed={!!it.half}
+                    aria-label={`Podziel na pół ${it.name}`}
+                    className={`mt-1 ml-4 inline-flex h-7 items-center gap-1 rounded-full border px-2.5 font-sans text-[11px] font-semibold ${it.half ? 'border-violet-500 bg-violet-100 text-violet-900' : 'border-neutral-300 bg-white/80 text-neutral-600 hover:bg-white'}`}
+                  >
+                    <Split size={12} /> {it.half ? `Podzielone 50/50 – Twoja część ${money(itemShare(it))}` : 'Podziel na pół (50/50)'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -194,10 +216,15 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
               <Plus size={14} /> Dodaj pozycję
             </button>
           )}
+          {canSplit && r.items.length > 1 && (
+            <button type="button" onClick={() => setAllHalf(!allHalf)} aria-pressed={allHalf} className={`mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed font-sans text-xs font-semibold ${allHalf ? 'border-violet-500 bg-violet-100 text-violet-900' : 'border-neutral-400 text-neutral-700 hover:bg-white'}`}>
+              <Split size={14} /> {allHalf ? 'Cofnij podział całego paragonu' : 'Podziel cały paragon na pół (50/50)'}
+            </button>
+          )}
           <Dashes />
           {/* Podział na kategorie budżetu (jak „sprzedaż opodatkowana” na paragonie) */}
           <div aria-label="Sumy częściowe">
-            <div className="text-[11px] tracking-wider text-neutral-500 uppercase">Podział na kategorie budżetu</div>
+            <div className="text-[11px] tracking-wider text-neutral-500 uppercase">Podział na kategorie budżetu{t.halved > 0 ? ' (Twoja część)' : ''}</div>
             <ul className="mt-1 space-y-0.5">
               {Object.entries(t.byCategory)
                 .sort((a, b) => b[1] - a[1])
@@ -215,6 +242,21 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
               {money(t.sum)}
             </span>
           </div>
+          {t.halved > 0 && (
+            <div className="mt-1 rounded border border-dashed border-violet-400 bg-violet-50 px-2 py-1.5" aria-label="Podział 50/50">
+              <div className="flex justify-between gap-2 font-bold">
+                <span>TWOJA CZĘŚĆ</span>
+                <span className="tabular" aria-label="Twoja część">
+                  {money(t.share)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-2 text-[12px] text-neutral-600">
+                <span>Druga osoba (50/50)</span>
+                <span className="tabular">{money(t.halved)}</span>
+              </div>
+              <div className="mt-0.5 font-sans text-[10px] text-neutral-500">Do budżetu i statystyk trafia Twoja część.</div>
+            </div>
+          )}
           {t.printed > 0 && Math.abs(t.diff) >= 0.01 && <p className="mt-1 font-sans text-[11px] text-amber-700">Na paragonie: {formatPLN(t.printed)} (różnica {formatPLN(t.diff)}) – sprawdź pozycje i ceny.</p>}
           <div className="my-2 flex gap-1" aria-hidden="true">
             {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -263,7 +305,7 @@ export function ReceiptsHistory({ rows, onAdjust, month }) {
               <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setEdit({ ...rc, items: rc.items.map((it, i) => ({ ...it, id: `h${i}`, source: 'memory', rowId: it.rowId || rc.rowId || '', budgetSource: 'memory' })) })} aria-label={`Otwórz paragon ${rc.shop} ${rc.date}`}>
                 <span className="block truncate font-medium">{rc.shop || 'Paragon'}</span>
                 <span className="block text-[11px] text-stone-500 dark:text-stone-400">
-                  {formatDate(rc.date)} · {rc.items.length} poz.{rc.auto ? ' · zapis automatyczny' : ''}
+                  {formatDate(rc.date)} · {rc.items.length} poz.{rc.halved > 0 ? ` · podział 50/50 (paragon ${formatPLN(rc.fullTotal)})` : ''}{rc.auto ? ' · zapis automatyczny' : ''}
                 </span>
               </button>
               <span className="shrink-0 font-semibold tabular">{formatPLN(rc.total)}</span>
@@ -305,7 +347,7 @@ export function ReceiptsHistory({ rows, onAdjust, month }) {
                 if (delta && rows.some((row) => row.id === id)) onAdjust?.(id, delta);
               }
             }
-            const next = list.map((x) => (x.id === edit.id ? { ...x, shop: r.shop, date: r.date, items: r.items.map(toStored(rows)), total: t.sum, rowId: receiptParts(r)[0]?.id || x.rowId } : x));
+            const next = list.map((x) => (x.id === edit.id ? { ...x, shop: r.shop, date: r.date, items: r.items.map(toStored(rows)), total: t.share, fullTotal: t.sum, halved: t.halved, rowId: receiptParts(r)[0]?.id || x.rowId } : x));
             writeReceipts(next);
             setList(next);
             setEdit(null);

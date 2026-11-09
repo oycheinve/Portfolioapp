@@ -217,7 +217,7 @@ function MonthlyBudget() {
               rows={rows}
               month={month}
               onSave={(receipt, parts) => {
-                const res = addPurchase(parts, null, `Paragon${receipt.shop ? `: ${receipt.shop}` : ''}`);
+                const res = addPurchase(parts, null, `Paragon${receipt.shop ? `: ${receipt.shop}` : ''}${receipt.halved > 0 ? ' (½ – podział 50/50)' : ''}`);
                 setReceiptsVer((v) => v + 1);
                 return res;
               }}

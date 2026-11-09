@@ -7,30 +7,70 @@ import { PREFS_CHANGED_EVENT, defaultFoodRow } from './budget.js';
 
 export const RECEIPTS_KEY = 'wealth-app-receipts-v1';
 const CACHE_KEY = 'fintrack-receipt-cache-v1';
-const MAX_SIDE = 1280;
+// Limity obrazu wysyłanego do AI: szerokość ≤ 1100 px (tekst paragonu nadal czytelny), wysokość ≤ 2400 px (długie
+// paragony), JPEG q 0.5 w skali szarości – zwykle 80–250 kB zamiast kilku MB z aparatu telefonu.
+const MAX_WIDTH = 1100;
+const MAX_HEIGHT = 2400;
+const QUALITY = 0.5;
 
-// Zdjęcie → JPEG w skali szarości (dłuższy bok ≤ 1280 px) – mniej danych do przesłania i mniej tokenów
-export async function compressImage(file, { maxSide = MAX_SIDE, quality = 0.6 } = {}) {
+// Dekodowanie z od razu zmniejszoną rozdzielczością (createImageBitmap z resizeWidth) – przeglądarka nie trzyma
+// w pamięci pełnych 12–48 Mpx z aparatu. Starsze przeglądarki: <img> + natychmiastowe zwolnienie zasobów.
+async function decodeScaled(file, maxWidth) {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(file, { resizeWidth: maxWidth, resizeQuality: 'medium', imageOrientation: 'from-image' });
+      // Część przeglądarek ignoruje resize* – wtedy bitmapa ma pełny rozmiar i zmniejszamy ją na płótnie
+      return { source: bmp, width: bmp.width, height: bmp.height, release: () => bmp.close?.() };
+    } catch {
+      // brak obsługi opcji / formatu – wariant z <img>
+    }
+  }
   const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.decoding = 'async';
   try {
-    const img = await new Promise((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error('Nie udało się wczytać zdjęcia'));
-      i.src = url;
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('Nie udało się wczytać zdjęcia'));
+      img.src = url;
     });
-    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-    const w = Math.max(1, Math.round(img.naturalWidth * scale));
-    const h = Math.max(1, Math.round(img.naturalHeight * scale));
-    const canvas = document.createElement('canvas');
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    throw e;
+  }
+  return {
+    source: img,
+    width: img.naturalWidth,
+    height: img.naturalHeight,
+    release: () => {
+      img.onload = null;
+      img.onerror = null;
+      img.removeAttribute('src');
+      URL.revokeObjectURL(url);
+    },
+  };
+}
+
+// Zdjęcie → JPEG w skali szarości (≤ 1100 × 2400 px). Płótno i bitmapa są zwalniane zaraz po użyciu (szerokość
+// i wysokość 0 – iOS Safari inaczej trzyma pamięć płótna do odśmiecania i przy kilku skanach zgłasza jej brak).
+export async function compressImage(file, { maxWidth = MAX_WIDTH, maxHeight = MAX_HEIGHT, quality = QUALITY } = {}) {
+  const dec = await decodeScaled(file, maxWidth);
+  const canvas = document.createElement('canvas');
+  try {
+    const scale = Math.min(1, maxWidth / dec.width, maxHeight / dec.height);
+    const w = Math.max(1, Math.round(dec.width * scale));
+    const h = Math.max(1, Math.round(dec.height * scale));
     canvas.width = w;
     canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, w, h);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(dec.source, 0, 0, w, h);
+    dec.release();
+    // Skala szarości na pomniejszonym obrazie (mało danych)
     const px = ctx.getImageData(0, 0, w, h);
     const d = px.data;
     for (let i = 0; i < d.length; i += 4) {
-      const g = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      const g = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0;
       d[i] = g;
       d[i + 1] = g;
       d[i + 2] = g;
@@ -40,7 +80,9 @@ export async function compressImage(file, { maxSide = MAX_SIDE, quality = 0.6 } 
     const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
     return { base64, mime: 'image/jpeg', width: w, height: h, bytes: Math.round((base64.length * 3) / 4), original: file.size };
   } finally {
-    URL.revokeObjectURL(url);
+    dec.release();
+    canvas.width = 0;
+    canvas.height = 0;
   }
 }
 
@@ -145,12 +187,15 @@ export function resolveBudgetRow(item, rows, map = readBudgetMap()) {
 export function assignBudgetRows(receipt, rows, map = readBudgetMap()) {
   return { ...receipt, items: receipt.items.map((it) => (it.rowId && rows.some((r) => r.id === it.rowId) ? it : { ...it, ...resolveBudgetRow(it, rows, map) })) };
 }
-// Podział paragonu na kategorie budżetu: [{ id, amount }]
+// Udział użytkownika w pozycji: cała cena albo połowa (pozycja podzielona 50/50, np. ze współlokatorem)
+const round2 = (v) => Math.round(v * 100) / 100;
+export const itemShare = (it) => round2((Number(it.price) || 0) / (it.half ? 2 : 1));
+// Podział paragonu na kategorie budżetu (kwoty po podziale 50/50): [{ id, amount }]
 export function receiptParts(receipt) {
   const by = {};
   for (const it of receipt.items) {
     if (!it.rowId) continue;
-    by[it.rowId] = Math.round(((by[it.rowId] || 0) + (Number(it.price) || 0)) * 100) / 100;
+    by[it.rowId] = round2((by[it.rowId] || 0) + itemShare(it));
   }
   return Object.entries(by).map(([id, amount]) => ({ id, amount }));
 }
@@ -172,19 +217,24 @@ export function learnBudget(receipt, rows) {
   return map;
 }
 
-// Sumy: pozycji, częściowe per kategoria budżetu (nazwa); zgodność z „SUMA PLN” z paragonu
+// Sumy: sum – pełna suma pozycji (zgodność z „SUMA PLN” z paragonu), share – Twoja część (po podziale 50/50,
+// trafia do budżetu), halved – kwota oddana drugiej osobie; byCategory – Twoja część per kategoria budżetu
 export function receiptTotals(receipt, rows = []) {
   const by = {};
   let sum = 0;
+  let share = 0;
   for (const it of receipt.items) {
-    const p = Math.round((Number(it.price) || 0) * 100) / 100;
+    const p = round2(Number(it.price) || 0);
+    const mine = itemShare(it);
     sum += p;
+    share += mine;
     const key = rows.find((r) => r.id === it.rowId)?.name || it.category || 'Bez kategorii';
-    by[key] = Math.round(((by[key] || 0) + p) * 100) / 100;
+    by[key] = round2((by[key] || 0) + mine);
   }
-  sum = Math.round(sum * 100) / 100;
+  sum = round2(sum);
+  share = round2(share);
   const printed = Number(receipt.total) || 0;
-  return { sum, byCategory: by, printed, diff: printed ? Math.round((printed - sum) * 100) / 100 : 0 };
+  return { sum, share, halved: round2(sum - share), byCategory: by, printed, diff: printed ? round2(printed - sum) : 0 };
 }
 
 // Samouczenie: zapis kategorii pozycji w pamięci produktów – poprawione przez użytkownika jako 'user'

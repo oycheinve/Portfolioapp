@@ -41,6 +41,18 @@ export default function ModulesCard() {
           label="Wymagaj potwierdzenia i podglądu po zeskanowaniu paragonu"
           description={receiptReview ? 'Po odczycie otwiera się ekran weryfikacji: sklep, data, pozycje, ceny i kategorie do poprawy przed zapisem.' : 'Paragon zapisuje się automatycznie w tle (wydatek w budżecie i historia paragonów) – korekty możliwe później.'}
         />
+        <div className="mt-4 border-t border-stone-100 pt-4 dark:border-white/5">
+          <Toggle
+            checked={state.settings.receiptSplit === true}
+            onChange={(v) => actions.updateSettings({ receiptSplit: v })}
+            label="Włącz opcję dzielenia pozycji z paragonu na pół (np. ze współlokatorem/partnerem)"
+            description={
+              state.settings.receiptSplit === true
+                ? `Na ekranie weryfikacji przy każdej pozycji (i dla całego paragonu) pojawi się „Podziel na pół (50/50)” – do budżetu i statystyk trafi połowa kwoty.${receiptReview ? '' : ' Wymaga włączonego podglądu paragonu powyżej.'}`
+                : 'Wyłączone – cała kwota paragonu trafia do budżetu.'
+            }
+          />
+        </div>
       </Card>
     </div>
   );
