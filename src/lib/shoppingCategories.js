@@ -22,9 +22,12 @@ export const SHOPPING_CATEGORIES = [
   { id: 'Dla dziecka', emoji: '🍼' },
   { id: 'Dla zwierząt', emoji: '🐾' },
   { id: 'Apteka', emoji: '💊' },
+  { id: 'Ubrania i obuwie', emoji: '👕' },
   { id: 'Dom i inne', emoji: '🏠' },
 ];
 export const OTHER = 'Dom i inne';
+// Wersja zestawu kategorii (2 – dodane „Ubrania i obuwie”); wpis z AI zapisuje wersję, z którą powstał
+export const CATS_VERSION = 2;
 const VALID = new Set(SHOPPING_CATEGORIES.map((c) => c.id));
 
 export const normProduct = (t) => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -46,6 +49,7 @@ const DICT = [
   ['Napoje', ['woda', 'sok', 'cola', 'pepsi', 'piwo', 'wino', 'kawa', 'herbata', 'napój', 'napoj', 'oranżad', 'lemoniad', 'energetyk', 'kakao']],
   ['Dla dziecka', ['pieluch', 'chusteczki nawilżane', 'kaszka', 'mleko modyfikowane', 'słoiczek', 'sloiczek']],
   ['Dla zwierząt', ['karma', 'żwirek', 'zwirek', 'przysmaki dla', 'dla psa', 'dla kota']],
+  ['Ubrania i obuwie', ['skarpet', 'majtki', 'bokserki', 'koszul', 't-shirt', 'tshirt', 'bluz', 'sweter', 'spodnie', 'jeans', 'dżins', 'legginsy', 'rajstopy', 'kurtk', 'płaszcz', 'sukienk', 'spódnic', 'piżam', 'biustonosz', 'stanik', 'czapk', 'szalik', 'rękawiczk', 'buty', 'trampki', 'adidasy', 'sandały', 'kapcie', 'klapki', 'kozaki', 'szorty', 'dres', 'marynarka', 'krawat', 'pasek do spodni', 'kąpielówki', 'strój kąpielowy']],
   ['Apteka', ['tabletki przeciw', 'paracetamol', 'ibuprofen', 'apap', 'witamin', 'plastry', 'syrop', 'krople do']],
 ];
 
@@ -109,7 +113,9 @@ export function resolveLocal(title, mem) {
   const key = normProduct(title);
   if (!key) return null;
   const e = mem[key];
-  if (e?.c && VALID.has(e.c)) return { category: e.c, source: 'memory' };
+  // „Dom i inne” zapamiętane przed dodaniem nowych kategorii (np. „Ubrania i obuwie”) – sprawdzane ponownie (jednorazowo)
+  const stale = e?.c === OTHER && (e.k || 1) < CATS_VERSION;
+  if (e?.c && VALID.has(e.c) && !stale) return { category: e.c, source: 'memory' };
   const l = learnedCategory(key, mem);
   if (l) return { category: l, source: 'learned' };
   const g = guessCategory(title);
@@ -122,9 +128,10 @@ export function remember(mem, title, { category, source, used = false } = {}) {
   if (!key) return mem;
   const prev = mem[key] || { n: String(title).trim(), u: 0, t: 0 };
   const next = { ...prev, n: prev.n || String(title).trim() };
-  if (category && VALID.has(category) && (source === 'ai' || !prev.c)) {
+  if (category && VALID.has(category) && (source === 'ai' || !prev.c || (prev.c === OTHER && (prev.k || 1) < CATS_VERSION))) {
     next.c = category;
     next.s = source;
+    next.k = CATS_VERSION;
   }
   if (used) {
     next.u = (prev.u || 0) + 1;
