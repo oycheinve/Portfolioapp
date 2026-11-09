@@ -5,6 +5,7 @@ import { MissingTablesError } from '../../lib/weeklyTasks.js';
 import { dailyCloudStore, dailyLocalStore, dayId, dayKey, dayLabel, dayProgress, dayShort, habitStreak, historyDays, makeDailyTask, shiftDay, tasksForDay } from '../../lib/dailyTasks.js';
 import { Card, Segmented } from '../ui.jsx';
 import TaskAccordion from './TaskAccordion.jsx';
+import { GroupedTaskList, TaskGroupBar, useTaskCategories } from './TaskGroups.jsx';
 import ScheduledCard, { PlanInput } from './ScheduledCard.jsx';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -57,6 +58,8 @@ export default function DailyTasksPanel({ onDataChange }) {
 
   const doneSet = useMemo(() => new Set(data.logs.map((l) => dayKey(l.taskId, l.day))), [data.logs]);
   const list = useMemo(() => tasksForDay(data.tasks, day), [data.tasks, day]);
+  // Kategorie (BETA): automatyczne grupowanie w sekcje (Dom, Praca, Finanse…) – pamięć, słownik, AI w tle
+  const cats = useTaskCategories(list.map((t) => t.title));
   const progress = dayProgress(data.tasks, doneSet, day);
   const history = useMemo(() => historyDays(data.tasks, doneSet, today), [data.tasks, doneSet, today]);
   const isToday = day === today;
@@ -177,14 +180,18 @@ export default function DailyTasksPanel({ onDataChange }) {
       {loading ? (
         <div className="h-32 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />
       ) : (
+        <div className="space-y-2">
+        {list.length > 0 && <TaskGroupBar cats={cats} />}
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
           {groups.map((g) => (
             <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(dayKey(t.id, day))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
               {g.items.length === 0 ? (
                 <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isToday ? (g.key === 'H' ? 'Dodaj nawyk „Codziennie” – np. zapisanie wydatków.' : 'Brak zadań na dziś.') : isFuture ? 'Brak zadań zaplanowanych na ten dzień.' : 'Brak zadań.'}</p>
               ) : (
-                <ul className="space-y-1">
-                  {g.items.map((t) => {
+                <GroupedTaskList
+                  items={g.items}
+                  cats={cats}
+                  renderItem={(t) => {
                     const done = doneSet.has(dayKey(t.id, day));
                     const streak = t.isRecurring ? habitStreak(t, doneSet, day) : 0;
                     return (
@@ -213,11 +220,12 @@ export default function DailyTasksPanel({ onDataChange }) {
                         )}
                       </li>
                     );
-                  })}
-                </ul>
+                  }}
+                />
               )}
             </Card>
           ))}
+        </div>
         </div>
       )}
 

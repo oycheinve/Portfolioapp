@@ -5,6 +5,7 @@ import { MissingTablesError } from '../../lib/weeklyTasks.js';
 import { daysLeftInMonth, hasTarget, historyMonths, makeMonthlyTask, monthDoneSet, monthId, monthKey, monthLabel, monthProgress, monthProgressMap, monthlyCloudStore, monthlyLocalStore, shiftMonthId, tasksForMonth } from '../../lib/monthlyTasks.js';
 import { Card, Segmented } from '../ui.jsx';
 import TaskAccordion from './TaskAccordion.jsx';
+import { GroupedTaskList, TaskGroupBar, useTaskCategories } from './TaskGroups.jsx';
 import ScheduledCard, { PlanInput } from './ScheduledCard.jsx';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -79,6 +80,8 @@ export default function MonthlyTasksPanel({ onDataChange }) {
   const progressMap = useMemo(() => monthProgressMap(data.logs), [data.logs]);
   const progressReady = store.progressReady !== false;
   const list = useMemo(() => tasksForMonth(data.tasks, month), [data.tasks, month]);
+  // Kategorie (BETA): automatyczne grupowanie w sekcje (Dom, Praca, Finanse…) – pamięć, słownik, AI w tle
+  const cats = useTaskCategories(list.map((t) => t.title));
   const progress = monthProgress(data.tasks, doneSet, month);
   const history = useMemo(() => historyMonths(data.tasks, doneSet, current), [data.tasks, doneSet, current]);
   const isCurrent = month === current;
@@ -271,14 +274,18 @@ export default function MonthlyTasksPanel({ onDataChange }) {
       {loading ? (
         <div className="h-32 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />
       ) : (
+        <div className="space-y-2">
+        {list.length > 0 && <TaskGroupBar cats={cats} />}
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
           {groups.map((g) => (
             <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(monthKey(t.id, month))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
               {g.items.length === 0 ? (
                 <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'H' ? 'Dodaj zadanie „Co miesiąc” – np. głęboki audyt portfela.' : 'Brak zadań tylko na ten miesiąc.') : isFuture ? 'Brak zadań zaplanowanych na ten miesiąc.' : 'Brak zadań.'}</p>
               ) : (
-                <ul className="space-y-1">
-                  {g.items.map((t) => {
+                <GroupedTaskList
+                  items={g.items}
+                  cats={cats}
+                  renderItem={(t) => {
                     const done = doneSet.has(monthKey(t.id, month));
                     const streak = t.isRecurring ? monthStreak(t, doneSet, month) : 0;
                     const target = hasTarget(t) ? Number(t.target) : null;
@@ -375,11 +382,12 @@ export default function MonthlyTasksPanel({ onDataChange }) {
                         )}
                       </li>
                     );
-                  })}
-                </ul>
+                  }}
+                />
               )}
             </Card>
           ))}
+        </div>
         </div>
       )}
 

@@ -3,6 +3,7 @@ import { CalendarCheck2, CalendarClock, Check, ChevronLeft, ChevronRight, Gauge,
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, archiveWeeks, cloudStore, localStore, logKey, makeTask, markCarryWeek, overdueOneOffs, readCarryWeek, shiftWeek, tasksForWeek, weekId, weekLabel, weekNumber, weekProgress, weekStart } from '../lib/weeklyTasks.js';
 import TaskAccordion from '../components/tasks/TaskAccordion.jsx';
+import { GroupedTaskList, TaskGroupBar, useTaskCategories } from '../components/tasks/TaskGroups.jsx';
 import ScheduledCard, { PlanInput } from '../components/tasks/ScheduledCard.jsx';
 import { dayId } from '../lib/dailyTasks.js';
 import { Card, Segmented } from '../components/ui.jsx';
@@ -245,6 +246,8 @@ function WeeklyTasksPanel({ onDataChange }) {
 
   const doneSet = useMemo(() => new Set(data.logs.map((l) => logKey(l.taskId, l.weekId))), [data.logs]);
   const list = useMemo(() => tasksForWeek(data.tasks, week), [data.tasks, week]);
+  // Kategorie (BETA): automatyczne grupowanie w sekcje (Dom, Praca, Finanse…) – pamięć, słownik, AI w tle
+  const cats = useTaskCategories(list.map((t) => t.title));
   const progress = weekProgress(data.tasks, doneSet, week);
   const archive = useMemo(() => archiveWeeks(data.tasks, doneSet, current), [data.tasks, doneSet, current]);
   const isCurrent = week === current;
@@ -365,14 +368,18 @@ function WeeklyTasksPanel({ onDataChange }) {
       {loading ? (
         <div className="h-32 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />
       ) : (
+        <div className="space-y-2">
+        {list.length > 0 && <TaskGroupBar cats={cats} />}
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
           {groups.map((g) => (
             <Card key={g.key} title={`${g.title} (${g.items.filter((t) => doneSet.has(logKey(t.id, week))).length}/${g.items.length})`} subtitle={g.hint} icon={g.icon} bodyClassName="p-2 sm:p-3">
               {g.items.length === 0 ? (
                 <p className="px-2 py-4 text-center text-sm text-stone-500 dark:text-stone-400">{isCurrent ? (g.key === 'R' ? 'Dodaj zadanie „Co tydzień” – np. nawyk lub stały przegląd.' : 'Brak zadań jednorazowych w tym tygodniu.') : isFuture ? 'Brak zadań zaplanowanych na ten tydzień.' : 'Brak zadań.'}</p>
               ) : (
-                <ul className="space-y-1">
-                  {g.items.map((t) => {
+                <GroupedTaskList
+                  items={g.items}
+                  cats={cats}
+                  renderItem={(t) => {
                     const done = doneSet.has(logKey(t.id, week));
                     return (
                       <li key={t.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
@@ -404,11 +411,12 @@ function WeeklyTasksPanel({ onDataChange }) {
                         )}
                       </li>
                     );
-                  })}
-                </ul>
+                  }}
+                />
               )}
             </Card>
           ))}
+        </div>
         </div>
       )}
 

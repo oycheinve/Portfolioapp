@@ -558,3 +558,7 @@ Instrukcja konfiguracji krok po kroku: **`supabase/MULTIUSER.md`**. Skrypt izola
 ### Listy zakupów – tryb edycji
 
 Przy nazwie listy jest przycisk „Edytuj”. Poza trybem edycji lista jest czysta (tylko odhaczanie produktów, bez etykiet kategorii i koszy). W trybie edycji: przy każdym produkcie lista kategorii (zmiana zapisywana od razu w pamięci jako poprawka użytkownika – ma pierwszeństwo przed AI i słownikiem), usuwanie pozycji, zmiana nazwy i usunięcie listy; „Gotowe” kończy edycję. Działa także bez grupowania wg kategorii.
+
+### Zadania – automatyczne grupowanie w kategorie (BETA)
+
+W zakładce Zadania (dzienne, tygodniowe i miesięczne) zadania w każdej karcie są dzielone na sekcje: Finanse, Praca, Dom, Zdrowie i sport, Zakupy i sprawunki, Rodzina i znajomi, Rozwój i nauka, Sprawy codzienne (przy co najmniej 2 zadaniach w karcie). Kategoria: pamięć (Twoje poprawki i wcześniejsze odpowiedzi AI) → lokalny słownik słów kluczowych → AI (`/api/news-summary`, tryb `tasks`, czysty JSON z zamkniętą listą kategorii – tylko dla zadań nieznanych lokalnie, w tle) → „Sprawy codzienne”. Nad listami: „Grupuj wg kategorii” (domyślnie włączone, wybór zapamiętany) i „Zmień kategorie” – przy zadaniach pojawia się wybór kategorii, poprawka jest zapamiętywana i ma pierwszeństwo przed AI. Pamięć: `wealth-app-task-cats-v1` (per użytkownik, urządzenie + chmura).
