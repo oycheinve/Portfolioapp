@@ -69,7 +69,7 @@ export default function EarningsAnalyst() {
       setOpenKey(entry.key);
       setText('');
       setImage(null);
-      actions.notify(`Analiza ${entry.analysis.company} ${entry.analysis.quarter}: ${(VERDICT[entry.analysis.verdict] || VERDICT.unknown).title.toLowerCase()}`, 'success');
+      actions.notify(`Analiza ${entry.analysis.company} ${entry.analysis.quarter}: ${(VERDICT[entry.analysis.verdict] || VERDICT.unknown).title.toLowerCase()}${res.searchNote === 'limit' ? ' (bez wyszukiwarki – limit Google wyczerpany)' : ''}`, res.searchNote === 'limit' ? 'warn' : 'success');
     } catch (err) {
       actions.notify(`Analityk wyników: ${err.message}`, 'warn');
     } finally {
@@ -281,7 +281,13 @@ function Analysis({ entry }) {
             ))}
           </div>
         ) : (
-          <span>{entry.grounded ? 'Wyszukiwarka nie zwróciła listy źródeł.' : 'Analiza bez wyszukiwania w internecie (dane z komunikatu i wiedzy modelu) – konsensus może być niepełny.'}</span>
+          <span>
+            {entry.grounded
+              ? 'Wyszukiwarka nie zwróciła listy źródeł.'
+              : entry.searchNote === 'limit'
+                ? 'Limit wyszukiwarki Google w darmowym planie Gemini jest wyczerpany – analiza bez internetu (wiedza modelu i wklejony komunikat). Dla dokładnych liczb wklej komunikat lub zrzut z wynikami; wyszukiwanie wróci po odnowieniu limitu.'
+                : 'Analiza bez wyszukiwania w internecie (dane z komunikatu i wiedzy modelu) – konsensus może być niepełny.'}
+          </span>
         )}
         <p className="mt-1">AI może się mylić – zweryfikuj liczby w raporcie spółki. Przygotowano {new Date(entry.at).toLocaleString('pl-PL')}.</p>
       </div>

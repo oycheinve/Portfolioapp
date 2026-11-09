@@ -34,8 +34,8 @@ function writeEarnings(list) {
   }
 }
 // Zapis analizy: rotacja (12 mies.) + nadpisanie wpisu o tym samym kluczu [Spółka + Kwartał]
-export function saveEarnings({ analysis, sources = [], grounded = false, model = '' }, now = Date.now()) {
-  const entry = { key: earningsKey(analysis), analysis, sources, grounded, model, at: new Date(now).toISOString() };
+export function saveEarnings({ analysis, sources = [], grounded = false, searchNote = '', model = '' }, now = Date.now()) {
+  const entry = { key: earningsKey(analysis), analysis, sources, grounded, ...(searchNote ? { searchNote } : {}), model, at: new Date(now).toISOString() };
   const list = readEarnings(now).filter((e) => e.key !== entry.key);
   writeEarnings([entry, ...list]);
   return entry;

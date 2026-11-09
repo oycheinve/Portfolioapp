@@ -653,6 +653,9 @@ function earningsParse(grounded) {
 const EARNINGS_SEARCH_SPEC = { system: EARNINGS_RULES, search: true, perTryMs: 40000, maxTokens: 6144, parse: earningsParse(true) };
 const EARNINGS_OFFLINE_SPEC = { system: `${EARNINGS_RULES}\n- Nie masz dostępu do internetu: korzystaj z danych użytkownika i własnej wiedzy, konsensus podawaj tylko, gdy jest w danych użytkownika lub jesteś go pewien.`, schema: EARNINGS_SCHEMA, maxTokens: 6144, parse: earningsParse(false) };
 const MAX_EARNINGS_TEXT = 20000;
+// Po 429 z wyszukiwarką: przez godzinę (w tej instancji funkcji) analizy od razu bez wyszukiwania
+const SEARCH_BLOCK_MS = 60 * 60 * 1000;
+let searchBlockedUntil = 0;
 
 async function earnings(body, res) {
   const query = str(body.query, 80).replace(/[<>]/g, ' ');
@@ -669,15 +672,27 @@ async function earnings(body, res) {
   const parts = image.length > 100 ? [{ text: intro }, { inlineData: { mimeType: mime, data: image } }] : intro;
   let r;
   const started = Date.now();
-  try {
-    r = await summarize(parts, EARNINGS_SEARCH_SPEC);
-  } catch (e) {
-    // Wyszukiwarka niedostępna dla klucza / modelu (400/403/404) albo nieczytelny wynik – analiza bez internetu
-    // (tylko gdy zostało dość czasu w limicie funkcji)
-    if (![400, 403, 404, 502].includes(e.status) || (e.status === 403 && keyRejected(e)) || Date.now() - started > 22000) throw e;
-    r = await summarize(parts, { ...EARNINGS_OFFLINE_SPEC, budgetMs: TIME_BUDGET_MS - (Date.now() - started) });
+  let searchNote = '';
+  if (Date.now() < searchBlockedUntil) {
+    // Limit wyszukiwarki wyczerpany niedawno – od razu analiza bez internetu (oszczędność czasu i zapytań)
+    r = await summarize(parts, EARNINGS_OFFLINE_SPEC);
+    searchNote = 'limit';
+  } else {
+    try {
+      r = await summarize(parts, EARNINGS_SEARCH_SPEC);
+    } catch (e) {
+      // Wyszukiwarka niedostępna dla klucza / modelu (400/403/404), nieczytelny wynik (502) albo wyczerpany limit
+      // wyszukiwania (429 – darmowy plan ma osobny, mały limit zapytań z wyszukiwarką Google) – analiza bez internetu
+      // na zwykłym limicie (tylko gdy zostało dość czasu w limicie funkcji)
+      if (![400, 403, 404, 429, 502].includes(e.status) || (e.status === 403 && keyRejected(e)) || Date.now() - started > 22000) throw e;
+      if (e.status === 429) {
+        searchBlockedUntil = Date.now() + SEARCH_BLOCK_MS;
+        searchNote = 'limit';
+      }
+      r = await summarize(parts, { ...EARNINGS_OFFLINE_SPEC, budgetMs: TIME_BUDGET_MS - (Date.now() - started) });
+    }
   }
-  const out = { analysis: r.analysis, sources: r.sources, grounded: r.grounded, model: r.model };
+  const out = { analysis: r.analysis, sources: r.sources, grounded: r.grounded, searchNote, model: r.model };
   cache.set(ekey, out);
   return send(res, 200, { ...out, cached: false });
 }
