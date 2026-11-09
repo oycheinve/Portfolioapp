@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Eraser, History, Pencil, Plus, RotateCcw, ShoppingBag, Split, Trash2, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Eraser, History, Pencil, Plane, Plus, RotateCcw, ShoppingBag, Split, Trash2, X } from 'lucide-react';
 import { DAILY_KEY, LOG_LIMIT, budgetTotals, readBudgetLog, writeBudgetLog, dailyAllowance, defaultFoodRow, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
+import TripsBudget from '../components/budget/TripsBudget.jsx';
+import { ReceiptScanner, ReceiptsHistory } from '../components/budget/Receipts.jsx';
+import MonthSummary from '../components/budget/MonthSummary.jsx';
+import { BetaBadge } from '../components/ui.jsx';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 const monthName = (key) => {
@@ -24,7 +28,60 @@ const leftTone = (v) => (v < -0.004 ? 'text-red-600 dark:text-red-400' : '');
 // Budżet miesięczny – minimalistyczna tabela wzorowana na arkuszu: Kategoria, Planowany Budżet,
 // Kwota Wydana, Pozostało (plan − wydane) i wiersz RAZEM. Podgląd (szybkie zakupy, limit dzienny) i tryb „Edytuj”
 // (nazwy, kwoty, dodawanie i usuwanie kategorii).
+const MODE_KEY = 'fintrack-budget-mode';
+const readMode = () => {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'trips' ? 'trips' : 'monthly';
+  } catch {
+    return 'monthly';
+  }
+};
+
+// Budżet: przełącznik Budżet Miesięczny / Budżet Wakacyjny (BETA – wiele wyjazdów)
 export default function BudgetView() {
+  const [mode, setModeState] = useState(readMode);
+  const setMode = (m) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      // brak localStorage
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Rodzaj budżetu">
+        {[
+          ['monthly', 'Budżet Miesięczny', CalendarDays],
+          ['trips', 'Budżet Wakacyjny', Plane],
+        ].map(([id, label, Icon]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={mode === id}
+            onClick={() => setMode(id)}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-colors ${
+              mode === id ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-300'
+            }`}
+          >
+            <Icon size={15} /> {label}
+            {id === 'trips' && <BetaBadge />}
+          </button>
+        ))}
+      </div>
+      {mode === 'trips' ? (
+        <section className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900">
+          <TripsBudget />
+        </section>
+      ) : (
+        <MonthlyBudget />
+      )}
+    </div>
+  );
+}
+
+function MonthlyBudget() {
   const [data, setData] = useState(readBudget);
   const [month, setMonth] = useState(() => monthKey());
   const saved = data[month];
@@ -117,6 +174,9 @@ export default function BudgetView() {
     const main = next.find((r) => r.id === parts[0].id);
     return { name: main.name, left: toNum(main.planned) - toNum(main.spent), parts: parts.map((p) => ({ name: next.find((r) => r.id === p.id).name, amount: p.amount })) };
   };
+  // Korekta kwoty wydanej kategorii (edycja zapisanego paragonu z tego miesiąca)
+  const [receiptsVer, setReceiptsVer] = useState(0);
+  const adjustSpent = (rowId, delta) => setRows(rows.map((r) => (r.id === rowId ? { ...r, spent: Math.max(0, Math.round((toNum(r.spent) + delta) * 100) / 100) } : r)));
   // Cofnięcie wpisu: kwota odjęta z „Kwoty Wydanej” kategorii (nie poniżej zera), wpis usunięty z dziennika
   const undoPurchase = (entryId) => {
     const entry = entries.find((e) => e.id === entryId);
@@ -171,6 +231,12 @@ export default function BudgetView() {
         </button>
         {editing && <span className="ml-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">Tryb edycji</span>}
       </div>
+      {/* Miniony miesiąc: podsumowanie od AI (archiwum; generowane automatycznie w nowym miesiącu) */}
+      {month < monthKey() && !editing && saved?.length > 0 && (
+        <div className="mb-3">
+          <MonthSummary key={month} month={month} label={monthName(month)} />
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
@@ -284,6 +350,22 @@ export default function BudgetView() {
             </div>
           )}
           <PurchasePanel rows={rows} onAdd={addPurchase} />
+          {/* Paragony (BETA): skan → weryfikacja / zapis automatyczny → wydatek; historia z edycją (samouczenie kategorii) */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <ReceiptScanner
+              rows={rows}
+              month={month}
+              defaultRowId={defaultFoodRow(rows)?.id || rows[0]?.id}
+              onSave={(receipt, rowId) => {
+                const res = addPurchase(rowId, receipt.total, `Paragon${receipt.shop ? `: ${receipt.shop}` : ''}`);
+                setReceiptsVer((v) => v + 1);
+                return res;
+              }}
+            />
+          </div>
+          <div className="mt-2">
+            <ReceiptsHistory key={receiptsVer} rows={rows} month={month} onAdjust={adjustSpent} />
+          </div>
           <RecentEntries entries={entries} rows={rows} onUndo={undoPurchase} />
           <DailyTile rows={rows} month={month} />
           <p className="mt-2 text-right text-[11px] text-stone-400">

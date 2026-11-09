@@ -117,3 +117,17 @@ export async function requestShoppingCategories(titles) {
   if (!res.ok || !body.categories) throw new Error(body.error || (res.status === 404 ? 'AI dostępne po wdrożeniu na serwerze (Vercel)' : `HTTP ${res.status}`));
   return body.categories;
 }
+
+// Wspólne wywołanie trybów pomocniczych (paragon, podsumowanie budżetu): kolejka, cicha ponowna próba przy przeciążeniu
+async function callAi(payload) {
+  const token = await sessionToken();
+  let { res, body } = await slot(() => post(payload, token));
+  if (busyAnswer(res, body)) {
+    await new Promise((r) => setTimeout(r, 3000));
+    ({ res, body } = await slot(() => post(payload, token)));
+  }
+  if (!res.ok) throw new Error(body.error || (res.status === 404 ? 'AI dostępne po wdrożeniu na serwerze (Vercel)' : `HTTP ${res.status}`));
+  return body;
+}
+export const requestReceipt = (image, mime = 'image/jpeg') => callAi({ mode: 'receipt', image, mime });
+export const requestBudgetSummary = (data) => callAi({ mode: 'budget', ...data });

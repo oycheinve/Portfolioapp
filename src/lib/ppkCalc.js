@@ -50,12 +50,14 @@ export function simulatePpk(p, startYear = new Date().getFullYear()) {
   const empPct = Math.min(PPK_LIMITS.employee.max, Math.max(PPK_LIMITS.employee.min, Number(p.employeePct) || 0)) / 100;
   const erPct = Math.min(PPK_LIMITS.employer.max, Math.max(PPK_LIMITS.employer.min, Number(p.employerPct) || 0)) / 100;
   const net = (Number(p.returnPct) || 0) / 100 - (Number(p.feePct) || 0) / 100;
-  const mr = Math.pow(1 + net, 1 / 12) - 1;
+  // Stopa zwrotu stała (kalkulator) albo zależna od roku (fundusz zdefiniowanej daty – p.returnByYear(y), już po opłacie)
+  const mrFor = (y) => Math.pow(1 + (typeof p.returnByYear === 'function' ? p.returnByYear(y) : net), 1 / 12) - 1;
   const taxRate = (Number(p.taxRate) || 0) / 100;
   const minWage0 = minWageFor(startYear);
   const reducedAllowed = (Number(p.salary) || 0) <= 1.2 * minWage0;
 
-  let balance = 0;
+  let balance = Math.max(0, Number(p.startBalance) || 0); // dotychczas zgromadzone środki (opcjonalnie)
+  const startBalance = balance;
   let own = 0;
   let employer = 0;
   let state = 0;
@@ -64,7 +66,9 @@ export function simulatePpk(p, startYear = new Date().getFullYear()) {
   let tax = 0;
   const rows = [];
   for (let y = 0; y < years; y += 1) {
-    const salary = (Number(p.salary) || 0) * Math.pow(1 + g, y);
+    // Podstawa wpłat: wynagrodzenie zasadnicze + średnie prowizje / premie (dochody zmienne) – rosną razem
+    const salary = ((Number(p.salary) || 0) + Math.max(0, Number(p.bonus) || 0)) * Math.pow(1 + g, y);
+    const mr = mrFor(y);
     const minWage = minWage0 * Math.pow(1 + g, y);
     let yearContrib = 0;
     let yearState = 0;
@@ -106,11 +110,12 @@ export function simulatePpk(p, startYear = new Date().getFullYear()) {
       own,
       employer,
       state,
-      gains: balance - own - employer - state,
+      gains: balance - startBalance - own - employer - state,
       balance,
+      returnPct: (Math.pow(1 + mr, 12) - 1) * 100,
     });
   }
-  const gains = balance - own - employer - state;
+  const gains = balance - startBalance - own - employer - state;
   const outOfPocket = own + tax;
   return {
     years,
@@ -126,10 +131,61 @@ export function simulatePpk(p, startYear = new Date().getFullYear()) {
     tax,
     outOfPocket,
     multiplier: outOfPocket > 0 ? balance / outOfPocket : 0,
-    firstMonth: { employee: (Number(p.salary) || 0) * empPct, employer: (Number(p.salary) || 0) * erPct, tax: (Number(p.salary) || 0) * erPct * taxRate },
+    startBalance,
+    firstMonth: (() => {
+      const base = (Number(p.salary) || 0) + Math.max(0, Number(p.bonus) || 0);
+      return { base, employee: base * empPct, employer: base * erPct, tax: base * erPct * taxRate };
+    })(),
     reducedAllowed,
     reducedThreshold: 1.2 * minWage0,
     minWage: minWage0,
     payout: { lump: balance * 0.25, installment: (balance * 0.75) / 120 },
   };
+}
+
+// ── Fundusz zdefiniowanej daty (PPK) ──
+// Ustawowe przedziały udziału akcji wg lat do 60. roku życia (rozporządzenie o polityce inwestycyjnej FZD):
+// > 20 lat: 60–80%, 10–20 lat: 40–70%, 5–10 lat: 25–50%, 0–5 lat: 10–30%, po 60. roku: do 15%.
+// Profil przyjmowany jako środek przedziału (typowy dla funduszy rynkowych); oczekiwane stopy zwrotu: akcje i obligacje.
+export const TDF_STAGES = [
+  { from: 20, min: 60, max: 80, label: 'ponad 20 lat do 60. r.ż.' },
+  { from: 10, min: 40, max: 70, label: '10–20 lat do 60. r.ż.' },
+  { from: 5, min: 25, max: 50, label: '5–10 lat do 60. r.ż.' },
+  { from: 0, min: 10, max: 30, label: 'do 5 lat do 60. r.ż.' },
+  { from: -Infinity, min: 0, max: 15, label: 'po 60. roku życia' },
+];
+export function tdfStage(yearsTo60) {
+  const st = TDF_STAGES.find((x) => yearsTo60 > x.from) || TDF_STAGES.at(-1);
+  return { ...st, equity: (st.min + st.max) / 2 };
+}
+// Fundusz właściwy dla daty urodzenia: rok 60. urodzin zaokrąglony do pełnych 5 lat (np. PPK 2055)
+export function tdfYear(birthYear) {
+  return Math.round((birthYear + 60) / 5) * 5;
+}
+export function ageFrom(birthDate, today = new Date()) {
+  const b = new Date(`${birthDate}T12:00:00`);
+  if (Number.isNaN(b.getTime())) return null;
+  let a = today.getFullYear() - b.getFullYear();
+  if (today.getMonth() < b.getMonth() || (today.getMonth() === b.getMonth() && today.getDate() < b.getDate())) a -= 1;
+  return a;
+}
+
+export function defaultPpkProfile() {
+  return { birthDate: '', age: 35, salary: 8000, bonus: 0, employeePct: 2, employerPct: 1.5, startBalance: 0, equityReturn: 7, bondReturn: 4.5, feePct: 0.5, salaryGrowth: 4, taxRate: 12 };
+}
+
+// Symulacja PPK w funduszu zdefiniowanej daty: udział akcji maleje z wiekiem (glide path), stopa zwrotu roku =
+// udział akcji × stopa akcji + reszta × stopa obligacji − opłata; do 60. roku życia
+export function simulatePpkTdf(profile, today = new Date()) {
+  const p = { ...defaultPpkProfile(), ...profile };
+  const age = p.birthDate ? ageFrom(p.birthDate, today) : Number(p.age) || 0;
+  const birthYear = p.birthDate ? new Date(`${p.birthDate}T12:00:00`).getFullYear() : today.getFullYear() - age;
+  const years = Math.max(1, Math.min(50, 60 - age));
+  const eq = (Number(p.equityReturn) || 0) / 100;
+  const bd = (Number(p.bondReturn) || 0) / 100;
+  const fee = (Number(p.feePct) || 0) / 100;
+  const stageAt = (y) => tdfStage(60 - (age + y));
+  const sim = simulatePpk({ ...p, horizonMode: 'YEARS', years, returnByYear: (y) => { const s = stageAt(y).equity / 100; return s * eq + (1 - s) * bd - fee; } }, today.getFullYear());
+  const rows = sim.rows.map((r, i) => ({ ...r, age: age + i + 1, equityShare: stageAt(i).equity }));
+  return { ...sim, rows, age, birthYear, fundYear: tdfYear(birthYear), stage: stageAt(0), years };
 }

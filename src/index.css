@@ -60,6 +60,24 @@ body,
   min-height: 100%;
 }
 
+/* iOS (Safari): wysokość widocznego okna (bez skakania przy chowaniu paska adresu), bez powiększania tekstu
+   przy obrocie i bez przybliżania pól formularzy przy fokusie */
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
 body {
   @apply bg-stone-50 text-stone-900 antialiased dark:bg-neutral-950 dark:text-stone-100;
 }

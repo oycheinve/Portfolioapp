@@ -3,7 +3,7 @@ import { Check, Eraser, ListPlus, Pencil, Plus, ShoppingCart, Sparkles, Trash2, 
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortItems, sortLists } from '../lib/shopping.js';
 import { BetaBadge, EmptyState } from '../components/ui.jsx';
-import { SHOPPING_CATEGORIES, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
+import { SHOPPING_CATEGORIES, categoryOf, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
 import { requestShoppingCategories } from '../lib/newsAi.js';
 
 const SELECTED_KEY = 'fintrack-shopping-selected';
@@ -224,6 +224,30 @@ export default function ShoppingView() {
         <span className={`min-w-0 flex-1 text-sm break-words ${it.done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{it.title}</span>
         {it.quantity && <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular ${it.done ? 'text-stone-400 dark:text-stone-500' : 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300'}`}>{it.quantity}</span>}
       </button>
+      {grouped && !it.done && (
+        // Zmiana kategorii produktu – zapamiętana jako poprawka użytkownika (samouczenie, ma pierwszeństwo przed AI)
+        <label className="relative inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-base hover:bg-stone-100 dark:hover:bg-white/5" title="Zmień kategorię">
+          <span aria-hidden="true">{emojiOf(categoryOf(it.title, aiCats).category)}</span>
+          <select
+            className="absolute inset-0 cursor-pointer opacity-0"
+            value={categoryOf(it.title, aiCats).category}
+            onChange={(e) =>
+              setAiCats((prev) => {
+                const next = remember(prev, it.title, { category: e.target.value, source: 'user' });
+                writeCats(next);
+                return next;
+              })
+            }
+            aria-label={`Kategoria ${it.title}`}
+          >
+            {SHOPPING_CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.emoji} {c.id}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <button type="button" onClick={() => removeItem(it)} aria-label={`Usuń ${it.title}`} title="Usuń pozycję" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 dark:text-stone-600 dark:hover:bg-red-500/10">
         <Trash2 size={15} />
       </button>

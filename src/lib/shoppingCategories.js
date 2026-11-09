@@ -64,7 +64,7 @@ export function guessCategory(title) {
 }
 
 // ── Ucząca się pamięć produktów ──
-// Wpis: { c: kategoria, n: nazwa do wyświetlenia, u: liczba dodań, t: ostatnie dodanie (ms), s: źródło 'ai' | 'dict' | 'learned' }.
+// Wpis: { c: kategoria, n: nazwa do wyświetlenia, u: liczba dodań, t: ostatnie dodanie (ms), s: źródło 'ai' | 'dict' | 'learned' | 'user' }.
 // Zgodność wstecz: dawne wpisy w postaci samej nazwy kategorii (string) są odczytywane jako { c }.
 export function readCats() {
   try {
@@ -128,7 +128,8 @@ export function remember(mem, title, { category, source, used = false } = {}) {
   if (!key) return mem;
   const prev = mem[key] || { n: String(title).trim(), u: 0, t: 0 };
   const next = { ...prev, n: prev.n || String(title).trim() };
-  if (category && VALID.has(category) && (source === 'ai' || !prev.c || (prev.c === OTHER && (prev.k || 1) < CATS_VERSION))) {
+  // Poprawka użytkownika (zakupy, paragon) ma pierwszeństwo – AI jej później nie nadpisuje
+  if (category && VALID.has(category) && (source === 'user' || (source === 'ai' && prev.s !== 'user') || !prev.c || (prev.c === OTHER && (prev.k || 1) < CATS_VERSION))) {
     next.c = category;
     next.s = source;
     next.k = CATS_VERSION;

@@ -36,6 +36,9 @@ export const NAV_ITEMS = [
 const MOBILE_ORDER = ['dashboard', 'portfolio', 'shopping', 'budget', 'tasks', 'news'];
 // Pozycje widoczne w menu (bez tymczasowo ukrytych i dostępnych z górnego paska)
 const MENU_ITEMS = NAV_ITEMS.filter((n) => !n.hidden && !n.topbar);
+// Moduły, które można ukryć w Ustawieniach (wszystkie z menu poza Pulpitem)
+export const TOGGLEABLE_MODULES = MENU_ITEMS.filter((n) => n.id !== 'dashboard');
+export const isModuleHidden = (settings, id) => id !== 'dashboard' && id !== 'settings' && settings?.modules?.[id] === false;
 const MOBILE_ITEMS = MOBILE_ORDER.map((id) => MENU_ITEMS.find((n) => n.id === id)).filter(Boolean);
 
 // Kolejność kafelków w arkuszu „Więcej” (telefon) – płaska siatka 2 kolumn; pod nią przełącznik motywu i Ustawienia.
@@ -92,6 +95,8 @@ function CloudStatus({ onNavigate }) {
 
 export function Layout({ view, onNavigate, children }) {
   const { state, actions, refreshing, cloud } = useApp();
+  // Moduły wyłączone w Ustawieniach → Moduły i widok – znikają z menu (Pulpit i Ustawienia zawsze widoczne)
+  const moduleOn = (n) => !isModuleHidden(state.settings, n.id);
   useNotificationScheduler(state, cloud?.enabled ? cloud.user?.id : null);
   // IKE - Julka (konto odizolowane): zaległe automatyczne zakupy miesięczne – po cichu, chwilę po starcie
   useEffect(() => {
@@ -116,6 +121,17 @@ export function Layout({ view, onNavigate, children }) {
         })
         .catch(() => {});
     }, 8000);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Budżet: podsumowanie AI minionego miesiąca – przy pierwszym otwarciu aplikacji w nowym miesiącu (w tle)
+  useEffect(() => {
+    if (isModuleHidden(state.settings, 'budget')) return undefined;
+    const t = setTimeout(() => {
+      import('../lib/budgetAi.js')
+        .then((m) => m.autoMonthlySummary())
+        .then((r) => r && actions.notify(`Podsumowanie budżetu za ${r.entry.stats.label} od AI jest gotowe – Budżet → poprzedni miesiąc`, 'success'))
+        .catch(() => {});
+    }, 10000);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Brak sieci (np. aplikacja na telefonie offline) – widoczny znaczek; dane działają z pamięci urządzenia
@@ -144,9 +160,9 @@ export function Layout({ view, onNavigate, children }) {
   }, [state]);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen min-h-[100dvh]">
       {/* Nawigacja boczna – desktop */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-stone-200 bg-white px-3 py-5 md:flex dark:border-white/10 dark:bg-neutral-900">
+      <aside className="sticky top-0 hidden h-screen h-[100dvh] w-60 shrink-0 flex-col border-r border-stone-200 bg-white px-3 py-5 md:flex dark:border-white/10 dark:bg-neutral-900">
         <div className="mb-4 flex shrink-0 items-center gap-2.5 px-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white dark:bg-blue-500">
             <Wallet size={18} />
@@ -157,7 +173,7 @@ export function Layout({ view, onNavigate, children }) {
           </div>
         </div>
         <nav className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1" aria-label="Główna nawigacja">
-          {MENU_ITEMS.map((item) => {
+          {MENU_ITEMS.filter(moduleOn).map((item) => {
             const active = item.id === view;
             const Icon = item.icon;
             return (
@@ -262,13 +278,13 @@ export function Layout({ view, onNavigate, children }) {
         className="fixed inset-x-0 bottom-0 z-40 flex border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden dark:border-white/10 dark:bg-neutral-900/95"
         aria-label="Nawigacja dolna"
       >
-        {MOBILE_ITEMS.map((item) => (
+        {MOBILE_ITEMS.filter(moduleOn).map((item) => (
           <BottomTab key={item.id} item={item} active={item.id === view} badge={badges[item.id]} onClick={() => onNavigate(item.id)} />
         ))}
         <BottomTab
           item={{ id: 'more', label: 'Więcej', icon: Menu }}
           active={!!current && !current.mobile && !current.topbar}
-          badge={MENU_ITEMS.filter((n) => !n.mobile).reduce((s2, n) => s2 + (badges[n.id] || 0), 0) || null}
+          badge={MENU_ITEMS.filter((n) => !n.mobile && moduleOn(n)).reduce((s2, n) => s2 + (badges[n.id] || 0), 0) || null}
           onClick={() => setMoreOpen(true)}
         />
       </nav>
@@ -287,7 +303,7 @@ export function Layout({ view, onNavigate, children }) {
               <span className="h-1.5 w-12 rounded-full bg-stone-300 dark:bg-white/20" />
             </button>
             <div className="grid max-h-[62vh] grid-cols-2 gap-3 overflow-y-auto">
-              {MORE_ITEMS.map((item) => {
+              {MORE_ITEMS.filter(moduleOn).map((item) => {
                 const Icon = item.icon;
                 const active = item.id === view;
                 return (
