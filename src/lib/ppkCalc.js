@@ -81,7 +81,7 @@ export function simulatePpk(p, startYear = new Date().getFullYear()) {
       tax += r * taxRate;
       yearContrib += e + r;
       // Dopłata powitalna po 3 miesiącach oszczędzania
-      if (p.welcome !== false && y === 0 && m === 3) {
+      if (p.welcome !== false && y === 0 && m === 3 && own + employer > 0) {
         balance += PPK_WELCOME;
         state += PPK_WELCOME;
         welcomePaid = PPK_WELCOME;
@@ -170,8 +170,48 @@ export function ageFrom(birthDate, today = new Date()) {
   return a;
 }
 
+// Profil startowy PPK: bez kwot – saldo, pensja i premie 0 zł, wiek nieuzupełniony (użytkownik wpisuje swoje dane);
+// procenty wpłat to ustawowe minima, stopy zwrotu i opłata – założenia symulacji (do zmiany)
 export function defaultPpkProfile() {
-  return { birthDate: '', age: 35, salary: 8000, bonus: 0, employeePct: 2, employerPct: 1.5, startBalance: 0, equityReturn: 7, bondReturn: 4.5, feePct: 0.5, salaryGrowth: 4, taxRate: 12 };
+  return { birthDate: '', age: '', salary: 0, bonus: 0, employeePct: 2, employerPct: 1.5, startBalance: 0, balanceDate: '', inNetWorth: true, equityReturn: 7, bondReturn: 4.5, feePct: 0.5, salaryGrowth: 4, taxRate: 12 };
+}
+// Wiek z profilu (data urodzenia albo wpisany wiek); null – nieuzupełniony
+export function ppkAge(profile, today = new Date()) {
+  if (profile?.birthDate) return ageFrom(profile.birthDate, today);
+  const a = Number(profile?.age);
+  return profile?.age !== '' && profile?.age !== undefined && profile?.age !== null && Number.isFinite(a) && a > 0 ? a : null;
+}
+
+// Bieżące saldo PPK (do Majątku i Poduszki): saldo z instytucji „stan na” balanceDate + szacowane wpłaty
+// (własna + pracodawcy od pensji i premii) za pełne miesiące od tej daty + zysk wg profilu funduszu.
+// Dopłaty państwa nie są doliczane szacunkowo – trafiają do salda po aktualizacji stanu z instytucji.
+// Bez danych (0 zł saldo, 0 zł pensja) – 0 zł; inNetWorth === false – nie wliczane.
+const monthsBetween = (fromIso, to) => {
+  const f = new Date(`${fromIso}T12:00:00`);
+  if (Number.isNaN(f.getTime())) return 0;
+  let m = (to.getFullYear() - f.getFullYear()) * 12 + (to.getMonth() - f.getMonth());
+  if (to.getDate() < f.getDate()) m -= 1;
+  return Math.max(0, m);
+};
+export function ppkCurrentValue(profile, today = new Date()) {
+  const p = { ...defaultPpkProfile(), ...(profile || {}) };
+  const start = Math.max(0, Number(p.startBalance) || 0);
+  const base = Math.max(0, (Number(p.salary) || 0) + (Number(p.bonus) || 0));
+  const monthly = (base * ((Number(p.employeePct) || 0) + (Number(p.employerPct) || 0))) / 100;
+  const months = p.balanceDate ? monthsBetween(p.balanceDate, today) : 0;
+  const age = ppkAge(p, today);
+  const eqShare = age === null ? 0.5 : tdfStage(60 - age).equity / 100;
+  const r = eqShare * ((Number(p.equityReturn) || 0) / 100) + (1 - eqShare) * ((Number(p.bondReturn) || 0) / 100) - (Number(p.feePct) || 0) / 100;
+  const mr = Math.pow(1 + r, 1 / 12) - 1;
+  let balance = start;
+  let contributions = 0;
+  for (let i = 0; i < months; i += 1) {
+    balance = balance * (1 + mr) + monthly;
+    contributions += monthly;
+  }
+  const round2 = (v) => Math.round(v * 100) / 100;
+  const value = round2(balance);
+  return { value, included: p.inNetWorth === false ? 0 : value, start, contributions: round2(contributions), gains: round2(value - start - contributions), months, since: p.balanceDate || '', monthly: round2(monthly) };
 }
 
 // Symulacja PPK w funduszu zdefiniowanej daty: udział akcji maleje z wiekiem (glide path), stopa zwrotu roku =

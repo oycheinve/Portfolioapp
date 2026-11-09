@@ -31,11 +31,16 @@ export default function NetWorthPanel({ valuation, compact = false }) {
     { key: 'CASH', label: 'Oszczędności', value: t.savingsCash, risk: 'Bezpieczne' },
     { key: 'OTHER', label: 'Nieruchomości / inne (netto)', value: other.realValue, risk: 'Inne' },
     { key: 'ALT', label: 'Surowce i krypto', value: other.altValue, risk: 'Inne' },
+    // PPK – część poduszki (bezpieczne); 0 zł, dopóki nie uzupełniono danych w Poduszce
+    { key: 'PPK', label: 'PPK', value: other.ppkValue || 0, risk: 'Bezpieczne' },
   ].filter((s) => s.value > 0.005);
 
-  const safeShare = netWorth > 0 ? t.safe / netWorth : 0;
+  const ppkValue = other.ppkValue || 0;
+  const safeValue = t.safe + ppkValue;
+  const otherValue = other.includedValue - ppkValue;
+  const safeShare = netWorth > 0 ? safeValue / netWorth : 0;
   const marketShare = netWorth > 0 ? t.market / netWorth : 0;
-  const otherShare = netWorth > 0 ? other.includedValue / netWorth : 0;
+  const otherShare = netWorth > 0 ? otherValue / netWorth : 0;
 
   const history = useMemo(() => {
     const ids = state.accounts.map((a) => a.id);
@@ -120,6 +125,12 @@ export default function NetWorthPanel({ valuation, compact = false }) {
             <div className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">{formatPLN(netWorth)}</div>
             <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">
               Inwestycje i gotówka: <span className="font-medium tabular text-stone-700 dark:text-stone-300">{formatPLN(t.total)}</span>
+              {ppkValue > 0 && (
+                <>
+                  {' '}· PPK:{' '}
+                  <span className="font-medium tabular text-stone-700 dark:text-stone-300">{formatPLN(ppkValue)}</span>
+                </>
+              )}
               {other.realValue !== 0 && (
                 <>
                   {' '}· Nieruchomości/inne netto:{' '}
@@ -144,8 +155,8 @@ export default function NetWorthPanel({ valuation, compact = false }) {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <RiskTile icon={TrendingUp} color={seriesColor(0, isDark)} label="Rynkowe" sub="Akcje + ETF" value={t.market} share={marketShare} />
-              <RiskTile icon={ShieldCheck} color={seriesColor(2, isDark)} label="Bezpieczne" sub="Obligacje + gotówka" value={t.safe} share={safeShare} />
-              <RiskTile icon={Building2} color={seriesColor(4, isDark)} label="Inne" sub={other.altValue > 0 ? 'Nieruchomości, surowce, krypto' : 'Nieruchomości itp.'} value={other.includedValue} share={otherShare} muted={!other.globallyEnabled} />
+              <RiskTile icon={ShieldCheck} color={seriesColor(2, isDark)} label="Bezpieczne" sub={ppkValue > 0 ? 'Obligacje + gotówka + PPK' : 'Obligacje + gotówka'} value={safeValue} share={safeShare} />
+              <RiskTile icon={Building2} color={seriesColor(4, isDark)} label="Inne" sub={other.altValue > 0 ? 'Nieruchomości, surowce, krypto' : 'Nieruchomości itp.'} value={otherValue} share={otherShare} muted={!other.globallyEnabled} />
             </div>
           </div>
 

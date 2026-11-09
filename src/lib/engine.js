@@ -3,6 +3,7 @@ import { ACCOUNT_TYPES, XTB_FX_FEE_PCT } from './constants.js';
 import { getCpiTable, valueBond } from './bonds.js';
 import { bondBelkaRate, computeIncomeTax, limitForAccount } from './tax.js';
 import { alternativesValue } from './alternatives.js';
+import { ppkCurrentValue } from './ppkCalc.js';
 import { accruedSavingsInterest } from './accrual.js';
 
 const DAY = 86400000;
@@ -508,12 +509,15 @@ export function otherAssetsValue(state) {
   const total = sum(items);
   const alt = alternativesValue(state);
   const altValue = alt.inNetWorth ? alt.value : 0;
+  // PPK (Poduszka): bieżące saldo – 0 zł, dopóki użytkownik nie uzupełni danych (ppkCalc.ppkCurrentValue)
+  const ppkValue = ppkCurrentValue(state.settings?.ppk).included;
   return {
     items,
-    includedValue: total + altValue,
-    totalValue: total + altValue,
+    includedValue: total + altValue + ppkValue,
+    totalValue: total + altValue + ppkValue,
     realValue: total,
     altValue,
+    ppkValue,
     portfolioItems: state.settings.includeOtherAssets === false ? [] : items.filter((a) => a.showInPortfolio !== false),
   };
 }

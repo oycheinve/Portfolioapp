@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { Landmark, PiggyBank, Shield, Wallet } from 'lucide-react';
+import { Briefcase, Landmark, PiggyBank, Shield, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
 import { getCpiTable, valueBond } from '../lib/bonds.js';
 import { isSafeAccount, isoDay, livePriceLookup, otherAssetsValue, valuePortfolio } from '../lib/engine.js';
 import { savingsProjection } from '../lib/savings.js';
+import { ppkCurrentValue } from '../lib/ppkCalc.js';
 import { bondBelkaRate } from '../lib/tax.js';
 import { seriesColor } from '../lib/colors.js';
 import { formatPLN, formatPercent } from '../lib/format.js';
@@ -39,9 +40,13 @@ export default function SafeCapitalView() {
     const savingsItems = savingsAccounts
       .map((a) => ({ key: a.id, label: a.name, value: v.byAccount[a.id]?.cash || 0 }))
       .sort((a, b) => b.value - a.value);
+    // PPK – bieżące saldo (saldo z instytucji + szacowane wpłaty od daty salda); grupa widoczna, gdy saldo > 0
+    const ppk = ppkCurrentValue(state.settings.ppk, new Date(`${today}T12:00:00`));
+    const ppkItems = ppk.included > 0.005 ? [{ key: 'ppk', label: ppk.months ? `Saldo ${formatPLN(ppk.start)} + wpłaty ${ppk.months} mies.${ppk.gains > 0.005 ? ' + zysk' : ''}` : 'Saldo z instytucji', value: ppk.included }] : [];
     const groups = [
       { key: 'bonds', label: 'Obligacje skarbowe', icon: Landmark, slot: 2, items: bondItems },
       { key: 'savings', label: 'Konta oszczędnościowe', icon: PiggyBank, slot: 3, items: savingsItems },
+      ...(ppkItems.length ? [{ key: 'ppk', label: 'PPK', icon: Briefcase, slot: 7, items: ppkItems }] : []),
     ].map((g) => ({ ...g, value: g.items.reduce((sum, it) => sum + it.value, 0) }));
     const safeIds = new Set(state.accounts.filter(isSafeAccount).map((a) => a.id));
     // Poza poduszką: wolna gotówka na kontach inwestycyjnych
@@ -87,7 +92,7 @@ export default function SafeCapitalView() {
               <div key={g.key} className="h-full" style={{ width: `${(g.value / (data.safe || 1)) * 100}%`, background: seriesColor(g.slot, isDark) }} />
             ))}
         </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${data.groups.length > 2 ? "lg:grid-cols-3" : ""}`}>
           {data.groups.map((g) => {
             const Icon = g.icon;
             return (
