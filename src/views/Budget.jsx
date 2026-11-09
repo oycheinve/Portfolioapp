@@ -176,7 +176,7 @@ function MonthlyBudget() {
   };
   // Korekta kwoty wydanej kategorii (edycja zapisanego paragonu z tego miesiąca)
   const [receiptsVer, setReceiptsVer] = useState(0);
-  const adjustSpent = (rowId, delta) => setRows(rows.map((r) => (r.id === rowId ? { ...r, spent: Math.max(0, Math.round((toNum(r.spent) + delta) * 100) / 100) } : r)));
+  const adjustSpent = (rowId, delta) => setData((d) => ({ ...d, [month]: (d[month] || []).map((r) => (r.id === rowId ? { ...r, spent: Math.max(0, Math.round((toNum(r.spent) + delta) * 100) / 100) } : r)) }));
   // Cofnięcie wpisu: kwota odjęta z „Kwoty Wydanej” kategorii (nie poniżej zera), wpis usunięty z dziennika
   const undoPurchase = (entryId) => {
     const entry = entries.find((e) => e.id === entryId);
@@ -196,22 +196,37 @@ function MonthlyBudget() {
         <h2 className="min-w-0 text-lg font-bold text-[#1f3864] sm:text-xl dark:text-blue-300">
           Budżet na: {monthName(month)}
         </h2>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {editing && (
-            <button type="button" onClick={cancelEdit} className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5">
-              <X size={14} /> Anuluj
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <div className="flex items-center gap-1.5">
+            {editing && (
+              <button type="button" onClick={cancelEdit} className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5">
+                <X size={14} /> Anuluj
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={editing ? save : startEdit}
+              aria-pressed={editing}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-sm transition-colors ${
+                editing ? 'bg-[#1f3864] text-white hover:bg-[#2a4a80] dark:bg-blue-500 dark:hover:bg-blue-400' : 'border border-stone-200 bg-white text-[#1f3864] hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-blue-200 dark:hover:bg-neutral-700'
+              }`}
+            >
+              {editing ? <Check size={14} /> : <Pencil size={14} />} {editing ? 'Zapisz' : 'Edytuj'}
             </button>
+          </div>
+          {/* Paragony (BETA): skan / wgranie zdjęcia → weryfikacja albo zapis automatyczny → wydatki rozdzielone
+              wyłącznie na kategorie tego budżetu (podział na kilka kategorii = osobne wpisy do cofnięcia) */}
+          {!editing && rows.length > 0 && (
+            <ReceiptScanner
+              rows={rows}
+              month={month}
+              onSave={(receipt, parts) => {
+                const res = addPurchase(parts, null, `Paragon${receipt.shop ? `: ${receipt.shop}` : ''}`);
+                setReceiptsVer((v) => v + 1);
+                return res;
+              }}
+            />
           )}
-          <button
-            type="button"
-            onClick={editing ? save : startEdit}
-            aria-pressed={editing}
-            className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-sm transition-colors ${
-              editing ? 'bg-[#1f3864] text-white hover:bg-[#2a4a80] dark:bg-blue-500 dark:hover:bg-blue-400' : 'border border-stone-200 bg-white text-[#1f3864] hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-blue-200 dark:hover:bg-neutral-700'
-            }`}
-          >
-            {editing ? <Check size={14} /> : <Pencil size={14} />} {editing ? 'Zapisz' : 'Edytuj'}
-          </button>
         </div>
       </div>
       <div className="mb-3 flex items-center gap-1">
@@ -351,19 +366,7 @@ function MonthlyBudget() {
           )}
           <PurchasePanel rows={rows} onAdd={addPurchase} />
           {/* Paragony (BETA): skan → weryfikacja / zapis automatyczny → wydatek; historia z edycją (samouczenie kategorii) */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <ReceiptScanner
-              rows={rows}
-              month={month}
-              defaultRowId={defaultFoodRow(rows)?.id || rows[0]?.id}
-              onSave={(receipt, rowId) => {
-                const res = addPurchase(rowId, receipt.total, `Paragon${receipt.shop ? `: ${receipt.shop}` : ''}`);
-                setReceiptsVer((v) => v + 1);
-                return res;
-              }}
-            />
-          </div>
-          <div className="mt-2">
+          <div className="mt-3">
             <ReceiptsHistory key={receiptsVer} rows={rows} month={month} onAdjust={adjustSpent} />
           </div>
           <RecentEntries entries={entries} rows={rows} onUndo={undoPurchase} />

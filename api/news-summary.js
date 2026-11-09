@@ -610,6 +610,35 @@ Zasady:
     return { receipt: { shop: String(s.shop || '').trim().slice(0, 80), date, time: /^\d{1,2}:\d{2}$/.test(String(s.time || '')) ? s.time : '', currency: String(s.currency || 'PLN').slice(0, 3).toUpperCase() || 'PLN', total: money(s.total), items }, model: response.modelVersion || model };
   },
 };
+
+// Wariant z kategoriami budżetu użytkownika: pole „budget” (enum z jego kategorii) – bez tworzenia nowych grup
+function receiptSpec(budget) {
+  if (!budget.length) return RECEIPT_SPEC;
+  const item = RECEIPT_SPEC.schema.properties.items.items;
+  return {
+    system: `${RECEIPT_SPEC.system}
+- budget: dla każdej pozycji jedna kategoria budżetu użytkownika z podanej listy, najlepiej pasująca do rodzaju wydatku (np. żywność → kategoria jedzeniowa; pasta do zębów, szampon, płyn do naczyń → kosmetyki / chemia). Nigdy nie wymyślaj nowych kategorii ani podgrup.`,
+    schema: {
+      ...RECEIPT_SPEC.schema,
+      properties: {
+        ...RECEIPT_SPEC.schema.properties,
+        items: { type: 'array', items: { ...item, properties: { ...item.properties, budget: { type: 'string', enum: budget } }, required: [...item.required, 'budget'] } },
+      },
+    },
+    parse(response, model) {
+      const out = RECEIPT_SPEC.parse(response, model);
+      let raw = null;
+      try {
+        raw = JSON.parse(response.text || '');
+      } catch {
+        // obsłużone w RECEIPT_SPEC.parse
+      }
+      const src = (Array.isArray(raw?.items) ? raw.items : []).filter((x) => x && String(x.name || '').trim());
+      out.receipt.items = out.receipt.items.map((it, i) => ({ ...it, budget: budget.includes(src[i]?.budget) ? src[i].budget : '' }));
+      return out;
+    },
+  };
+}
 const MAX_IMAGE_B64 = 4_000_000; // ~3 MB obrazu – aplikacja wysyła skompresowany (zwykle 100–300 kB)
 
 // ── Miesięczne podsumowanie budżetu (AI): zagregowane liczby z aplikacji → krótka analiza w czystym JSON ──
@@ -698,9 +727,12 @@ export default async function handler(req, res) {
       const mime = /^image\/(jpeg|png|webp)$/.test(body.mime || '') ? body.mime : 'image/jpeg';
       if (!image || image.length < 100) return send(res, 400, { error: 'Brak zdjęcia paragonu' });
       if (image.length > MAX_IMAGE_B64) return send(res, 413, { error: 'Zdjęcie jest za duże – aplikacja powinna je zmniejszyć przed wysłaniem' });
-      const rkey = `r|${createHash('sha256').update(image).digest('hex')}`;
+      // Kategorie budżetu użytkownika (opcjonalnie): każda pozycja przypisana wyłącznie do jednej z nich
+      const budget = [...new Set((Array.isArray(body.budgetCategories) ? body.budgetCategories : []).map((t) => String(t || '').replace(/[<>"]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)).filter(Boolean))];
+      const rkey = `r|${createHash('sha256').update(image).update(`|${budget.join('|')}`).digest('hex')}`;
       if (cache.has(rkey)) return send(res, 200, { ...cache.get(rkey), cached: true });
-      const r = await summarize([{ text: `Dozwolone kategorie: ${SHOPPING_CATEGORIES.join('; ')}. Odczytaj paragon ze zdjęcia.` }, { inlineData: { mimeType: mime, data: image } }], RECEIPT_SPEC);
+      const intro = `Dozwolone kategorie sklepowe: ${SHOPPING_CATEGORIES.join('; ')}.${budget.length ? `\nKategorie budżetu użytkownika (pole „budget” – wyłącznie jedna z nich, dokładnie tak zapisana): ${budget.map((b) => `„${b}”`).join('; ')}.` : ''} Odczytaj paragon ze zdjęcia.`;
+      const r = await summarize([{ text: intro }, { inlineData: { mimeType: mime, data: image } }], receiptSpec(budget));
       const out = { receipt: r.receipt, model: r.model };
       cache.set(rkey, out);
       return send(res, 200, { ...out, cached: false });

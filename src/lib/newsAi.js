@@ -129,5 +129,5 @@ async function callAi(payload) {
   if (!res.ok) throw new Error(body.error || (res.status === 404 ? 'AI dostępne po wdrożeniu na serwerze (Vercel)' : `HTTP ${res.status}`));
   return body;
 }
-export const requestReceipt = (image, mime = 'image/jpeg') => callAi({ mode: 'receipt', image, mime });
+export const requestReceipt = (image, mime = 'image/jpeg', budgetCategories = []) => callAi({ mode: 'receipt', image, mime, ...(budgetCategories.length ? { budgetCategories } : {}) });
 export const requestBudgetSummary = (data) => callAi({ mode: 'budget', ...data });

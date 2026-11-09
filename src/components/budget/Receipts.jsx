@@ -1,31 +1,35 @@
 import { useMemo, useRef, useState } from 'react';
 import { Camera, Check, ChevronDown, Loader2, Plus, Receipt, Trash2, X } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { SHOPPING_CATEGORIES } from '../../lib/shoppingCategories.js';
-import { applyMemory, cacheReceipt, cachedReceipt, compressImage, imageHash, learnFromReceipt, readReceipts, receiptTotals, writeReceipts } from '../../lib/receipts.js';
+import { applyMemory, assignBudgetRows, cacheReceipt, cachedReceipt, compressImage, imageHash, learnBudget, learnFromReceipt, readReceipts, receiptParts, receiptRows, receiptTotals, writeReceipts } from '../../lib/receipts.js';
 import { requestReceipt } from '../../lib/newsAi.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
 import { BetaBadge } from '../ui.jsx';
 
 const inputCls = 'h-9 min-w-0 rounded-lg border border-stone-200 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-white/10 dark:bg-neutral-800';
-const emoji = (c) => SHOPPING_CATEGORIES.find((x) => x.id === c)?.emoji || '🏠';
+const named = (rows) => rows.filter((r) => String(r.name || '').trim());
+const SOURCE_LABEL = { user: 'poprawione – zapamiętam', memory: 'z pamięci', ai: 'AI', rule: 'dopasowane' };
+const toStored = (rows) => (it) => ({ name: it.name, quantity: it.quantity, price: it.price, category: it.category, rowId: it.rowId, rowName: rows.find((r) => r.id === it.rowId)?.name || it.rowName || '' });
 
-// Skanowanie paragonu → (weryfikacja) → wydatek w budżecie + historia. rows – kategorie budżetu miesiąca,
-// defaultRowId – domyślna kategoria budżetu (np. jedzenie), onSave(receipt, rowId) – zapis wydatku, zwraca opis.
-export function ReceiptScanner({ rows, defaultRowId, onSave, month }) {
+// Skanowanie paragonu → (weryfikacja) → wydatki w budżecie + historia. rows – kategorie budżetu miesiąca; każda
+// pozycja trafia wyłącznie do jednej z nich (bez nowych podgrup). onSave(receipt, parts) – parts: [{ id, amount }].
+export function ReceiptScanner({ rows, onSave, month }) {
   const { state, actions } = useApp();
   const review = state.settings.receiptReview !== false;
   const fileRef = useRef(null);
   const [busy, setBusy] = useState('');
   const [draft, setDraft] = useState(null);
 
-  const persist = (receipt, rowId, { auto = false } = {}) => {
+  const persist = (receipt, { auto = false } = {}) => {
     learnFromReceipt(receipt);
-    const t = receiptTotals(receipt);
-    const res = onSave({ ...receipt, total: t.sum }, rowId);
-    const saved = { id: receipt.id || `rc${Date.now().toString(36)}`, shop: receipt.shop, date: receipt.date, time: receipt.time || '', items: receipt.items.map(({ name, quantity, price, category }) => ({ name, quantity, price, category })), total: t.sum, printedTotal: t.printed, rowId, month, savedAt: new Date().toISOString(), auto };
+    learnBudget(receipt, rows);
+    const t = receiptTotals(receipt, rows);
+    const parts = receiptParts(receipt);
+    const res = onSave({ ...receipt, total: t.sum }, parts);
+    const saved = { id: receipt.id || `rc${Date.now().toString(36)}`, shop: receipt.shop, date: receipt.date, time: receipt.time || '', items: receipt.items.map(toStored(rows)), total: t.sum, printedTotal: t.printed, rowId: parts[0]?.id || '', month, savedAt: new Date().toISOString(), auto };
     writeReceipts([saved, ...readReceipts().filter((r) => r.id !== saved.id)]);
-    actions.notify(`Paragon ${receipt.shop || ''} zapisany: ${formatPLN(t.sum)}${res?.name ? ` → ${res.name}` : ''}${auto ? ' (zapis automatyczny)' : ''}`, 'success');
+    const split = (res?.parts || []).map((p) => `${p.name} ${formatPLN(p.amount)}`).join(', ');
+    actions.notify(`Paragon ${receipt.shop || ''} zapisany: ${formatPLN(t.sum)}${split ? ` → ${split}` : ''}${auto ? ' (zapis automatyczny)' : ''}`, 'success');
     return saved;
   };
 
@@ -41,14 +45,14 @@ export function ReceiptScanner({ rows, defaultRowId, onSave, month }) {
       let receipt = cachedReceipt(hash);
       if (!receipt) {
         setBusy('AI odczytuje paragon…');
-        receipt = (await requestReceipt(img.base64, img.mime)).receipt;
+        receipt = (await requestReceipt(img.base64, img.mime, receiptRows(rows).map((r) => r.name.trim()))).receipt;
         if (receipt?.items?.length) cacheReceipt(hash, receipt);
       }
       if (!receipt?.items?.length) throw new Error('Nie rozpoznano pozycji – zrób wyraźniejsze zdjęcie całego paragonu');
-      // Krok 2: kategorie z uczącej się pamięci produktów, potem z AI
-      const ready = { ...applyMemory(receipt), id: `rc${hash.slice(0, 12)}`, date: receipt.date || todayISO() };
+      // Krok 2: kategorie budżetu użytkownika – pamięć (poprawki) → AI → reguły; nic spoza jego listy
+      const ready = assignBudgetRows({ ...applyMemory(receipt), id: `rc${hash.slice(0, 12)}`, date: receipt.date || todayISO() }, rows);
       if (review) setDraft(ready);
-      else persist(ready, defaultRowId, { auto: true });
+      else persist(ready, { auto: true });
     } catch (err) {
       actions.notify(`Paragon: ${err.message}`, 'warn');
     } finally {
@@ -62,8 +66,9 @@ export function ReceiptScanner({ rows, defaultRowId, onSave, month }) {
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
-        disabled={!!busy || !rows.length}
-        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-200"
+        disabled={!!busy || !receiptRows(rows).length}
+        title="Zeskanuj albo wgraj zdjęcie paragonu"
+        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-200"
       >
         {busy ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />} {busy || 'Skanuj paragon'}
         {!busy && <BetaBadge />}
@@ -72,10 +77,9 @@ export function ReceiptScanner({ rows, defaultRowId, onSave, month }) {
         <ReceiptReview
           receipt={draft}
           rows={rows}
-          defaultRowId={defaultRowId}
           onCancel={() => setDraft(null)}
-          onSave={(r, rowId) => {
-            persist(r, rowId);
+          onSave={(r) => {
+            persist(r);
             setDraft(null);
           }}
         />
@@ -85,11 +89,13 @@ export function ReceiptScanner({ rows, defaultRowId, onSave, month }) {
 }
 
 // Ekran weryfikacji (pełny ekran): sklep, data, pozycje z edycją nazwy / ceny / kategorii, sumy częściowe i suma całkowita
-export function ReceiptReview({ receipt, rows, defaultRowId, onCancel, onSave, title = 'Weryfikacja paragonu', saveLabel = 'Zapisz w budżecie' }) {
-  const [r, setR] = useState(receipt);
-  const [rowId, setRowId] = useState(receipt.rowId || defaultRowId || rows[0]?.id || '');
-  const t = useMemo(() => receiptTotals(r), [r]);
-  const setItem = (id, patch) => setR((x) => ({ ...x, items: x.items.map((it) => (it.id === id ? { ...it, ...patch, edited: it.edited || 'category' in patch } : it)) }));
+export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfikacja paragonu', saveLabel = 'Zapisz w budżecie' }) {
+  const [r, setR] = useState(() => assignBudgetRows(receipt, rows));
+  const t = useMemo(() => receiptTotals(r, rows), [r, rows]);
+  const options = receiptRows(rows);
+  const extra = named(rows).filter((row) => !options.includes(row));
+  const setItem = (id, patch) => setR((x) => ({ ...x, items: x.items.map((it) => (it.id === id ? { ...it, ...patch, ...('rowId' in patch ? { budgetEdited: true, budgetSource: 'user' } : {}) } : it)) }));
+  const missing = r.items.some((it) => !rows.some((row) => row.id === it.rowId));
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-stone-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] dark:bg-neutral-950" role="dialog" aria-modal="true" aria-label={title}>
       <header className="flex items-center gap-2 border-b border-stone-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-neutral-900">
@@ -124,46 +130,45 @@ export function ReceiptReview({ receipt, rows, defaultRowId, onCancel, onSave, t
                 </button>
               </div>
               <div className="mt-1.5 flex items-center gap-2">
-                <select className={`${inputCls} h-8 flex-1 text-xs`} value={it.category} onChange={(e) => setItem(it.id, { category: e.target.value })} aria-label={`Kategoria ${it.name}`}>
-                  {SHOPPING_CATEGORIES.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.emoji} {c.id}
+                <select className={`${inputCls} h-8 flex-1 text-xs`} value={it.rowId || ''} onChange={(e) => setItem(it.id, { rowId: e.target.value })} aria-label={`Kategoria ${it.name}`}>
+                  {!it.rowId && <option value="">– wybierz kategorię budżetu –</option>}
+                  {options.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.name}
                     </option>
                   ))}
+                  {extra.length > 0 && (
+                    <optgroup label="Pozostałe kategorie">
+                      {extra.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
-                <span className="shrink-0 text-[10px] text-stone-400">{it.edited ? 'poprawione – zapamiętam' : it.source === 'ai' ? 'AI' : 'z pamięci'}</span>
+                <span className="shrink-0 text-[10px] text-stone-400">{SOURCE_LABEL[it.budgetSource] || 'z pamięci'}</span>
               </div>
             </li>
           ))}
         </ul>
-        <button type="button" onClick={() => setR({ ...r, items: [...r.items, { id: `ri${Date.now().toString(36)}`, name: '', price: 0, quantity: 1, category: 'Dom i inne', source: 'user', edited: true }] })} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10">
+        <button type="button" onClick={() => setR({ ...r, items: [...r.items, { id: `ri${Date.now().toString(36)}`, name: '', price: 0, quantity: 1, category: 'Dom i inne', source: 'user', rowId: r.items[r.items.length - 1]?.rowId || options[0]?.id || '', budgetSource: 'user', budgetEdited: true }] })} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10">
           <Plus size={15} /> Dodaj pozycję
         </button>
         <div className="rounded-xl border border-stone-200 bg-white p-3 dark:border-white/10 dark:bg-neutral-900" aria-label="Sumy częściowe">
-          <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Sumy częściowe</div>
+          <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Podział na kategorie budżetu</div>
           <ul className="space-y-1 text-sm tabular">
             {Object.entries(t.byCategory)
               .sort((a, b) => b[1] - a[1])
               .map(([c, v]) => (
                 <li key={c} className="flex justify-between gap-2">
-                  <span>
-                    {emoji(c)} {c}
-                  </span>
+                  <span>{c}</span>
                   <span className="font-medium">{formatPLN(v)}</span>
                 </li>
               ))}
           </ul>
         </div>
-        <label className="block text-[11px] text-stone-500 dark:text-stone-400">
-          Kategoria budżetu, do której trafi wydatek
-          <select className={`${inputCls} mt-0.5 w-full`} value={rowId} onChange={(e) => setRowId(e.target.value)} aria-label="Kategoria budżetu">
-            {rows.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.name || '(bez nazwy)'}
-              </option>
-            ))}
-          </select>
-        </label>
+        <p className="text-[11px] text-stone-500 dark:text-stone-400">Pozycje trafiają wyłącznie do Twoich kategorii z Budżetu. Zmiana kategorii przy pozycji jest zapamiętywana i użyta przy kolejnych paragonach.</p>
       </div>
       <footer className="border-t border-stone-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-neutral-900">
         <div className="mb-2 flex items-end justify-between gap-2">
@@ -177,7 +182,7 @@ export function ReceiptReview({ receipt, rows, defaultRowId, onCancel, onSave, t
           <button type="button" onClick={onCancel} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-stone-200 text-sm font-semibold text-stone-600 dark:border-white/10 dark:text-stone-300">
             Anuluj
           </button>
-          <button type="button" disabled={!r.items.length || !rowId} onClick={() => onSave({ ...r, items: r.items.filter((it) => String(it.name).trim()) }, rowId)} className="inline-flex h-11 flex-[2] items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-semibold text-white disabled:opacity-50 dark:bg-blue-500 dark:text-neutral-950">
+          <button type="button" disabled={!r.items.length || missing} onClick={() => onSave({ ...r, items: r.items.filter((it) => String(it.name).trim()) })} className="inline-flex h-11 flex-[2] items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-semibold text-white disabled:opacity-50 dark:bg-blue-500 dark:text-neutral-950">
             <Check size={16} /> {saveLabel}
           </button>
         </div>
@@ -202,7 +207,7 @@ export function ReceiptsHistory({ rows, onAdjust, month }) {
         <ul className="divide-y divide-stone-100 border-t border-stone-100 dark:divide-white/5 dark:border-white/5" aria-label="Historia paragonów">
           {list.map((rc) => (
             <li key={rc.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setEdit({ ...rc, items: rc.items.map((it, i) => ({ ...it, id: `h${i}`, source: 'memory' })) })} aria-label={`Otwórz paragon ${rc.shop} ${rc.date}`}>
+              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setEdit({ ...rc, items: rc.items.map((it, i) => ({ ...it, id: `h${i}`, source: 'memory', rowId: it.rowId || rc.rowId || '', budgetSource: 'memory' })) })} aria-label={`Otwórz paragon ${rc.shop} ${rc.date}`}>
                 <span className="block truncate font-medium">{rc.shop || 'Paragon'}</span>
                 <span className="block text-[11px] text-stone-500 dark:text-stone-400">
                   {formatDate(rc.date)} · {rc.items.length} poz.{rc.auto ? ' · zapis automatyczny' : ''}
@@ -233,13 +238,21 @@ export function ReceiptsHistory({ rows, onAdjust, month }) {
           title="Edycja paragonu"
           saveLabel="Zapisz zmiany"
           onCancel={() => setEdit(null)}
-          onSave={(r, rowId) => {
+          onSave={(r) => {
             learnFromReceipt(r);
-            const t = receiptTotals(r);
+            learnBudget(r, rows);
+            const t = receiptTotals(r, rows);
             const old = list.find((x) => x.id === edit.id);
-            const delta = Math.round((t.sum - (old?.total || 0)) * 100) / 100;
-            if (delta && old?.month === month && old.rowId === rowId) onAdjust?.(rowId, delta);
-            const next = list.map((x) => (x.id === edit.id ? { ...x, shop: r.shop, date: r.date, items: r.items.map(({ name, quantity, price, category }) => ({ name, quantity, price, category })), total: t.sum, rowId } : x));
+            // Korekta kwot wydanych w kategoriach tego miesiąca: różnica podziału przed i po edycji
+            if (old?.month === month) {
+              const before = Object.fromEntries(receiptParts({ items: old.items.map((it) => ({ ...it, rowId: it.rowId || old.rowId })) }).map((p) => [p.id, p.amount]));
+              const after = Object.fromEntries(receiptParts(r).map((p) => [p.id, p.amount]));
+              for (const id of new Set([...Object.keys(before), ...Object.keys(after)])) {
+                const delta = Math.round(((after[id] || 0) - (before[id] || 0)) * 100) / 100;
+                if (delta && rows.some((row) => row.id === id)) onAdjust?.(id, delta);
+              }
+            }
+            const next = list.map((x) => (x.id === edit.id ? { ...x, shop: r.shop, date: r.date, items: r.items.map(toStored(rows)), total: t.sum, rowId: receiptParts(r)[0]?.id || x.rowId } : x));
             writeReceipts(next);
             setList(next);
             setEdit(null);
