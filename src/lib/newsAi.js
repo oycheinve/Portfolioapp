@@ -131,6 +131,7 @@ async function callAi(payload) {
 }
 export const requestReceipt = (image, mime = 'image/jpeg', budgetCategories = []) => callAi({ mode: 'receipt', image, mime, ...(budgetCategories.length ? { budgetCategories } : {}) });
 export const requestBudgetSummary = (data) => callAi({ mode: 'budget', ...data });
+export const requestEarnings = ({ query = '', text = '', image = '', mime = 'image/jpeg' }) => callAi({ mode: 'earnings', query, text, ...(image ? { image, mime } : {}) });
 export async function requestTaskCategories(titles) {
   const items = [...new Set(titles.map((t) => String(t || '').trim()).filter(Boolean))].slice(0, 80);
   if (!items.length) return {};

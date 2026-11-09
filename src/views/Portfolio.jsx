@@ -7,6 +7,7 @@ import { formatDate, formatMoney, formatNumber, formatPLN, formatPercent, signCl
 import { Card, Dropdown, EmptyState, Modal, Segmented } from '../components/ui.jsx';
 import OperationFormModal, { emptyOperation } from '../components/cash/OperationFormModal.jsx';
 import { DividendsModal, InstrumentEditModal, PriceChartModal } from '../components/portfolio/RowModals.jsx';
+import EarningsAnalyst from '../components/portfolio/EarningsAnalyst.jsx';
 
 const PREFS_KEY = 'wealth-app-portfolio-filters';
 const VIEW_KEY = 'wealth-app-portfolio-mobile-view';
@@ -503,6 +504,9 @@ export default function PortfolioView({ onNavigate }) {
         * Zmiana dzienna względem poprzedniego zamknięcia; dla obligacji i oszczędności – odsetki za 1 dzień. Ceny w PLN po bieżącym kursie walut; śr. cena zakupu zawiera prowizje i przewalutowanie. Okres inwestycji w dniach od
         pierwszego zakupu lub wpłaty. Operacje: kup, sprzedaj, historia operacji, notowania; ikony monet i strzałek oznaczają wypłacony dochód i przewalutowanie.
       </p>
+
+      {/* Analityk wyników spółek (BETA): konsensus, Beat/Miss, kwartały – archiwum 12 mies. */}
+      <EarningsAnalyst />
 
       <Modal open={!!opsFor} onClose={() => setOpsFor(null)} title={`Operacje: ${opsFor?.name || ''}`}>
         {opsFor && (
