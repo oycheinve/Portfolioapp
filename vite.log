@@ -1,0 +1,7 @@
+
+  VITE v6.4.5  ready in 277 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+7:12:05 PM [vite] (client) hmr update /src/components/budget/Receipts.jsx, /src/index.css
+7:12:05 PM [vite] (client) hmr update /src/views/Budget.jsx, /src/index.css

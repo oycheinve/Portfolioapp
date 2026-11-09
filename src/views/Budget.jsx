@@ -4,7 +4,6 @@ import { DAILY_KEY, LOG_LIMIT, budgetTotals, readBudgetLog, writeBudgetLog, dail
 import TripsBudget from '../components/budget/TripsBudget.jsx';
 import { ReceiptScanner, ReceiptsHistory } from '../components/budget/Receipts.jsx';
 import MonthSummary from '../components/budget/MonthSummary.jsx';
-import { BetaBadge } from '../components/ui.jsx';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 const monthName = (key) => {
@@ -28,47 +27,44 @@ const leftTone = (v) => (v < -0.004 ? 'text-red-600 dark:text-red-400' : '');
 // Budżet miesięczny – minimalistyczna tabela wzorowana na arkuszu: Kategoria, Planowany Budżet,
 // Kwota Wydana, Pozostało (plan − wydane) i wiersz RAZEM. Podgląd (szybkie zakupy, limit dzienny) i tryb „Edytuj”
 // (nazwy, kwoty, dodawanie i usuwanie kategorii).
-const MODE_KEY = 'fintrack-budget-mode';
+// Rodzaj budżetu – trwały wybór (domyślnie miesięczny): zapisany per użytkownik na urządzeniu i w chmurze (ui_prefs),
+// aktywny do czasu ponownej zmiany. Zgodność: wcześniejszy klucz `fintrack-budget-mode` (tylko urządzenie).
+const MODE_KEY = 'wealth-app-budget-mode';
+const OLD_MODE_KEY = 'fintrack-budget-mode';
 const readMode = () => {
   try {
-    return localStorage.getItem(MODE_KEY) === 'trips' ? 'trips' : 'monthly';
+    return (localStorage.getItem(MODE_KEY) ?? localStorage.getItem(OLD_MODE_KEY)) === 'trips' ? 'trips' : 'monthly';
   } catch {
     return 'monthly';
   }
 };
 
-// Budżet: przełącznik Budżet Miesięczny / Budżet Wakacyjny (BETA – wiele wyjazdów)
+// Budżet: rozwijana lista „Budżet Miesięczny / Budżet Wakacyjny” (BETA – wiele wyjazdów)
 export default function BudgetView() {
   const [mode, setModeState] = useState(readMode);
   const setMode = (m) => {
     setModeState(m);
     try {
       localStorage.setItem(MODE_KEY, m);
+      localStorage.removeItem(OLD_MODE_KEY);
+      window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key: MODE_KEY } }));
     } catch {
       // brak localStorage
     }
   };
+  const Icon = mode === 'trips' ? Plane : CalendarDays;
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Rodzaj budżetu">
-        {[
-          ['monthly', 'Budżet Miesięczny', CalendarDays],
-          ['trips', 'Budżet Wakacyjny', Plane],
-        ].map(([id, label, Icon]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={mode === id}
-            onClick={() => setMode(id)}
-            className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-colors ${
-              mode === id ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-300'
-            }`}
-          >
-            <Icon size={15} /> {label}
-            {id === 'trips' && <BetaBadge />}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="relative inline-flex h-10 items-center rounded-full border border-blue-600 bg-blue-600 pr-2 pl-3.5 text-white shadow-sm focus-within:ring-2 focus-within:ring-blue-500/40 dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950">
+          <Icon size={16} className="pointer-events-none shrink-0" />
+          <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Rodzaj budżetu" className="h-full cursor-pointer appearance-none bg-transparent pr-6 pl-2 text-sm font-semibold outline-none [&>option]:text-neutral-900">
+            <option value="monthly">Budżet Miesięczny</option>
+            <option value="trips">Budżet Wakacyjny (BETA)</option>
+          </select>
+          <ChevronDown size={16} className="pointer-events-none absolute right-3 shrink-0" />
+        </label>
+        <span className="text-[11px] text-stone-500 dark:text-stone-400">Wybór zapamiętany – zmienisz go tutaj</span>
       </div>
       {mode === 'trips' ? (
         <section className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900">

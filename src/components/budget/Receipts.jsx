@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Camera, Check, ChevronDown, Loader2, Plus, Receipt, Trash2, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, Loader2, Pencil, Plus, Receipt, Trash2, X } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { applyMemory, assignBudgetRows, cacheReceipt, cachedReceipt, compressImage, imageHash, learnBudget, learnFromReceipt, readReceipts, receiptParts, receiptRows, receiptTotals, writeReceipts } from '../../lib/receipts.js';
 import { requestReceipt } from '../../lib/newsAi.js';
@@ -88,17 +88,35 @@ export function ReceiptScanner({ rows, onSave, month }) {
   );
 }
 
-// Ekran weryfikacji (pełny ekran): sklep, data, pozycje z edycją nazwy / ceny / kategorii, sumy częściowe i suma całkowita
-export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfikacja paragonu', saveLabel = 'Zapisz w budżecie' }) {
+// Ekran weryfikacji (pełny ekran) stylizowany na wydruk termiczny paragonu fiskalnego: wyśrodkowany sklep, data,
+// „PARAGON FISKALNY”, linie przerywane między sekcjami, pozycje z cenami, przy każdej kategoria budżetu (szybka
+// poprawka z listy – wyłącznie kategorie użytkownika), podział na kategorie, SUMA PLN, data i godzina na dole.
+// „Edytuj” przełącza paragon w tryb edycji (sklep, data, nazwy, ceny, dodawanie i usuwanie pozycji).
+const PAPER = 'font-mono text-[13px] leading-snug text-neutral-900';
+const paperInput = 'h-8 min-w-0 rounded border border-dashed border-neutral-400 bg-white/70 px-1.5 font-mono text-[13px] text-neutral-900 outline-none focus:border-neutral-800';
+const Dashes = () => <div className="my-2 border-t-2 border-dashed border-neutral-400" aria-hidden="true" />;
+const money = (v) => (Math.round((Number(v) || 0) * 100) / 100).toFixed(2).replace('.', ',');
+// Ząbkowana krawędź oderwanego paragonu (półkoliste wycięcia papieru)
+const tear = (pos) => ({
+  [pos]: -7,
+  height: 8,
+  backgroundImage: `radial-gradient(circle at 5px ${pos === 'top' ? '0' : '8px'}, transparent 4.5px, #fbfaf6 5px)`,
+  backgroundSize: '10px 8px',
+  backgroundRepeat: 'repeat-x',
+});
+
+export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfikacja paragonu', saveLabel = 'Zatwierdź i zapisz' }) {
   const [r, setR] = useState(() => assignBudgetRows(receipt, rows));
+  const [editing, setEditing] = useState(false);
   const t = useMemo(() => receiptTotals(r, rows), [r, rows]);
   const options = receiptRows(rows);
   const extra = named(rows).filter((row) => !options.includes(row));
   const setItem = (id, patch) => setR((x) => ({ ...x, items: x.items.map((it) => (it.id === id ? { ...it, ...patch, ...('rowId' in patch ? { budgetEdited: true, budgetSource: 'user' } : {}) } : it)) }));
   const missing = r.items.some((it) => !rows.some((row) => row.id === it.rowId));
+  const save = () => onSave({ ...r, items: r.items.filter((it) => String(it.name).trim()) });
   return (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-stone-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] dark:bg-neutral-950" role="dialog" aria-modal="true" aria-label={title}>
-      <header className="flex items-center gap-2 border-b border-stone-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-neutral-900">
+    <div className="fixed inset-0 z-[70] flex flex-col bg-stone-200 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] dark:bg-neutral-950" role="dialog" aria-modal="true" aria-label={title}>
+      <header className="flex items-center gap-2 border-b border-stone-300 bg-white px-4 py-3 dark:border-white/10 dark:bg-neutral-900">
         <Receipt size={18} className="text-blue-600 dark:text-blue-400" />
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
           {title}
@@ -108,81 +126,116 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
           <X size={18} />
         </button>
       </header>
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-[11px] text-stone-500 dark:text-stone-400">
-            Sklep
-            <input className={`${inputCls} mt-0.5 w-full`} value={r.shop} onChange={(e) => setR({ ...r, shop: e.target.value })} aria-label="Nazwa sklepu" />
-          </label>
-          <label className="text-[11px] text-stone-500 dark:text-stone-400">
-            Data{r.time ? ` (${r.time})` : ''}
-            <input className={`${inputCls} mt-0.5 w-full`} type="date" value={r.date} onChange={(e) => setR({ ...r, date: e.target.value })} aria-label="Data paragonu" />
-          </label>
-        </div>
-        <ul className="space-y-2" aria-label="Pozycje paragonu">
-          {r.items.map((it) => (
-            <li key={it.id} className="rounded-xl border border-stone-200 bg-white p-2 dark:border-white/10 dark:bg-neutral-900">
-              <div className="flex items-center gap-2">
-                <input className={`${inputCls} flex-1`} value={it.name} onChange={(e) => setItem(it.id, { name: e.target.value })} aria-label={`Nazwa pozycji ${it.name}`} />
-                <input className={`${inputCls} w-24 text-right tabular`} type="number" inputMode="decimal" step="0.01" value={it.price} onChange={(e) => setItem(it.id, { price: e.target.value === '' ? '' : Number(e.target.value) })} aria-label={`Cena ${it.name}`} />
-                <button type="button" onClick={() => setR({ ...r, items: r.items.filter((x) => x.id !== it.id) })} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-red-600" aria-label={`Usuń pozycję ${it.name}`}>
-                  <Trash2 size={15} />
-                </button>
-              </div>
-              <div className="mt-1.5 flex items-center gap-2">
-                <select className={`${inputCls} h-8 flex-1 text-xs`} value={it.rowId || ''} onChange={(e) => setItem(it.id, { rowId: e.target.value })} aria-label={`Kategoria ${it.name}`}>
-                  {!it.rowId && <option value="">– wybierz kategorię budżetu –</option>}
-                  {options.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      {row.name}
-                    </option>
-                  ))}
-                  {extra.length > 0 && (
-                    <optgroup label="Pozostałe kategorie">
-                      {extra.map((row) => (
-                        <option key={row.id} value={row.id}>
-                          {row.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-                <span className="shrink-0 text-[10px] text-stone-400">{SOURCE_LABEL[it.budgetSource] || 'z pamięci'}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <button type="button" onClick={() => setR({ ...r, items: [...r.items, { id: `ri${Date.now().toString(36)}`, name: '', price: 0, quantity: 1, category: 'Dom i inne', source: 'user', rowId: r.items[r.items.length - 1]?.rowId || options[0]?.id || '', budgetSource: 'user', budgetEdited: true }] })} className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10">
-          <Plus size={15} /> Dodaj pozycję
-        </button>
-        <div className="rounded-xl border border-stone-200 bg-white p-3 dark:border-white/10 dark:bg-neutral-900" aria-label="Sumy częściowe">
-          <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Podział na kategorie budżetu</div>
-          <ul className="space-y-1 text-sm tabular">
-            {Object.entries(t.byCategory)
-              .sort((a, b) => b[1] - a[1])
-              .map(([c, v]) => (
-                <li key={c} className="flex justify-between gap-2">
-                  <span>{c}</span>
-                  <span className="font-medium">{formatPLN(v)}</span>
-                </li>
-              ))}
+      <div className="flex-1 overflow-y-auto px-4 py-6">
+        <article className={`relative mx-auto w-full max-w-sm bg-[#fbfaf6] px-4 py-5 shadow-[0_6px_24px_rgba(0,0,0,0.18)] ${PAPER}`} aria-label="Wirtualny paragon">
+          <div className="absolute inset-x-0" style={tear('top')} aria-hidden="true" />
+          <div className="absolute inset-x-0" style={tear('bottom')} aria-hidden="true" />
+          {/* Nagłówek: sklep wyśrodkowany */}
+          <div className="text-center">
+            {editing ? (
+              <input className={`${paperInput} w-full text-center text-base font-bold uppercase`} value={r.shop} onChange={(e) => setR({ ...r, shop: e.target.value })} aria-label="Nazwa sklepu" placeholder="SKLEP" />
+            ) : (
+              <div className="text-lg font-bold tracking-wider uppercase">{r.shop || 'Sklep'}</div>
+            )}
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            {editing ? <input className={`${paperInput} w-40`} type="date" value={r.date} onChange={(e) => setR({ ...r, date: e.target.value })} aria-label="Data paragonu" /> : <span>{r.date || '—'}</span>}
+            <span>{r.time || ''}</span>
+          </div>
+          <div className="mt-2 text-center text-[15px] font-bold tracking-[0.2em]">PARAGON FISKALNY</div>
+          <Dashes />
+          {/* Pozycje: nazwa i cena, pod spodem kategoria budżetu (poprawka w locie) */}
+          <ul className="space-y-2.5" aria-label="Pozycje paragonu">
+            {r.items.map((it) => (
+              <li key={it.id}>
+                {editing ? (
+                  <div className="flex items-center gap-1.5">
+                    <input className={`${paperInput} flex-1 uppercase`} value={it.name} onChange={(e) => setItem(it.id, { name: e.target.value })} aria-label={`Nazwa pozycji ${it.name}`} />
+                    <input className={`${paperInput} w-20 text-right`} type="number" inputMode="decimal" step="0.01" value={it.price} onChange={(e) => setItem(it.id, { price: e.target.value === '' ? '' : Number(e.target.value) })} aria-label={`Cena ${it.name}`} />
+                    <button type="button" onClick={() => setR({ ...r, items: r.items.filter((x) => x.id !== it.id) })} className="inline-flex h-8 w-7 shrink-0 items-center justify-center text-neutral-500 hover:text-red-600" aria-label={`Usuń pozycję ${it.name}`}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 break-words uppercase">
+                      {it.name}
+                      {Number(it.quantity) > 0 && Number(it.quantity) !== 1 && <span className="text-neutral-500"> {String(it.quantity).replace('.', ',')}×</span>}
+                    </span>
+                    <span className="shrink-0 tabular">{money(it.price)}</span>
+                  </div>
+                )}
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span aria-hidden="true" className="text-neutral-400">↳</span>
+                  <select className={`h-7 min-w-0 flex-1 rounded border px-1 font-sans text-[11px] outline-none ${it.budgetEdited ? 'border-blue-400 bg-blue-50 text-blue-900' : 'border-neutral-300 bg-white/80 text-neutral-700'}`} value={it.rowId || ''} onChange={(e) => setItem(it.id, { rowId: e.target.value })} aria-label={`Kategoria ${it.name}`}>
+                    {!it.rowId && <option value="">– wybierz kategorię budżetu –</option>}
+                    {options.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.name}
+                      </option>
+                    ))}
+                    {extra.length > 0 && (
+                      <optgroup label="Pozostałe kategorie">
+                        {extra.map((row) => (
+                          <option key={row.id} value={row.id}>
+                            {row.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  <span className="shrink-0 font-sans text-[10px] text-neutral-500">{SOURCE_LABEL[it.budgetSource] || 'z pamięci'}</span>
+                </div>
+              </li>
+            ))}
           </ul>
-        </div>
-        <p className="text-[11px] text-stone-500 dark:text-stone-400">Pozycje trafiają wyłącznie do Twoich kategorii z Budżetu. Zmiana kategorii przy pozycji jest zapamiętywana i użyta przy kolejnych paragonach.</p>
+          {editing && (
+            <button type="button" onClick={() => setR({ ...r, items: [...r.items, { id: `ri${Date.now().toString(36)}`, name: '', price: 0, quantity: 1, category: 'Dom i inne', source: 'user', rowId: r.items[r.items.length - 1]?.rowId || options[0]?.id || '', budgetSource: 'user', budgetEdited: true }] })} className="mt-2 inline-flex h-8 items-center gap-1 font-sans text-xs font-semibold text-blue-700 hover:underline">
+              <Plus size={14} /> Dodaj pozycję
+            </button>
+          )}
+          <Dashes />
+          {/* Podział na kategorie budżetu (jak „sprzedaż opodatkowana” na paragonie) */}
+          <div aria-label="Sumy częściowe">
+            <div className="text-[11px] tracking-wider text-neutral-500 uppercase">Podział na kategorie budżetu</div>
+            <ul className="mt-1 space-y-0.5">
+              {Object.entries(t.byCategory)
+                .sort((a, b) => b[1] - a[1])
+                .map(([c, v]) => (
+                  <li key={c} className="flex justify-between gap-2">
+                    <span className="min-w-0 truncate uppercase">{c}</span>
+                    <span className="shrink-0 tabular">{money(v)}</span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+          <div className="mt-2 flex items-end justify-between gap-2 text-xl font-bold">
+            <span>SUMA PLN</span>
+            <span className="tabular" aria-label="Suma całkowita">
+              {money(t.sum)}
+            </span>
+          </div>
+          {t.printed > 0 && Math.abs(t.diff) >= 0.01 && <p className="mt-1 font-sans text-[11px] text-amber-700">Na paragonie: {formatPLN(t.printed)} (różnica {formatPLN(t.diff)}) – sprawdź pozycje i ceny.</p>}
+          <div className="my-2 flex gap-1" aria-hidden="true">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <span key={i} className="h-0.5 flex-1 bg-neutral-500" />
+            ))}
+          </div>
+          <div className="flex justify-between gap-2 text-[12px]">
+            <span>{r.date ? formatDate(r.date) : '—'}</span>
+            <span>{r.time || ''}</span>
+          </div>
+          <div className="mt-1 text-[12px]">{r.items.length} poz.</div>
+          <div className="mt-3 text-center text-[12px] tracking-wide">DZIĘKUJEMY – ZAPRASZAMY PONOWNIE</div>
+        </article>
+        <p className="mx-auto mt-5 max-w-sm text-center text-[11px] text-stone-600 dark:text-stone-400">Pozycje trafiają wyłącznie do Twoich kategorii z Budżetu. Zmiana kategorii przy pozycji jest zapamiętywana i użyta przy kolejnych paragonach.</p>
       </div>
-      <footer className="border-t border-stone-200 bg-white px-4 py-3 dark:border-white/10 dark:bg-neutral-900">
-        <div className="mb-2 flex items-end justify-between gap-2">
-          <span className="text-sm text-stone-500 dark:text-stone-400">Suma ({r.items.length} poz.)</span>
-          <span className="text-2xl font-bold tabular" aria-label="Suma całkowita">
-            {formatPLN(t.sum)}
-          </span>
-        </div>
-        {t.printed > 0 && Math.abs(t.diff) >= 0.01 && <p className="mb-2 text-[11px] text-amber-700 dark:text-amber-400">Na paragonie: {formatPLN(t.printed)} (różnica {formatPLN(t.diff)}) – sprawdź pozycje i ceny.</p>}
-        <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-stone-200 text-sm font-semibold text-stone-600 dark:border-white/10 dark:text-stone-300">
-            Anuluj
+      <footer className="border-t border-stone-300 bg-white px-4 py-3 dark:border-white/10 dark:bg-neutral-900">
+        <div className="mx-auto flex max-w-sm gap-2">
+          <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className={`inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border text-sm font-semibold ${editing ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-500/10 dark:text-blue-300' : 'border-stone-200 text-stone-700 dark:border-white/10 dark:text-stone-200'}`}>
+            {editing ? <Check size={16} /> : <Pencil size={16} />} {editing ? 'Gotowe' : 'Edytuj'}
           </button>
-          <button type="button" disabled={!r.items.length || missing} onClick={() => onSave({ ...r, items: r.items.filter((it) => String(it.name).trim()) })} className="inline-flex h-11 flex-[2] items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-semibold text-white disabled:opacity-50 dark:bg-blue-500 dark:text-neutral-950">
+          <button type="button" disabled={!r.items.length || missing} onClick={save} className="inline-flex h-11 flex-[2] items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-semibold text-white disabled:opacity-50 dark:bg-blue-500 dark:text-neutral-950">
             <Check size={16} /> {saveLabel}
           </button>
         </div>
