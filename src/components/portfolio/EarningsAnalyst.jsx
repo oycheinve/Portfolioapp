@@ -94,6 +94,12 @@ export default function EarningsAnalyst() {
     return hasContent(p) ? p : null;
   }, [profiles, query, sel0]);
 
+  // Profil z Ustawień (z treścią) dla spółki z analizy – świeży odczyt (mógł zostać dopisany w międzyczasie)
+  const profileFor = (a) => {
+    const p = findProfile(readProfiles(), { ticker: a.ticker, company: a.company });
+    return hasContent(p) ? p : null;
+  };
+
   const addFiles = async (e) => {
     const picked = [...(e.target.files || [])];
     e.target.value = '';
@@ -149,8 +155,10 @@ export default function EarningsAnalyst() {
     const history = known ? companyPeriods(known).map(({ quarter, revenue, netIncome, ebitda, eps }) => ({ quarter, revenue, netIncome, ebitda, eps })) : [];
     setBusy('AI analizuje Twoje materiały…');
     try {
-      const res = await requestEarnings({ query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile: profileContext(matched) });
+      const profile = profileContext(matched);
+      const res = await requestEarnings({ query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile });
       if (!res.analysis) throw new Error(res.error || 'Brak analizy');
+      if (profile) res.analysis.profileUsed = matched.ticker || matched.name;
       const entry = saveEarnings(res);
       setList(readEarnings());
       setHist(readHistory());
@@ -159,6 +167,8 @@ export default function EarningsAnalyst() {
       setText('');
       setFiles([]);
       actions.notify(`Zapisano: ${entry.analysis.company} ${entry.analysis.quarter} – historia spółki zaktualizowana`, 'success');
+      // Spółka rozpoznana dopiero z materiałów, a w Ustawieniach jest jej profil → omówienie przez pryzmat profilu i tezy
+      if (!profile && profileFor(entry.analysis)) interpret(entry, readHistory());
     } catch (err) {
       actions.notify(`Analityk wyników: ${err.message}`, 'warn');
     } finally {
@@ -168,16 +178,17 @@ export default function EarningsAnalyst() {
 
   // Interpretacja AI zapisanej analizy (także danych startowych): liczby + historia spółki + profil z Ustawień
   const [interpreting, setInterpreting] = useState('');
-  const interpret = async (entry) => {
+  const interpret = async (entry, histNow = hist) => {
     if (interpreting) return;
     const a = entry.analysis;
-    const h = hist[companyKey(a)];
+    const h = histNow[companyKey(a)];
+    const prof = profileFor(a);
     const history = h ? companyPeriods(h).map(({ quarter, revenue, netIncome, ebitda }) => ({ quarter, revenue, netIncome, ebitda })) : [];
     setInterpreting(entry.key);
     try {
-      const res = await requestEarningsInterpretation({ analysis: a, history, profile: profileContext(findProfile(readProfiles(), a)) });
+      const res = await requestEarningsInterpretation({ analysis: a, history, profile: profileContext(prof) });
       if (!res.interpretation) throw new Error(res.error || 'Brak interpretacji');
-      setInterpretation(entry.key, res.interpretation);
+      setInterpretation(entry.key, res.interpretation, { profileUsed: prof ? prof.ticker || prof.name : '' });
       setList(readEarnings());
     } catch (err) {
       actions.notify(`Interpretacja AI: ${err.message}`, 'warn');
@@ -298,7 +309,7 @@ export default function EarningsAnalyst() {
               </span>
             ))}
           </div>
-          {open && <Analysis entry={open} onInterpret={() => interpret(open)} interpreting={interpreting === open.key} />}
+          {open && <Analysis entry={open} onInterpret={() => interpret(open)} interpreting={interpreting === open.key} profileName={(() => { const p = profileFor(open.analysis); return p ? p.ticker || p.name : ''; })()} />}
         </div>
       )}
       {sel && (
@@ -409,7 +420,7 @@ function CompanyHistory({ company }) {
   );
 }
 
-function Analysis({ entry, onInterpret, interpreting }) {
+function Analysis({ entry, onInterpret, interpreting, profileName }) {
   const a = entry.analysis;
   const it = a.interpretation;
   const hasCons = a.metrics.some((m) => m.consensus !== null && m.consensus !== undefined);
@@ -464,7 +475,7 @@ function Analysis({ entry, onInterpret, interpreting }) {
         </div>
       )}
 
-      <Interpretation it={it} onInterpret={onInterpret} busy={interpreting} />
+      <Interpretation it={it} onInterpret={onInterpret} busy={interpreting} profileName={profileName} profileUsed={a.profileUsed} />
 
       {(a.highlights.length > 0 || a.risks.length > 0 || a.outlook) && (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -507,7 +518,12 @@ function Analysis({ entry, onInterpret, interpreting }) {
 }
 
 // Omówienie wyników jak w komentarzu analityka: narracja, czynniki, jakość wyniku, wniosek dla inwestora
-function Interpretation({ it, onInterpret, busy }) {
+const THESIS = {
+  confirms: { label: 'Wspiera tezę', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' },
+  mixed: { label: 'Częściowo', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' },
+  weakens: { label: 'Podważa tezę', cls: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300' },
+};
+function Interpretation({ it, onInterpret, busy, profileName, profileUsed }) {
   const btn = (label) => (
     <button type="button" onClick={onInterpret} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-400/30 dark:bg-transparent dark:text-blue-300 dark:hover:bg-blue-500/10">
       {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -517,7 +533,7 @@ function Interpretation({ it, onInterpret, busy }) {
   if (!it) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-200 p-3 text-[13px] text-stone-600 dark:border-blue-400/25 dark:text-stone-300">
-        <span>Szersze omówienie: co napędziło wynik, jakość zysku i wniosek dla inwestora.</span>
+        <span>{profileName ? `Omówienie przez pryzmat Twojego profilu ${profileName}: teza vs wyniki, co napędziło wynik, jakość zysku.` : 'Szersze omówienie: co napędziło wynik, jakość zysku i wniosek dla inwestora. Dodaj profil spółki w Ustawieniach, aby AI oceniało wyniki względem Twojej tezy.'}</span>
         {btn('Interpretuj wyniki (AI)')}
       </div>
     );
@@ -530,6 +546,24 @@ function Interpretation({ it, onInterpret, busy }) {
         </div>
         {btn('Odśwież')}
       </div>
+      {profileUsed ? (
+        <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80">Na podstawie Twojego profilu spółki {profileUsed} (Ustawienia)</p>
+      ) : (
+        profileName && <p className="text-[11px] text-amber-700 dark:text-amber-300">Omówienie powstało bez Twojego profilu {profileName} – „Odśwież”, aby je uwzględnić.</p>
+      )}
+      {it.thesis && (
+        <div className="rounded-lg border border-blue-200/70 bg-white/70 p-2.5 dark:border-blue-400/20 dark:bg-white/5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold text-stone-600 dark:text-stone-300">Twoja teza vs wyniki</span>
+            {THESIS[it.thesis.status] && <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase ${THESIS[it.thesis.status].cls}`}>{THESIS[it.thesis.status].label}</span>}
+          </div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {it.thesis.points.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {it.summary && <p>{it.summary}</p>}
       {it.drivers?.length > 0 && (
         <div>

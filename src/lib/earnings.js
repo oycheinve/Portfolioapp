@@ -56,11 +56,11 @@ export function saveEarnings({ analysis, sources = [], grounded = false, searchN
 }
 
 // Dopisanie interpretacji AI do zapisanej analizy (bez zmiany daty zapisu i historii liczb)
-export function setInterpretation(key, interpretation) {
+export function setInterpretation(key, interpretation, extra = {}) {
   const list = readEarnings();
   const i = list.findIndex((e) => e.key === key);
   if (i < 0) return null;
-  list[i] = { ...list[i], analysis: { ...list[i].analysis, interpretation } };
+  list[i] = { ...list[i], analysis: { ...list[i].analysis, ...extra, interpretation } };
   writeEarnings(list);
   return list[i];
 }
