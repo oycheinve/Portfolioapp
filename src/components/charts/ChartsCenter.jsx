@@ -251,11 +251,13 @@ export default function ChartsCenter({ param }) {
   const usesBenchmarks = option.kind === 'series' && chart !== 'value';
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-3 sm:space-y-5">
       {/* Pasek wyboru: wykres · aktywa · benchmarki · zakres */}
       <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-0 flex-1 basis-56 sm:max-w-[18rem]">
+          {/* Wiersz 1: wybór wykresu + odświeżenie (ikona) */}
+          <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1 sm:basis-56">
+          <div className="relative min-w-0 flex-1 sm:max-w-[18rem]">
             <LineIcon size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-blue-600 dark:text-blue-400" />
             <Select value={chart} onChange={(e) => setChart(e.target.value)} aria-label="Wybierz wykres" className="pl-9 font-medium">
               {['Portfel', 'Dywidendy', 'Rynek', 'Podsumowania'].map((g) => (
@@ -268,6 +270,17 @@ export default function ChartsCenter({ param }) {
                 </optgroup>
               ))}
             </Select>
+          </div>
+            {option.kind === 'series' && (
+              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => actions.refreshHistory()} disabled={historyLoading} title="Pobierz historię cen z Yahoo Finance" aria-label="Pobierz historię cen">
+                <span className="hidden sm:inline">{historyLoading ? 'Pobieranie…' : 'Historia cen'}</span>
+              </Button>
+            )}
+            {option.kind === 'market' && (
+              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => actions.refreshPrices()} aria-label="Odśwież kursy">
+                <span className="hidden sm:inline">Odśwież kursy</span>
+              </Button>
+            )}
           </div>
 
           {usesSelection && (
@@ -361,21 +374,9 @@ export default function ChartsCenter({ param }) {
             </div>
           )}
 
-          <div className="ml-auto">
-            {option.kind === 'series' && (
-              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => actions.refreshHistory()} disabled={historyLoading} title="Pobierz historię cen z Yahoo Finance">
-                <span className="hidden sm:inline">{historyLoading ? 'Pobieranie…' : 'Historia cen'}</span>
-              </Button>
-            )}
-            {option.kind === 'market' && (
-              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => actions.refreshPrices()}>
-                Odśwież kursy
-              </Button>
-            )}
-          </div>
         </div>
         {option.kind === 'series' && (
-          <div className="mt-2 text-xs text-stone-500 tabular dark:text-stone-400">
+          <div className="mt-1.5 text-[11px] text-stone-400 tabular">
             {formatDate(series.start)} – {formatDate(series.end)}
           </div>
         )}
@@ -383,13 +384,14 @@ export default function ChartsCenter({ param }) {
 
       {/* Podsumowanie okresu (wykresy portfela) */}
       {option.kind === 'series' && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Tile label="Wartość" value={formatPLN(sum.value)} />
-          <Tile label="Wkład netto" value={formatPLN(sum.contrib)} />
-          <Tile label="Zysk w okresie" value={formatPLN(sum.profit, { sign: true })} tone={signClass(sum.profit)} />
-          <Tile label="TWR w okresie" value={formatPercent(sum.twr, { sign: true })} tone={signClass(sum.twr)} sub={sum.annualized !== null ? `rocznie ${formatPercent(sum.annualized, { sign: true })}` : null} />
-          <Tile label="Maks. obsunięcie" value={formatPercent(sum.maxDrawdown)} tone={sum.maxDrawdown < 0 ? 'text-red-600 dark:text-red-400' : ''} sub={`obecnie ${formatPercent(sum.currentDrawdown)}`} />
+        <div className="grid grid-cols-3 gap-x-3 gap-y-2.5 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 shadow-sm sm:px-4 lg:grid-cols-6 dark:border-white/10 dark:bg-neutral-900" aria-label="Podsumowanie okresu">
+          <Tile plain label="Wartość" value={formatPLN(sum.value)} />
+          <Tile plain label="Wkład netto" value={formatPLN(sum.contrib)} />
+          <Tile plain label="Zysk w okresie" value={formatPLN(sum.profit, { sign: true })} tone={signClass(sum.profit)} />
+          <Tile plain label="TWR w okresie" value={formatPercent(sum.twr, { sign: true })} tone={signClass(sum.twr)} sub={sum.annualized !== null ? `rocznie ${formatPercent(sum.annualized, { sign: true })}` : null} />
+          <Tile plain label="Maks. obsunięcie" value={formatPercent(sum.maxDrawdown)} tone={sum.maxDrawdown < 0 ? 'text-red-600 dark:text-red-400' : ''} sub={`obecnie ${formatPercent(sum.currentDrawdown)}`} />
           {chart !== 'value' && <Tile
+            plain
             label="vs benchmarki"
             value={
               benchmarks.length
@@ -480,7 +482,7 @@ function Tile({ label, value, sub, tone = '', small, plain }) {
   return (
     <div className={plain ? 'min-w-0' : 'min-w-0 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-neutral-900'}>
       <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">{label}</div>
-      <div className={`truncate font-semibold tabular ${small ? 'text-xs leading-6' : 'text-base'} ${tone}`}>{value}</div>
+      <div className={`truncate font-semibold tabular ${small ? 'text-xs leading-6' : 'text-sm sm:text-base'} ${tone}`}>{value}</div>
       {sub && <div className="truncate text-[11px] text-stone-500 dark:text-stone-500">{sub}</div>}
     </div>
   );

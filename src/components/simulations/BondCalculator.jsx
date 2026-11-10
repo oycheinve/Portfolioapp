@@ -77,7 +77,7 @@ export default function BondCalculator() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <Card title="Kalkulator obligacyjny" subtitle="Porównanie obligacji skarbowych przy Twoim horyzoncie – z przedterminowym wykupem, podatkiem Belki i inflacją" icon={Landmark}>
+      <Card collapsible defaultOpen storageKey="fintrack-sim-bonds-params" title="Kalkulator obligacyjny" subtitle="Porównanie obligacji skarbowych przy Twoim horyzoncie – z przedterminowym wykupem, podatkiem Belki i inflacją" icon={Landmark}>
         <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
           <Field label="Kwota inwestycji (zł)">
             <Input type="number" min="100" step="100" value={p.amount} onChange={(e) => set({ amount: Math.max(0, Number(e.target.value) || 0) })} />

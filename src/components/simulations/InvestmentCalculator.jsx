@@ -52,7 +52,7 @@ export default function InvestmentCalculator() {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 1. Dane wejściowe */}
-      <Card title="Kalkulator inwestycyjny" subtitle="Procent składany z kapitalizacją miesięczną, kosztem TER i podatkiem wg rodzaju konta" icon={Calculator}>
+      <Card collapsible defaultOpen storageKey="fintrack-sim-calc-params" title="Kalkulator inwestycyjny" subtitle="Procent składany z kapitalizacją miesięczną, kosztem TER i podatkiem wg rodzaju konta" icon={Calculator}>
         <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
           <Field label="Kapitał początkowy (zł)">
             <Input type="number" min="0" step="1000" value={p.initial} onChange={(e) => set({ initial: Math.max(0, Number(e.target.value) || 0) })} />

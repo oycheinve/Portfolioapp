@@ -62,7 +62,7 @@ export default function PpkCalculator() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <Card title="Kalkulator PPK" subtitle="Pracownicze Plany Kapitałowe – wpłaty Twoje i pracodawcy, dopłaty państwa i wzrost kapitału w czasie" icon={Briefcase}>
+      <Card collapsible defaultOpen storageKey="fintrack-sim-ppk-params" title="Kalkulator PPK" subtitle="Pracownicze Plany Kapitałowe – wpłaty Twoje i pracodawcy, dopłaty państwa i wzrost kapitału w czasie" icon={Briefcase}>
         <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
           <Field label="Miesięczne wynagrodzenie brutto (zł)" hint={`Domyślnie przeciętne wynagrodzenie ${year}: ${formatPLN(Math.round(averageWage))}`}>
             <Input type="number" min="0" step="100" value={p.salary} onChange={(e) => set({ salary: Math.max(0, Number(e.target.value) || 0) })} aria-label="Wynagrodzenie brutto" />
@@ -189,7 +189,7 @@ export default function PpkCalculator() {
         </div>
       </Card>
 
-      <Card title="Projekcja rok po roku" bodyClassName="p-0 sm:p-0">
+      <Card collapsible storageKey="fintrack-sim-ppk-table" title="Projekcja rok po roku" bodyClassName="p-0 sm:p-0">
         <div className="max-h-[28rem] overflow-auto">
           <table className="w-full min-w-[860px] text-sm">
             <thead className="sticky top-0 bg-white dark:bg-neutral-900">

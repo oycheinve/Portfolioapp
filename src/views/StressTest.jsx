@@ -29,7 +29,7 @@ export default function StressTestView() {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 1. Dane wejściowe */}
-      <Card title="Scenariusz stresu rynkowego" subtitle="Suwaki nagłych zdarzeń rynkowych i walutowych" icon={Activity}>
+      <Card collapsible defaultOpen storageKey="fintrack-sim-stress-params" title="Scenariusz stresu rynkowego" subtitle="Suwaki nagłych zdarzeń rynkowych i walutowych" icon={Activity}>
           <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
             <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-3">
               {STRESS_PRESETS.map((p) => (

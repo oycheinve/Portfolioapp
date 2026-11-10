@@ -78,6 +78,9 @@ export default function FireView({ onNavigate }) {
     <div className="space-y-4 sm:space-y-6">
       {/* 1. Dane wejściowe */}
       <Card
+        collapsible
+        defaultOpen
+        storageKey="fintrack-sim-fire-params"
         title="Parametry symulacji FIRE"
         subtitle={`Cel: ${formatPLN(fire.targetMonthlyIncome)} / mies. i ${formatPLN(fire.targetNetWorth, { compact: true })} majątku do ${fire.targetYear} (w dzisiejszych zł)`}
         icon={SlidersHorizontal}
@@ -221,7 +224,7 @@ export default function FireView({ onNavigate }) {
             <Tile label="Coast FIRE" value={formatPLN(coast, { compact: true })} sub={current.value >= coast ? 'osiągnięte – cel majątku bez dalszych wpłat' : `brakuje ${formatPLN(coast - current.value, { compact: true })}`} />
           </div>
 
-          <Card title="Porównanie scenariuszy" icon={CalendarCheck} bodyClassName="p-0 sm:p-0">
+          <Card collapsible defaultOpen storageKey="fintrack-sim-fire-compare" title="Porównanie scenariuszy" icon={CalendarCheck} bodyClassName="p-0 sm:p-0">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[520px] text-sm">
                 <thead>

@@ -51,7 +51,7 @@ export default function IkzeCalculator() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <Card title="Kalkulator IKZE" subtitle="Zwrot podatku z wpłat na IKZE i wzrost kapitału w czasie – wg Twoich zarobków i formy opodatkowania" icon={PiggyBank}>
+      <Card collapsible defaultOpen storageKey="fintrack-sim-ikze-params" title="Kalkulator IKZE" subtitle="Zwrot podatku z wpłat na IKZE i wzrost kapitału w czasie – wg Twoich zarobków i formy opodatkowania" icon={PiggyBank}>
         <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
           <div className="space-y-1.5 sm:col-span-2 xl:col-span-3">
             <div className="text-xs font-medium text-stone-600 dark:text-stone-400">Forma opodatkowania</div>
@@ -142,7 +142,7 @@ export default function IkzeCalculator() {
         </div>
       </Card>
 
-      <Card title="Projekcja rok po roku" bodyClassName="p-0 sm:p-0">
+      <Card collapsible storageKey="fintrack-sim-ikze-table" title="Projekcja rok po roku" bodyClassName="p-0 sm:p-0">
         <div className="max-h-[28rem] overflow-auto">
           <table className="w-full min-w-[900px] text-sm">
             <thead className="sticky top-0 bg-white dark:bg-neutral-900">

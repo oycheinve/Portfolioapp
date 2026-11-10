@@ -92,7 +92,7 @@ export default function EtfCostCalculator() {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 1. Dane wejściowe */}
-      <Card title="Kalkulator opłacalności ETF" subtitle="Porównanie TER, przewalutowania XTB 0,05% (kupno i sprzedaż) i podatku w długim terminie" icon={Scale}>
+      <Card collapsible defaultOpen storageKey="fintrack-sim-etf-params" title="Kalkulator opłacalności ETF" subtitle="Porównanie TER, przewalutowania XTB 0,05% (kupno i sprzedaż) i podatku w długim terminie" icon={Scale}>
         <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
           <div className="space-y-1.5 sm:col-span-2 xl:col-span-3">
             <div className="text-xs font-medium text-stone-600 dark:text-stone-400">Waluta kalkulatora (konta, kwot i wyniku)</div>
