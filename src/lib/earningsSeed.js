@@ -1,4 +1,4 @@
-// Dane startowe Analityka wyników (XTB, LPP, Synektik – niżej). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
+// Dane startowe Analityka wyników (XTB, LPP, Synektik, cyber_Folks – niżej). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
 // użytkownika). Wartości sprzed roku i z Q4 2025 wyliczone z podanych zmian r/r i q/q, EBITDA Q1 2026 z narastającej
 // EBITDA (YTD). Przychody Q3 2026 – z pełnej tabeli (wersja 2 danych; wcześniej szacunek z marż ≈ 623 mln zł).
 // Dopisywane do bazy użytkownika jednorazowo (flaga), dalej historia buduje się z kolejnych analiz.
@@ -162,11 +162,61 @@ export const SNT_SEED = [
   },
 ];
 
+// cyber_Folks (CBF): Q1 i Q2 2026 z raportów kwartalnych spółki (PDF od użytkownika) – bez konsensusu, ocena r/r.
+// EBITDA skorygowana = główny wskaźnik spółki (bez ESOP, kosztów transakcyjnych i restrukturyzacji); EBITDA
+// raportowana = EBIT + amortyzacja. Przychody Q1 2026 po korekcie (unettowienie PrestaShop, raport Q2): 243,0 mln zł
+// (w raporcie Q1: 245,3). Q4 2025 – brak danych za Q3 2025 w raportach, więc nie da się go wydzielić z wyników rocznych.
+const yoy = (name, actual, previous, unit = 'mln PLN', lowerIsBetter = false) => {
+  const d = unit === '%' ? actual - previous : previous ? (actual - previous) / Math.abs(previous) : null;
+  const th = unit === '%' ? 0.5 : 0.02;
+  const better = d === null ? null : lowerIsBetter ? -d : d;
+  return { name, actual, consensus: null, previous, unit, lowerIsBetter, verdict: better === null ? 'unknown' : better > th ? 'beat' : better < -th ? 'miss' : 'inline' };
+};
+const cbfBase = { company: 'cyber_Folks', ticker: 'CBF', industry: 'Technologie internetowe: hosting i domeny, komunikacja (Vercom), e-commerce (Shoper, PrestaShop)', currency: 'PLN', unit: 'mln PLN', basis: 'yoy', verdict: 'unknown' };
+export const CBF_SEED = [
+  {
+    ...cbfBase,
+    quarter: 'Q1 2026',
+    periodEnd: '2026-03-31',
+    headline: 'Q1 2026: przychody 245,3 mln zł (+29% r/r), skorygowana EBITDA 83,1 mln zł (+35%), zysk netto j.d. 22,9 mln zł (+71%).',
+    metrics: [
+      yoy('Przychody', 245.3, 190.5), yoy('EBITDA skorygowana', 83.1, 61.8), yoy('EBITDA', 79.3, 56.8), yoy('EBIT', 62.9, 42.9), yoy('Zysk netto', 41.2, 27.8), yoy('Zysk netto j.d.', 22.9, 13.3), yoy('Marża EBITDA skor.', 33.9, 32.4, '%'),
+      yoy('Vercom – przychody', 122.9, 110.8), yoy('Vercom – EBITDA skor.', 34.9, 28.8), yoy('E-commerce – przychody', 73.4, 35.5), yoy('E-commerce – EBITDA skor.', 23.8, 12.7), yoy('Segment cyber_Folks – przychody', 49.3, 44.4), yoy('Segment cyber_Folks – EBITDA skor.', 25.9, 21.7),
+    ],
+    quarters: [
+      { quarter: 'Q1 2025', revenue: 190.5, netIncome: 13.3, ebitda: 61.8, eps: null },
+      { quarter: 'Q1 2026', revenue: 245.3, netIncome: 22.9, ebitda: 83.1, eps: null },
+    ],
+    highlights: ['Wzrost organiczny w segmentach Vercom, cyber_Folks i E-commerce; konsolidacja PrestaShop, Sylius i BitBag od lutego 2026', 'E-commerce: przychody +107% r/r (73,4 mln zł), EBITDA skor. +87%', 'Koszty finansowe netto 12,5 mln zł (+56% r/r) – kredyt na zakup Shoper', 'Cały 2025: przychody 855,2 mln zł (+30%), EBITDA skor. 291,7 mln zł (+66%), marża ok. 34,1%', 'Na wykresach: EBITDA = skorygowana, zysk netto = przypadający akcjonariuszom jednostki dominującej'],
+    risks: ['Koszty jednorazowe w Q1: ESOP 1,9 mln zł i transakcyjne 2,0 mln zł', 'Wyższe zadłużenie po przejęciach (koszty finansowe)'],
+    outlook: '',
+  },
+  {
+    ...cbfBase,
+    quarter: 'Q2 2026',
+    periodEnd: '2026-06-30',
+    headline: 'Q2 2026: przychody 269,0 mln zł (+27% r/r), skorygowana EBITDA 88,3 mln zł (+23%); raportowany zysk netto j.d. −5,7 mln zł przez jednorazowe koszty, skorygowany 26,9 mln zł (+122%).',
+    metrics: [
+      yoy('Przychody', 269.0, 212.0), yoy('EBITDA skorygowana', 88.3, 72.0), yoy('EBITDA', 58.7, 68.8), yoy('EBIT', 40.5, 50.9), yoy('Zysk netto', 12.2, 27.9), yoy('Zysk netto j.d.', -5.7, 12.1), yoy('Zysk netto j.d. skorygowany', 26.9, 12.1), yoy('Marża EBITDA skor.', 32.8, 34.0, '%'),
+      yoy('Vercom – przychody', 132.9, 114.1), yoy('Vercom – EBITDA skor.', 38.6, 32.8), yoy('E-commerce – przychody', 89.0, 54.5), yoy('E-commerce – EBITDA skor.', 26.9, 19.8), yoy('Segment cyber_Folks – przychody', 47.5, 43.7), yoy('Segment cyber_Folks – EBITDA skor.', 24.2, 20.7),
+    ],
+    quarters: [
+      { quarter: 'Q2 2025', revenue: 212.0, netIncome: 12.1, ebitda: 72.0, eps: null },
+      { quarter: 'Q1 2026', revenue: 243.0, netIncome: 22.9, ebitda: 83.1, eps: null },
+      { quarter: 'Q2 2026', revenue: 269.0, netIncome: -5.7, ebitda: 88.3, eps: null },
+    ],
+    highlights: ['H1 2026: przychody 512,0 mln zł (+27% r/r), EBITDA skor. 171,4 mln zł (+28%)', 'Sprzedaż ponad 4,3 mln akcji Vercom (ponad 500 mln zł); cyber_Folks pozostaje największym akcjonariuszem (31%)', 'Koszty finansowe netto spadły do 9,5 mln zł (−42% r/r)', 'Przychody Q1 2026 po korekcie prezentacji PrestaShop: 243,0 mln zł (w raporcie Q1: 245,3)'],
+    risks: ['Jednorazowo: podatek od sprzedaży akcji Vercom ujęty w wyniku 23,1 mln zł, restrukturyzacja PrestaShop 25,4 mln zł, odpis _Stores 1,6 mln zł', 'Marża EBITDA skor. 32,8% (−1,2 p.p. r/r) po konsolidacji PrestaShop'],
+    outlook: '',
+  },
+];
+
 // Rejestr danych startowych (dowolna liczba spółek): każda ma własną flagę „wczytane” per użytkownik
 export const COMPANY_SEEDS = [
   { key: 'XTB', label: 'XTB (Q1–Q3 2026 vs konsensus)', flag: SEED_KEY, data: XTB_SEED },
   { key: 'LPP', label: 'LPP (Q4 2025 – Q2 2026 vs konsensus)', flag: 'wealth-app-earnings-seed-lpp-v1', data: LPP_SEED },
   { key: 'SNT', label: 'Synektik (Q1–Q3 2025/26 vs konsensus)', flag: 'wealth-app-earnings-seed-snt-v1', data: SNT_SEED },
+  { key: 'CBF', label: 'cyber_Folks (Q1–Q2 2026, raporty kwartalne)', flag: 'wealth-app-earnings-seed-cbf-v1', data: CBF_SEED },
 ];
 const flagSet = (flag) => {
   try {
