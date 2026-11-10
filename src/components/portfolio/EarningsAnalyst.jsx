@@ -4,7 +4,7 @@ import { FileText, Image as ImageIcon, Loader2, Paperclip, Sparkles, Trash2, X }
 import { useApp } from '../../state/AppContext.jsx';
 import { requestEarnings, requestEarningsInterpretation } from '../../lib/newsAi.js';
 import { compressImage } from '../../lib/receipts.js';
-import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
+import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, profileKpis, readProfiles } from '../../lib/companyProfiles.js';
 import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
@@ -451,6 +451,8 @@ function Analysis({ entry, onInterpret, interpreting, profile }) {
   const hasCons = a.metrics.some((m) => m.consensus !== null && m.consensus !== undefined);
   const hasPrev = a.metrics.some((m) => m.previous !== null && m.previous !== undefined);
   const refCol = hasCons ? 'consensus' : hasPrev ? 'previous' : null;
+  // Wiersze bez konsensusu oceniane r/r (gdy znany rok wcześniej) – oznaczone „r/r” w kolumnie odniesienia
+  const mixedRef = hasCons && a.metrics.some((m) => metricRef(m).kind === 'previous');
   return (
     <article className="mt-2 space-y-3 rounded-xl border border-stone-200 p-3 dark:border-white/10" aria-label={`Analiza ${a.company} ${a.quarter}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -471,13 +473,15 @@ function Analysis({ entry, onInterpret, interpreting, profile }) {
               <tr className="bg-stone-50 text-left text-[11px] text-stone-500 dark:bg-white/[0.03] dark:text-stone-400">
                 <th className="px-2.5 py-2 font-medium">Wskaźnik</th>
                 <th className="px-2 py-2 text-right font-medium">Wynik</th>
-                {refCol && <th className="px-2 py-2 text-right font-medium">{refCol === 'consensus' ? 'Konsensus' : 'Rok wcześniej'}</th>}
+                {refCol && <th className="px-2 py-2 text-right font-medium">{refCol === 'consensus' ? (mixedRef ? 'Kons. / r/r' : 'Konsensus') : 'Rok wcześniej'}</th>}
                 <th className="px-2 py-2 text-right font-medium">Ocena</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 dark:divide-white/5">
-              {a.metrics.map((m) => {
-                const ref = refCol ? m[refCol] : null;
+              {a.metrics.map((m0) => {
+                const r = metricRef(m0);
+                const m = { ...m0, verdict: r.verdict };
+                const ref = refCol ? r.ref : null;
                 const s = surprise(m.actual, ref ?? null);
                 return (
                   <tr key={m.name}>
@@ -491,11 +495,16 @@ function Analysis({ entry, onInterpret, interpreting, profile }) {
                       {m.unit && <span className="block text-[10px] text-stone-400">{m.unit}</span>}
                     </td>
                     <td className="px-2 py-1.5 text-right font-medium">{nf(m.actual)}</td>
-                    {refCol && <td className="px-2 py-1.5 text-right text-stone-500 dark:text-stone-400">{nf(ref)}</td>}
+                    {refCol && (
+                      <td className="px-2 py-1.5 text-right text-stone-500 dark:text-stone-400">
+                        {nf(ref)}
+                        {mixedRef && r.kind === 'previous' && <span className="block text-[10px] text-stone-400">rok wcz.</span>}
+                      </td>
+                    )}
                     {/* Kolor odchylenia wg oceny (np. wyższe koszty = MISS), nie wg znaku */}
                     <td className="px-2 py-1.5 text-right">
                       <Verdict v={m.verdict} />
-                      <span className={`mt-0.5 block text-[11px] ${m.verdict === 'beat' ? 'text-emerald-700 dark:text-emerald-400' : m.verdict === 'miss' ? 'text-red-600 dark:text-red-400' : 'text-stone-500 dark:text-stone-400'}`}>{m.unit === '%' && ref !== null && ref !== undefined && m.actual !== null ? `${m.actual - ref >= 0 ? '+' : ''}${nf(m.actual - ref, 1)} p.p.` : s === null ? '' : `${s >= 0 ? '+' : ''}${nf(s, 1)}%`}</span>
+                      <span className={`mt-0.5 block text-[11px] ${m.verdict === 'beat' ? 'text-emerald-700 dark:text-emerald-400' : m.verdict === 'miss' ? 'text-red-600 dark:text-red-400' : 'text-stone-500 dark:text-stone-400'}`}>{m.unit === '%' && ref !== null && ref !== undefined && m.actual !== null ? `${m.actual - ref >= 0 ? '+' : ''}${nf(m.actual - ref, 1)} p.p.${mixedRef && r.kind === 'previous' ? ' r/r' : ''}` : s === null ? '' : `${s >= 0 ? '+' : ''}${nf(s, 1)}%${mixedRef && r.kind === 'previous' ? ' r/r' : ''}`}</span>
                     </td>
                   </tr>
                 );
@@ -541,7 +550,7 @@ function Analysis({ entry, onInterpret, interpreting, profile }) {
         </div>
       )}
       <p className="text-[11px] text-stone-500 dark:text-stone-400">
-        {refCol === 'consensus' ? 'Ocena względem podanego konsensusu' : refCol === 'previous' ? 'Ocena względem tego samego okresu rok wcześniej' : 'Brak punktu odniesienia – dopisz konsensus albo wgraj raport z danymi porównawczymi'}. Na podstawie Twoich materiałów – AI może się mylić. Zapisano {new Date(entry.at).toLocaleString('pl-PL')}.
+        {refCol === 'consensus' ? (mixedRef ? 'Ocena względem konsensusu; pozycje bez konsensusu – względem tego samego okresu rok wcześniej (r/r)' : 'Ocena względem podanego konsensusu') : refCol === 'previous' ? 'Ocena względem tego samego okresu rok wcześniej' : 'Brak punktu odniesienia – dopisz konsensus albo wgraj raport z danymi porównawczymi'}. Na podstawie Twoich materiałów – AI może się mylić. Zapisano {new Date(entry.at).toLocaleString('pl-PL')}.
       </p>
     </article>
   );

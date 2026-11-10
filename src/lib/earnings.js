@@ -156,5 +156,22 @@ export function deleteCompanyHistory(key) {
 export function deleteEarnings(key) {
   writeEarnings(readEarnings().filter((e) => e.key !== key));
 }
+// Punkt odniesienia wiersza: konsensus, a gdy go brak – ten sam okres rok wcześniej (ocena r/r: > 2%, dla % > 0,5 p.p.;
+// „mniej = lepiej” odwrotnie). Dzięki temu pozycje bez konsensusu (np. przychody, marże) nie zostają „bez oceny”.
+export function metricRef(m) {
+  const has = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
+  if (has(m.consensus)) return { ref: Number(m.consensus), kind: 'consensus', verdict: m.verdict };
+  if (!has(m.previous) || !has(m.actual)) return { ref: null, kind: null, verdict: m.verdict };
+  const prev = Number(m.previous);
+  let verdict = m.verdict;
+  if (!verdict || verdict === 'unknown') {
+    const pct = m.unit === '%';
+    const d = pct ? m.actual - prev : prev ? (m.actual - prev) / Math.abs(prev) : null;
+    const better = d === null ? null : m.lowerIsBetter ? -d : d;
+    const th = pct ? 0.5 : 0.02;
+    verdict = better === null ? 'unknown' : better > th ? 'beat' : better < -th ? 'miss' : 'inline';
+  }
+  return { ref: prev, kind: 'previous', verdict };
+}
 // Odchylenie od konsensusu (%), gdy oba znane
 export const surprise = (actual, consensus) => (actual === null || consensus === null || !consensus ? null : ((actual - consensus) / Math.abs(consensus)) * 100);
