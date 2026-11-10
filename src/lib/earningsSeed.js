@@ -341,11 +341,20 @@ const EXTRA_HISTORY = {
     P('Q3 2025', 20.9, 13.4, 8.3, { Przychody: 20.9, EBITDA: 13.4, EBIT: 10.5, 'Zysk netto j.d.': 8.3, 'Marża EBITDA': [64.2, '%'], 'Marża netto': [39.6, '%'] }),
     P('Q4 2025', 56.2, 32.0, 17.2, { Przychody: 56.2, EBITDA: 32.0, EBIT: 24.7, 'Zysk netto j.d.': 17.2, 'Marża EBITDA': [57.0, '%'], 'Marża netto': [30.6, '%'] }),
   ],
+  // cyber_Folks 2024: raporty kwartalne i komunikaty spółki/PAP Biznes; Q3 2024 przychody = 2024 (657,0) − Q1 − Q2 − Q4,
+  // EBITDA skor. Q3 2024 = 2024 (176,0) − pozostałe kwartały; zysk netto j.d. Q3 2024 znormalizowany (raportowany 62,3 – sprzedaż Profitroom)
   CBF: [
+    P('Q1 2024', 144.0, 40.0, 16.0, { Przychody: 144.0, 'EBITDA skorygowana': 40.0, EBIT: 30.8, 'Zysk netto j.d.': 16.0 }),
+    P('Q2 2024', 154.0, 42.0, 17.8, { Przychody: 154.0, 'EBITDA skorygowana': 42.0, 'Zysk netto j.d.': 17.8 }),
+    P('Q3 2024', 185.8, 45.8, 17.1, { Przychody: 185.8, 'EBITDA skorygowana': 45.8, EBITDA: 41.1, EBIT: 32.3, 'Zysk netto j.d.': 17.1 }),
+    P('Q4 2024', 173.2, 48.2, 21.0, { Przychody: 173.2, 'EBITDA skorygowana': 48.2, EBIT: 38.2, 'Zysk netto j.d.': 21.0 }),
     P('Q3 2025', 215.9, 75.5, 13.7, { Przychody: 215.9, 'EBITDA skorygowana': 75.5, EBITDA: 69.9, 'Zysk netto j.d.': 13.7 }),
     P('Q4 2025', 236.7, 82.4, 24.2, { Przychody: 236.7, 'EBITDA skorygowana': 82.4, 'Zysk netto j.d.': 24.2 }),
   ],
 };
+// Wersja starszych okresów per spółka – podbicie dopisuje nowe okresy także u użytkowników, którzy mieli już poprzednią wersję
+const EXTRA_VERSION = { CBF: 2 };
+const extraFlag = (key) => `wealth-app-earnings-extra-${key.toLowerCase()}-v${EXTRA_VERSION[key] || 1}`;
 function recordExtras(key) {
   const seed = COMPANY_SEEDS.find((c) => c.key === key);
   const extra = EXTRA_HISTORY[key];
@@ -363,7 +372,7 @@ function recordExtras(key) {
     });
   }
   try {
-    localStorage.setItem(`wealth-app-earnings-extra-${key.toLowerCase()}-v1`, new Date().toISOString());
+    localStorage.setItem(extraFlag(key), new Date().toISOString());
   } catch {
     // brak localStorage
   }
@@ -371,7 +380,7 @@ function recordExtras(key) {
 }
 const extraDone = (key) => {
   try {
-    return !!localStorage.getItem(`wealth-app-earnings-extra-${key.toLowerCase()}-v1`);
+    return !!localStorage.getItem(extraFlag(key));
   } catch {
     return true;
   }
