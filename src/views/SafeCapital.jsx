@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Briefcase, Landmark, PiggyBank, Shield, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES } from '../lib/constants.js';
@@ -9,7 +9,7 @@ import { ppkCurrentValue } from '../lib/ppkCalc.js';
 import { bondBelkaRate } from '../lib/tax.js';
 import { seriesColor } from '../lib/colors.js';
 import { formatPLN, formatPercent } from '../lib/format.js';
-import { Card } from '../components/ui.jsx';
+import { Card, Segmented } from '../components/ui.jsx';
 import BondsSection from '../components/bonds/BondsSection.jsx';
 import SafeGoalCard from '../components/bonds/SafeGoalCard.jsx';
 import { CushionGrowthCard, CushionWeightsCard } from '../components/bonds/CushionPlanCards.jsx';
@@ -18,8 +18,33 @@ import { CpiCard, SavingsCards } from '../components/bonds/SavingsSection.jsx';
 
 // Poduszka finansowa = konta oszczędnościowe i konta obligacji skarbowych (obligacje + gotówka na nich).
 // Oba instrumenty są wbudowane (nie konta tworzone w ustawieniach); gotówka na kontach inwestycyjnych pokazana osobno.
+const SAFE_TABS = [
+  { id: 'bonds', label: 'Obligacje' },
+  { id: 'savings', label: 'Oszczędności' },
+  { id: 'ppk', label: 'PPK' },
+  { id: 'goal', label: 'Cel' },
+  { id: 'more', label: 'Więcej' },
+];
+const SAFE_TAB_KEY = 'wealth-app-safe-tab';
+
 export default function SafeCapitalView() {
   const { state, isDark } = useApp();
+  const [tab, setTabState] = useState(() => {
+    try {
+      return localStorage.getItem(SAFE_TAB_KEY) || 'bonds';
+    } catch {
+      return 'bonds';
+    }
+  });
+  const setTab = (t) => {
+    setTabState(t);
+    try {
+      localStorage.setItem(SAFE_TAB_KEY, t);
+    } catch {
+      // brak localStorage
+    }
+  };
+  const activeTab = SAFE_TABS.some((t) => t.id === tab) ? tab : 'bonds';
   const today = isoDay(new Date());
   const data = useMemo(() => {
     const v = valuePortfolio(state, { asOf: today, accountIds: null, priceLookup: livePriceLookup(state) });
@@ -43,10 +68,11 @@ export default function SafeCapitalView() {
     // PPK – bieżące saldo (saldo z instytucji + szacowane wpłaty od daty salda); grupa widoczna, gdy saldo > 0
     const ppk = ppkCurrentValue(state.settings.ppk, new Date(`${today}T12:00:00`));
     const ppkItems = ppk.included > 0.005 ? [{ key: 'ppk', label: ppk.months ? `Saldo ${formatPLN(ppk.start)} + wpłaty ${ppk.months} mies.${ppk.gains > 0.005 ? ' + zysk' : ''}` : 'Saldo z instytucji', value: ppk.included }] : [];
+    // Trzy równorzędne składniki poduszki: obligacje, konta oszczędnościowe i PPK (od 0 zł, dopóki nie uzupełnisz danych)
     const groups = [
-      { key: 'bonds', label: 'Obligacje skarbowe', icon: Landmark, slot: 2, items: bondItems },
-      { key: 'savings', label: 'Konta oszczędnościowe', icon: PiggyBank, slot: 3, items: savingsItems },
-      ...(ppkItems.length ? [{ key: 'ppk', label: 'PPK', icon: Briefcase, slot: 7, items: ppkItems }] : []),
+      { key: 'bonds', label: 'Obligacje skarbowe', icon: Landmark, slot: 2, items: bondItems, empty: 'Brak – dodaj w zakładce Obligacje' },
+      { key: 'savings', label: 'Konta oszczędnościowe', icon: PiggyBank, slot: 3, items: savingsItems, empty: 'Brak – dodaj w zakładce Oszczędności' },
+      { key: 'ppk', label: 'PPK', icon: Briefcase, slot: 7, items: ppkItems, empty: '0 zł – uzupełnij w zakładce PPK' },
     ].map((g) => ({ ...g, value: g.items.reduce((sum, it) => sum + it.value, 0) }));
     const safeIds = new Set(state.accounts.filter(isSafeAccount).map((a) => a.id));
     // Poza poduszką: wolna gotówka na kontach inwestycyjnych
@@ -64,10 +90,6 @@ export default function SafeCapitalView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <SafeGoalCard value={data.safe} yearlyIncomeNet={data.income} />
-      <CushionWeightsCard />
-      <CushionGrowthCard />
-      <PpkCard />
       <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-neutral-900">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -92,7 +114,7 @@ export default function SafeCapitalView() {
               <div key={g.key} className="h-full" style={{ width: `${(g.value / (data.safe || 1)) * 100}%`, background: seriesColor(g.slot, isDark) }} />
             ))}
         </div>
-        <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${data.groups.length > 2 ? "lg:grid-cols-3" : ""}`}>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
           {data.groups.map((g) => {
             const Icon = g.icon;
             return (
@@ -113,7 +135,7 @@ export default function SafeCapitalView() {
                     ))}
                   </ul>
                 ) : (
-                  <div className="mt-1 text-xs text-stone-500">Brak – dodaj poniżej</div>
+                  <div className="mt-1 text-xs text-stone-500">{g.empty}</div>
                 )}
               </div>
             );
@@ -130,33 +152,45 @@ export default function SafeCapitalView() {
         </div>
       </section>
 
-      <BondsSection />
-
-      <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-2">
-        <SavingsCards />
-        <Card
-          title="Gotówka na kontach inwestycyjnych"
-          subtitle="Wolne środki czekające na inwestycję – część portfela inwestycyjnego, nie poduszki"
-          icon={Wallet}
-          bodyClassName="p-0 sm:p-0"
-        >
-          {data.brokerCash.length === 0 ? (
-            <p className="px-5 py-6 text-center text-sm text-stone-500">Brak wolnej gotówki na rachunkach.</p>
-          ) : (
-            <ul className="divide-y divide-stone-100 dark:divide-white/5">
-              {data.brokerCash.map((x) => (
-                <li key={x.account.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: ACCOUNT_TYPES[x.account.type]?.color }} />
-                  <span className="min-w-0 flex-1 truncate text-sm">{x.account.name}</span>
-                  <span className="text-sm font-semibold tabular">{formatPLN(x.cash)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+      {/* Składniki poduszki na tym samym poziomie – zakładki zamiast długiego przewijania (wybór zapamiętany) */}
+      <div className="-mx-1 flex overflow-x-auto px-1 sm:justify-center">
+        <Segmented value={activeTab} onChange={setTab} ariaLabel="Sekcje poduszki finansowej" options={SAFE_TABS.map((t) => ({ value: t.id, label: t.label }))} />
       </div>
-
-      <CpiCard />
+      {activeTab === 'bonds' && <BondsSection />}
+      {activeTab === 'savings' && <SavingsCards />}
+      {activeTab === 'ppk' && <PpkCard embedded />}
+      {activeTab === 'goal' && (
+        <div className="space-y-4">
+          <SafeGoalCard value={data.safe} yearlyIncomeNet={data.income} />
+          <CushionWeightsCard />
+          <CushionGrowthCard />
+        </div>
+      )}
+      {activeTab === 'more' && (
+        <div className="space-y-4">
+          <Card
+            title="Gotówka na kontach inwestycyjnych"
+            subtitle="Wolne środki czekające na inwestycję – część portfela inwestycyjnego, nie poduszki"
+            icon={Wallet}
+            bodyClassName="p-0 sm:p-0"
+          >
+            {data.brokerCash.length === 0 ? (
+              <p className="px-5 py-6 text-center text-sm text-stone-500">Brak wolnej gotówki na rachunkach.</p>
+            ) : (
+              <ul className="divide-y divide-stone-100 dark:divide-white/5">
+                {data.brokerCash.map((x) => (
+                  <li key={x.account.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: ACCOUNT_TYPES[x.account.type]?.color }} />
+                    <span className="min-w-0 flex-1 truncate text-sm">{x.account.name}</span>
+                    <span className="text-sm font-semibold tabular">{formatPLN(x.cash)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <CpiCard />
+        </div>
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ const pct = (v) => `${Number(v).toLocaleString('pl-PL', { maximumFractionDigits:
 // PPK w Poduszce (BETA): wiek (data urodzenia), wynagrodzenie + średnie prowizje / premie, wpłaty pracownika
 // i pracodawcy, fundusz zdefiniowanej daty – udział akcji dobierany automatycznie do wieku (ustawowe przedziały),
 // symulacja do 60. roku życia i wykres kapitału (kolory zgodne z motywem). Ustawienia: settings.ppk (per użytkownik).
-export default function PpkCard() {
+export default function PpkCard({ embedded = false }) {
   const { state, actions, isDark } = useApp();
   const ppk = { ...defaultPpkProfile(), ...(state.settings.ppk || {}) };
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -42,7 +42,7 @@ export default function PpkCard() {
   );
   return (
     <Card
-      collapsible
+      collapsible={!embedded}
       storageKey="fintrack-safe-open-ppk"
       title={
         <>

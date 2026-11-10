@@ -38,7 +38,7 @@ export default function Dashboard({ onNavigate }) {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-3 sm:space-y-5">
       <QuickStatsPanel />
       <NetWorthPanel valuation={valuation} compact />
       <PassiveIncomeTile onNavigate={onNavigate} />

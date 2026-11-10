@@ -203,9 +203,22 @@ export default function PortfolioView({ onNavigate }) {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Pasek: filtr + podsumowanie */}
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-3">
+      {/* Podsumowanie (wartość i zysk) – jeden wiersz nad tabelą */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-1 tabular">
+        <div className="min-w-0">
+          <span className="text-[11px] text-stone-500 dark:text-stone-400">Wartość </span>
+          <strong className="text-lg">{formatPLN(data.total)}</strong>
+        </div>
+        <div className="text-sm">
+          <span className="text-[11px] text-stone-500 dark:text-stone-400">Zysk </span>
+          <strong className={signClass(data.gain)}>
+            {formatPLN(data.gain, { sign: true })} ({formatPercent(data.gainPct, { sign: true })})
+          </strong>
+        </div>
+      </div>
+      {/* Pasek: filtr · zwijanie sekcji · widok (telefon) */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <Dropdown label="Filtruj portfel" icon={SlidersHorizontal} badge={activeFilters || null}>
           <div className="space-y-3">
             <div className="flex flex-wrap gap-1.5">
@@ -247,11 +260,12 @@ export default function PortfolioView({ onNavigate }) {
         <button
           type="button"
           onClick={() => setCollapsedAll(allCollapsed ? {} : Object.fromEntries(data.groups.map((g) => [g.id, true])))}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5"
+          className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-sm text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5"
         >
-          {allCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />} {allCollapsed ? 'Rozwiń sekcje' : 'Zwiń sekcje'}
+          {allCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />} {allCollapsed ? 'Rozwiń' : 'Zwiń'}
+          <span className="hidden sm:inline">sekcje</span>
         </button>
-        <div className="md:hidden">
+        <div className="ml-auto md:hidden">
           <Segmented
             size="sm"
             value={mobileView}
@@ -262,18 +276,6 @@ export default function PortfolioView({ onNavigate }) {
               { value: 'cards', label: 'Karty' },
             ]}
           />
-        </div>
-        <div className="ml-auto flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm tabular">
-          <span>
-            <span className="text-xs text-stone-500">Wartość </span>
-            <strong>{formatPLN(data.total)}</strong>
-          </span>
-          <span>
-            <span className="text-xs text-stone-500">Zysk </span>
-            <strong className={signClass(data.gain)}>
-              {formatPLN(data.gain, { sign: true })} ({formatPercent(data.gainPct, { sign: true })})
-            </strong>
-          </span>
         </div>
       </div>
 
@@ -500,10 +502,13 @@ export default function PortfolioView({ onNavigate }) {
           </div>
         </section>
       )}
-      <p className="text-[11px] text-stone-500 dark:text-stone-500">
+      <details className="text-[11px] text-stone-500 dark:text-stone-500">
+        <summary className="cursor-pointer select-none hover:text-stone-700 dark:hover:text-stone-300">Objaśnienia kolumn i ikon</summary>
+        <p className="mt-1">
         * Zmiana dzienna względem poprzedniego zamknięcia; dla obligacji i oszczędności – odsetki za 1 dzień. Ceny w PLN po bieżącym kursie walut; śr. cena zakupu zawiera prowizje i przewalutowanie. Okres inwestycji w dniach od
         pierwszego zakupu lub wpłaty. Operacje: kup, sprzedaj, historia operacji, notowania; ikony monet i strzałek oznaczają wypłacony dochód i przewalutowanie.
-      </p>
+        </p>
+      </details>
 
       {/* Analityk wyników spółek (BETA): konsensus, Beat/Miss, kwartały – archiwum 12 mies. */}
       <EarningsAnalyst />
