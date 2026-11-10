@@ -9,11 +9,15 @@ import { PREFS_CHANGED_EVENT } from './budget.js';
 export const EARNINGS_KEY = 'wealth-app-earnings-v1';
 export const RETENTION_DAYS = 365;
 
+// Okres: „Q3 2026”, „3Q2026”, „III kw. 2026”, „2026 Q3”; rok obrotowy przesunięty (np. Synektik, X–IX): „1Q2025/26” →
+// „Q1 2025/26” (sufiks roku obrotowego zachowany – inaczej Q1 2025/26 i Q1 2025 stałyby się tym samym okresem)
 const normQuarter = (q) => {
   const t = String(q || '').toUpperCase().replace(/\s+/g, ' ').trim();
   const m = t.match(/(?:Q|KW\.?\s*)?([1-4])\s*(?:Q|KW\.?)?\s*[ /-]?\s*((?:19|20)\d{2})/) || t.match(/((?:19|20)\d{2})\s*[ /-]?\s*Q([1-4])/);
   if (!m) return t;
-  return /^(19|20)\d{2}$/.test(m[1]) ? `Q${m[2]} ${m[1]}` : `Q${m[1]} ${m[2]}`;
+  const label = /^(19|20)\d{2}$/.test(m[1]) ? `Q${m[2]} ${m[1]}` : `Q${m[1]} ${m[2]}`;
+  const fy = t.slice(m.index + m[0].length).match(/^\s*\/\s*(\d{4}|\d{2})\b/);
+  return fy ? `${label}/${fy[1].slice(-2)}` : label;
 };
 const normCompany = (a) => String(a.ticker || a.company || '').toUpperCase().replace(/\.(WA|PL)$/, '').replace(/[^A-Z0-9ĄĆĘŁŃÓŚŹŻ]+/g, '');
 export const earningsKey = (a) => `${normCompany(a)}|${normQuarter(a.quarter)}`;
@@ -61,6 +65,8 @@ export function periodOrder(q) {
 }
 const prevYearLabel = (q) => {
   const t = normQuarter(q);
+  const fy = t.match(/^(.*?)((?:19|20)\d{2})\/(\d{2})$/); // rok obrotowy: Q1 2025/26 → Q1 2024/25
+  if (fy) return `${fy[1]}${Number(fy[2]) - 1}/${String((Number(fy[3]) + 99) % 100).padStart(2, '0')}`;
   const m = t.match(/^(.*?)((?:19|20)\d{2})$/);
   return m ? `${m[1]}${Number(m[2]) - 1}` : '';
 };

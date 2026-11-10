@@ -1,4 +1,4 @@
-// Dane startowe Analityka wyników (XTB, LPP – niżej). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
+// Dane startowe Analityka wyników (XTB, LPP, Synektik – niżej). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
 // użytkownika). Wartości sprzed roku i z Q4 2025 wyliczone z podanych zmian r/r i q/q, EBITDA Q1 2026 z narastającej
 // EBITDA (YTD). Przychody Q3 2026 – z pełnej tabeli (wersja 2 danych; wcześniej szacunek z marż ≈ 623 mln zł).
 // Dopisywane do bazy użytkownika jednorazowo (flaga), dalej historia buduje się z kolejnych analiz.
@@ -112,10 +112,61 @@ export const LPP_SEED = [
   },
 ];
 
+// Synektik (rok obrotowy X–IX, np. Q1 2025/26 = X–XII 2025): Q1–Q3 2025/26 vs konsensus PAP Biznes (tabele użytkownika).
+// Okresy sprzed roku – ze zmian r/r, Q4 2024/25 – z q/q w tabeli Q1. Zysk netto: tabela Q1 podaje zysk j.d. (35,0),
+// tabele Q2 i Q3 – zysk z działalności kontynuowanej; dla spójnej linii w historii Q1 = 43,1 mln zł (z q/q i YTD),
+// a w analizie Q1 zostaje wskaźnik „Zysk netto j.d.” 35,0 vs kons. 40,1.
+const sntBase = { company: 'Synektik', ticker: 'SNT', industry: 'Technologie medyczne (sprzęt medyczny, robotyka chirurgiczna, radiofarmaceutyki)', currency: 'PLN', unit: 'mln PLN', basis: 'consensus', outlook: '', risks: [] };
+export const SNT_SEED = [
+  {
+    ...sntBase,
+    quarter: 'Q1 2025/26',
+    periodEnd: '2025-12-31',
+    verdict: 'miss',
+    headline: 'Q1 2025/26 poniżej konsensusu: przychody 228,0 mln zł (−4,1%), zysk netto j.d. 35,0 mln zł (−12,6%), EBITDA blisko oczekiwań (−0,9%).',
+    metrics: [m('Przychody', 228.0, 237.8, 203.2), m('EBITDA', 59.8, 60.4, 50.5), m('EBIT', 54.0, 56.2, 45.7), m('Zysk netto j.d.', 35.0, 40.1, 33.1), m('Marża EBITDA', 26.2, 25.1, 24.83, '%'), m('Marża EBIT', 23.7, 23.6, 22.51, '%'), m('Marża netto', 15.4, 16.9, 16.34, '%')],
+    quarters: [
+      { quarter: 'Q1 2024/25', revenue: 203.2, netIncome: 33.1, ebitda: 50.5, eps: null },
+      { quarter: 'Q4 2024/25', revenue: 199.1, netIncome: 30.9, ebitda: 54.6, eps: null },
+      { quarter: 'Q1 2025/26', revenue: 228.0, netIncome: 43.1, ebitda: 59.8, eps: null },
+    ],
+    highlights: ['Przychody +12,2% r/r i +14,5% q/q', 'EBITDA +18,4% r/r, EBIT +18,2% r/r (działalność kontynuowana)', 'Zysk netto j.d. +5,7% r/r, marża netto 15,4% (−1,6 p.p. vs konsensus)', 'Rok obrotowy X–IX: Q1 2025/26 = październik–grudzień 2025'],
+  },
+  {
+    ...sntBase,
+    quarter: 'Q2 2025/26',
+    periodEnd: '2026-03-31',
+    verdict: 'beat',
+    headline: 'Q2 2025/26 powyżej konsensusu: zysk netto 39,8 mln zł (+7,5%), EBIT 53,7 mln zł (+6,4%) przy przychodach 213,2 mln zł zgodnych z oczekiwaniami (−1,2%).',
+    metrics: [m('Przychody', 213.2, 215.8, 124.7), m('EBITDA', 58.2, 56.2, 30.3), m('EBIT', 53.7, 50.4, 25.5), m('Zysk netto', 39.8, 37.0, 18.6), m('Marża EBITDA', 27.5, 26.0, 24.42, '%'), m('Marża EBIT', 25.2, 23.4, 20.38, '%'), m('Marża netto', 18.7, 17.1, 14.94, '%')],
+    quarters: [
+      { quarter: 'Q2 2024/25', revenue: 124.7, netIncome: 18.6, ebitda: 30.3, eps: null },
+      { quarter: 'Q1 2025/26', revenue: 228.0, netIncome: 43.1, ebitda: 59.8, eps: null },
+      { quarter: 'Q2 2025/26', revenue: 213.2, netIncome: 39.8, ebitda: 58.2, eps: null },
+    ],
+    highlights: ['Przychody +71% r/r, −6,5% q/q', 'EBITDA +92% r/r, EBIT +111% r/r, zysk netto +114% r/r', 'Narastająco H1 2025/26: przychody 441,2 mln zł (+35%), EBITDA 118,3 mln zł (+46%), zysk netto 82,9 mln zł (+50%)', 'Marża EBIT 25,2% (+1,8 p.p. vs konsensus)'],
+  },
+  {
+    ...sntBase,
+    quarter: 'Q3 2025/26',
+    periodEnd: '2026-06-30',
+    verdict: 'beat',
+    headline: 'Q3 2025/26 powyżej konsensusu: przychody 292,3 mln zł (+4,8%) i zysk netto 55,1 mln zł (+5,4%); marże EBITDA i EBIT nieco niższe od oczekiwań.',
+    metrics: [m('Przychody', 292.3, 279.0, 154.2), m('EBITDA', 71.5, 70.7, 41.6), m('EBIT', 66.1, 65.8, 36.4), m('Zysk netto', 55.1, 52.2, 30.6), m('Marża EBITDA', 24.5, 25.3, 27.0, '%'), m('Marża EBIT', 22.6, 23.6, 23.6, '%'), m('Marża netto', 18.8, 18.7, 19.76, '%')],
+    quarters: [
+      { quarter: 'Q3 2024/25', revenue: 154.2, netIncome: 30.6, ebitda: 41.6, eps: null },
+      { quarter: 'Q2 2025/26', revenue: 213.2, netIncome: 39.8, ebitda: 58.2, eps: null },
+      { quarter: 'Q3 2025/26', revenue: 292.3, netIncome: 55.1, ebitda: 71.5, eps: null },
+    ],
+    highlights: ['Przychody +89,5% r/r i +37,1% q/q', 'EBITDA +71,9% r/r, EBIT +81,5% r/r, zysk netto (dz. kontynuowana) +80,3% r/r', 'Narastająco 2025/26 (3 kwartały): przychody 733,4 mln zł (+52,1%), EBITDA 189,6 mln zł (+54,7%), zysk netto 138,0 mln zł (+61,0%)', 'Marża EBITDA 24,5% (−0,8 p.p. vs konsensus), marża EBIT 22,6% (−1,0 p.p.)'],
+  },
+];
+
 // Rejestr danych startowych (dowolna liczba spółek): każda ma własną flagę „wczytane” per użytkownik
 export const COMPANY_SEEDS = [
   { key: 'XTB', label: 'XTB (Q1–Q3 2026 vs konsensus)', flag: SEED_KEY, data: XTB_SEED },
   { key: 'LPP', label: 'LPP (Q4 2025 – Q2 2026 vs konsensus)', flag: 'wealth-app-earnings-seed-lpp-v1', data: LPP_SEED },
+  { key: 'SNT', label: 'Synektik (Q1–Q3 2025/26 vs konsensus)', flag: 'wealth-app-earnings-seed-snt-v1', data: SNT_SEED },
 ];
 const flagSet = (flag) => {
   try {
