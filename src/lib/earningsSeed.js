@@ -1,4 +1,4 @@
-// Dane startowe Analityka wyników: XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
+// Dane startowe Analityka wyników (XTB, LPP – niżej). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
 // użytkownika). Wartości sprzed roku i z Q4 2025 wyliczone z podanych zmian r/r i q/q, EBITDA Q1 2026 z narastającej
 // EBITDA (YTD). Przychody Q3 2026 – z pełnej tabeli (wersja 2 danych; wcześniej szacunek z marż ≈ 623 mln zł).
 // Dopisywane do bazy użytkownika jednorazowo (flaga), dalej historia buduje się z kolejnych analiz.
@@ -61,6 +61,87 @@ export const XTB_SEED = [
     highlights: ['Przychody 623,3 mln zł: +65,9% r/r, −37,2% q/q, −1,2% vs konsensus 631,1 mln zł', 'EBITDA +291,0% r/r, −59,7% q/q', 'Zysk netto +301,5% r/r, −56,6% q/q', 'Narastająco 2026: przychody 2709,9 mln zł (+76,4% r/r), EBITDA 1449,5 mln zł (+132,4%), zysk netto 1240,9 mln zł (+167,8%)'],
   },
 ];
+
+// LPP (handel odzieżą): Q4 2025, Q1 2026, Q2 2026 vs konsensus PAP Biznes (tabele użytkownika; Q3 2026 – zwykłą analizą).
+// Q4 2024, Q1 2025 i wyniki sprzed roku – ze zmian r/r; Q3 2025 – z q/q (przychody, EBITDA, EBIT); Q2 2025 – z wyników
+// za cały 2025 (YTD w tabeli Q4) minus pozostałe kwartały (zgodne z r/r); zysk netto Q3 2025 (strata ≈ 16 mln zł) –
+// z rocznego zysku netto 2025 (dlatego w tabeli Q4 brak q/q zysku netto).
+const lppBase = { company: 'LPP', ticker: 'LPP', industry: 'Handel odzieżą (sieci sklepów i e-commerce)', currency: 'PLN', unit: 'mln PLN', basis: 'consensus', outlook: '', risks: [] };
+export const LPP_SEED = [
+  {
+    ...lppBase,
+    quarter: 'Q4 2025',
+    periodEnd: '',
+    verdict: 'beat',
+    headline: 'Q4 2025: zysk netto 714,0 mln zł (+23,1% vs kons.) i EBITDA 1518,0 mln zł (+6,7%) powyżej konsensusu przy przychodach 6460,0 mln zł nieco poniżej (−1,1%).',
+    metrics: [m('Przychody', 6460.0, 6535.1, 5671.6), m('EBITDA', 1518.0, 1423.1, 1133.7), m('EBIT', 952.0, 860.5, 662.0), m('Zysk netto j.d.', 714.0, 579.8, 447.9), m('Marża EBITDA', 23.5, 21.8, 20.0, '%'), m('Marża EBIT', 14.7, 13.2, 11.64, '%'), m('Marża netto', 11.1, 8.9, 7.95, '%')],
+    quarters: [
+      { quarter: 'Q4 2024', revenue: 5671.6, netIncome: 447.9, ebitda: 1133.7, eps: null },
+      { quarter: 'Q3 2025', revenue: 6140.7, netIncome: -16.3, ebitda: 917.8, eps: null },
+      { quarter: 'Q4 2025', revenue: 6460.0, netIncome: 714.0, ebitda: 1518.0, eps: null },
+    ],
+    highlights: ['Przychody +13,9% r/r i +5,2% q/q', 'EBITDA +33,9% r/r, EBIT +43,8% r/r, zysk netto +59,4% r/r', 'Marża netto 11,1% (+2,2 p.p. vs konsensus)', 'Cały 2025: przychody 23 109,0 mln zł, EBITDA 4568,0 mln zł, EBIT 2493,0 mln zł, zysk netto 1500,0 mln zł'],
+  },
+  {
+    ...lppBase,
+    quarter: 'Q1 2026',
+    periodEnd: '',
+    verdict: 'mixed',
+    headline: 'Q1 2026 mieszany: przychody 5472,0 mln zł poniżej konsensusu (−4,5%), ale zysk netto 475,0 mln zł powyżej (+7,8%).',
+    metrics: [m('Przychody', 5472.0, 5731.3, 4952.0), m('EBITDA', 1282.0, 1261.9, 937.8), m('EBIT', 688.0, 673.3, 463.9), m('Zysk netto j.d.', 475.0, 440.5, 334.0), m('Marża EBITDA', 23.4, 22.1, 18.91, '%'), m('Marża EBIT', 12.6, 11.8, 9.39, '%'), m('Marża netto', 8.7, 7.7, 6.76, '%')],
+    quarters: [
+      { quarter: 'Q1 2025', revenue: 4952.0, netIncome: 334.0, ebitda: 937.8, eps: null },
+      { quarter: 'Q4 2025', revenue: 6460.0, netIncome: 714.0, ebitda: 1518.0, eps: null },
+      { quarter: 'Q1 2026', revenue: 5472.0, netIncome: 475.0, ebitda: 1282.0, eps: null },
+    ],
+    highlights: ['Przychody +10,5% r/r, −15,3% q/q (sezonowo słabszy kwartał)', 'EBITDA +36,7% r/r, EBIT +48,3% r/r, zysk netto +42,2% r/r', 'Marże wyższe niż w konsensusie: EBITDA 23,4% (+1,3 p.p.), netto 8,7% (+0,9 p.p.)'],
+  },
+  {
+    ...lppBase,
+    quarter: 'Q2 2026',
+    periodEnd: '',
+    verdict: 'beat',
+    headline: 'Q2 2026 powyżej konsensusu: zysk netto 768,0 mln zł (+12%), EBIT 1127,0 mln zł (+16%) przy przychodach 6577,0 mln zł zgodnych z oczekiwaniami.',
+    metrics: [m('Przychody', 6577.0, 6547.0, 5556.3), m('EBITDA', 1744.0, 1577.7, 1194.4), m('EBIT', 1127.0, 968.2, 689.1), m('Zysk netto j.d.', 768.0, 684.1, 468.3), m('Marża EBITDA', 26.5, 24.1, 21.48, '%'), m('Marża EBIT', 17.1, 14.8, 12.37, '%'), m('Marża netto', 11.7, 10.5, 8.43, '%')],
+    quarters: [
+      { quarter: 'Q2 2025', revenue: 5556.3, netIncome: 468.3, ebitda: 1194.4, eps: null },
+      { quarter: 'Q1 2026', revenue: 5472.0, netIncome: 475.0, ebitda: 1282.0, eps: null },
+      { quarter: 'Q2 2026', revenue: 6577.0, netIncome: 768.0, ebitda: 1744.0, eps: null },
+    ],
+    highlights: ['Przychody +18% r/r i +20% q/q', 'EBITDA +46% r/r, EBIT +64% r/r, zysk netto +64% r/r', 'Narastająco H1 2026: przychody 12 049,0 mln zł (+15%), EBITDA 3026,0 mln zł (+42%), zysk netto 1243,0 mln zł (+55%)', 'Marża EBIT 17,1% (+2,3 p.p. vs konsensus)'],
+  },
+];
+
+// Rejestr danych startowych (dowolna liczba spółek): każda ma własną flagę „wczytane” per użytkownik
+export const COMPANY_SEEDS = [
+  { key: 'XTB', label: 'XTB (Q1–Q3 2026 vs konsensus)', flag: SEED_KEY, data: XTB_SEED },
+  { key: 'LPP', label: 'LPP (Q4 2025 – Q2 2026 vs konsensus)', flag: 'wealth-app-earnings-seed-lpp-v1', data: LPP_SEED },
+];
+const flagSet = (flag) => {
+  try {
+    return !!localStorage.getItem(flag);
+  } catch {
+    return true;
+  }
+};
+// Spółki z danymi startowymi do zaproponowania: nie wczytane wcześniej i bez historii w bazie użytkownika
+export const availableSeeds = () => {
+  const hist = readHistory();
+  return COMPANY_SEEDS.filter((c) => !flagSet(c.flag) && !hist[c.key]).map(({ key, label }) => ({ key, label }));
+};
+export function applySeed(key, now = Date.now()) {
+  if (key === 'XTB') return applyXtbSeed(now);
+  const seed = COMPANY_SEEDS.find((c) => c.key === key);
+  if (!seed || !availableSeeds().some((c) => c.key === key)) return false;
+  seed.data.forEach((analysis, i) => saveEarnings({ analysis, sources: [], grounded: false, model: SEED_MODEL }, now - (seed.data.length - i) * 1000));
+  try {
+    localStorage.setItem(seed.flag, new Date(now).toISOString());
+    window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: seed.flag } }));
+  } catch {
+    // brak localStorage
+  }
+  return true;
+}
 
 const done = () => {
   try {

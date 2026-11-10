@@ -7,7 +7,7 @@ import { compressImage } from '../../lib/receipts.js';
 import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, readProfiles } from '../../lib/companyProfiles.js';
-import { applyXtbSeed, seedAvailable, upgradeSeed } from '../../lib/earningsSeed.js';
+import { applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
 import { formatDate } from '../../lib/format.js';
 import { BetaBadge, Card, ChartTooltip } from '../ui.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
@@ -59,16 +59,18 @@ export default function EarningsAnalyst() {
   const [openKey, setOpenKey] = useState(() => readEarnings()[0]?.key || null);
   const fileRef = useRef(null);
   // Dane startowe XTB (Q1–Q3 2026 vs konsensus): wczytywane automatycznie, gdy XTB jest w portfelu, inaczej – przyciskiem
-  const [seedOffer, setSeedOffer] = useState(seedAvailable);
-  const loadSeed = () => {
-    if (applyXtbSeed()) {
+  // Dane startowe spółek (XTB, LPP…): automatycznie, gdy spółka jest w portfelu, inaczej – przyciskiem
+  const [seeds, setSeeds] = useState(availableSeeds);
+  const loadSeed = (key) => {
+    const seed = seeds.find((x) => x.key === key);
+    if (applySeed(key)) {
       setList(readEarnings());
       setHist(readHistory());
-      setCompany('XTB');
-      setOpenKey(readEarnings().find((e) => e.analysis.ticker === 'XTB')?.key || null);
-      actions.notify('Dodano dane startowe XTB: Q1–Q3 2026 vs konsensus', 'success');
+      setCompany(key);
+      setOpenKey(readEarnings().find((e) => e.analysis.ticker === key)?.key || null);
+      actions.notify(`Dodano dane startowe ${seed?.label || key}`, 'success');
     }
-    setSeedOffer(false);
+    setSeeds(availableSeeds());
   };
   useEffect(() => {
     // Wcześniej wczytane dane startowe → aktualizacja do nowej wersji (np. pełne przychody Q3 2026)
@@ -76,7 +78,8 @@ export default function EarningsAnalyst() {
       setList(readEarnings());
       setHist(readHistory());
     }
-    if (seedOffer && (state.instruments || []).some((i) => String(i.ticker || '').toUpperCase() === 'XTB')) loadSeed();
+    const held = new Set((state.instruments || []).map((i) => String(i.ticker || '').toUpperCase()));
+    for (const sd of availableSeeds()) if (held.has(sd.key)) loadSeed(sd.key);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const tickers = useMemo(() => [...new Set((state.instruments || []).map((i) => i.ticker || i.name).filter(Boolean))].sort(), [state.instruments]);
   const companies = useMemo(() => Object.entries(hist).map(([key, c]) => ({ key, ...c, count: Object.keys(c.periods || {}).length })).sort((a, b) => a.company.localeCompare(b.company, 'pl')), [hist]);
@@ -234,10 +237,14 @@ export default function EarningsAnalyst() {
         <p className="text-[11px] text-stone-500 dark:text-stone-400">Analityk korzysta wyłącznie z Twoich materiałów (bez wyszukiwania w internecie). Duże raporty PDF są zamieniane na tekst w przeglądarce.</p>
       </form>
 
-      {seedOffer && (
-        <button type="button" onClick={loadSeed} className="mt-3 inline-flex items-center gap-1 rounded-full border border-dashed border-violet-300 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50 dark:border-violet-400/40 dark:text-violet-300 dark:hover:bg-violet-500/10">
-          + Dodaj dane startowe XTB (Q1–Q3 2026 vs konsensus)
-        </button>
+      {seeds.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {seeds.map((sd) => (
+            <button key={sd.key} type="button" onClick={() => loadSeed(sd.key)} className="inline-flex items-center gap-1 rounded-full border border-dashed border-violet-300 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50 dark:border-violet-400/40 dark:text-violet-300 dark:hover:bg-violet-500/10">
+              + Dodaj dane startowe {sd.label}
+            </button>
+          ))}
+        </div>
       )}
       {companies.length > 0 && (
         <div className="mt-4">
