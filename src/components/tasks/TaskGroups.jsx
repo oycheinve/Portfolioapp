@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Pencil, Sparkles } from 'lucide-react';
 import { TASK_CATEGORIES, groupTasks, normTask, readTaskCats, rememberTask, resolveTaskLocal, taskCategoryOf, writeTaskCats } from '../../lib/taskCategories.js';
 import { requestTaskCategories } from '../../lib/newsAi.js';
+import { aiOn } from '../../lib/aiFeatures.js';
 import { useApp } from '../../state/AppContext.jsx';
 
 
@@ -27,7 +28,7 @@ export function useTaskCategories(titles) {
     });
   }, [key, mem]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!grouped || !pending.length) return undefined;
+    if (!grouped || !pending.length || !aiOn(state.settings, 'tasksAi')) return undefined; // AI wyłączone – grupowanie z pamięci
     const t = setTimeout(async () => {
       const batch = pending.slice(0, 80);
       for (const x of batch) attempted.current.add(normTask(x));
@@ -46,7 +47,7 @@ export function useTaskCategories(titles) {
       }
     }, 1200);
     return () => clearTimeout(t);
-  }, [pending, grouped]);
+  }, [pending, grouped, state.settings.ai]); // eslint-disable-line react-hooks/exhaustive-deps
   const setCategory = (title, category) =>
     setMem((prev) => {
       const next = rememberTask(prev, title, category, 'user');

@@ -588,6 +588,10 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 
 - „Skanuj paragon” otwiera aparat wewnątrz aplikacji (`getUserMedia`, tylna kamera, podgląd na żywo, zdjęcie klatki ≤ 1920 px) – przeglądarka nie przechodzi w tło, więc Android nie zamyka jej z braku pamięci (komunikat „Zbyt mało pamięci, by ukończyć poprzednią operację” przy zewnętrznej aplikacji aparatu). Przycisk „Z galerii” – wybór gotowego zdjęcia; bez zgody na aparat / bez kamery – komunikat i przycisk „Aparat telefonu” (dotychczasowy tryb). Strumień kamery zatrzymywany od razu po zdjęciu lub zamknięciu.
 
+### Ustawienia → Funkcje AI
+
+- Główny przełącznik „Funkcje AI w aplikacji” i osobny dla każdej funkcji (`src/lib/aiFeatures.js`, `settings.ai`, zapis w ustawieniach użytkownika): podsumowania newsów, skanowanie paragonów, miesięczne podsumowania budżetu (także automatyczne), Analityk wyników spółek, kategorie zakupów i zadań od AI. Wyłączenie ukrywa funkcję i zatrzymuje zapytania do AI; dane (analizy, paragony, podsumowania, kategorie) zostają, a grupowanie zakupów i zadań działa dalej z pamięci.
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.

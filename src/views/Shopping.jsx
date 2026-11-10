@@ -4,6 +4,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortItems, sortLists } from '../lib/shopping.js';
 import { SHOPPING_CATEGORIES, categoryOf, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
 import { requestShoppingCategories } from '../lib/newsAi.js';
+import { aiOn } from '../lib/aiFeatures.js';
 
 const SELECTED_KEY = 'fintrack-shopping-selected';
 const readSelected = () => {
@@ -170,7 +171,7 @@ export default function ShoppingView() {
       });
   }, [data.items, aiCats]);
   useEffect(() => {
-    if (!grouped || !pendingTitles.length) return undefined;
+    if (!grouped || !pendingTitles.length || !aiOn(state.settings, 'shoppingAi')) return undefined; // AI wyłączone – grupowanie z pamięci
     const t = setTimeout(async () => {
       const batch = pendingTitles.slice(0, 80);
       for (const x of batch) attempted.current.add(normProduct(x));
@@ -189,7 +190,7 @@ export default function ShoppingView() {
       }
     }, 1200);
     return () => clearTimeout(t);
-  }, [pendingTitles, grouped]);
+  }, [pendingTitles, grouped, state.settings.ai]); // eslint-disable-line react-hooks/exhaustive-deps
   const openItems = items.filter((i) => !i.done);
   const doneItems = items.filter((i) => i.done);
   const groups = useMemo(() => (grouped ? groupByCategory(openItems, aiCats) : []), [grouped, openItems, aiCats]); // eslint-disable-line react-hooks/exhaustive-deps

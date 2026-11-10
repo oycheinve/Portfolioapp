@@ -8,6 +8,7 @@ import { Card, EmptyState } from '../components/ui.jsx';
 import AiSummary from '../components/news/AiSummary.jsx';
 import { articleKey, digestKey } from '../lib/newsAi.js';
 import { portfolioContext, portfolioKey } from '../lib/aiContext.js';
+import { aiOn } from '../lib/aiFeatures.js';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
 const LIST_LIMIT = 60;
@@ -332,7 +333,7 @@ export default function NewsView() {
             />
           </Card>
         )}
-        {!loading && dayItems.length > 0 && (
+        {!loading && dayItems.length > 0 && aiOn(state.settings, 'newsSummary') && (
           <section aria-label="Podsumowanie dnia" className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900">
             <button
               type="button"
@@ -383,6 +384,7 @@ export default function NewsView() {
                 ))}
               </div>
               {/* Dyskretny znaczek AI w prawym górnym rogu karty – rozwija / generuje podsumowanie artykułu */}
+              {aiOn(state.settings, 'newsSummary') && (
               <button
                 type="button"
                 onClick={() => toggleAi(it.link)}
@@ -397,6 +399,7 @@ export default function NewsView() {
               >
                 <Sparkles size={12} aria-hidden="true" /> AI
               </button>
+              )}
             </div>
             <a href={it.link} target="_blank" rel="noopener noreferrer" className="group flex items-start gap-2">
               <span className="min-w-0 flex-1 text-sm leading-snug font-semibold break-words text-stone-800 group-hover:text-blue-700 group-hover:underline dark:text-stone-100 dark:group-hover:text-blue-300">{it.title}</span>
@@ -411,7 +414,7 @@ export default function NewsView() {
                 </time>
               )}
             </p>
-            {aiOpen.has(it.link) && (
+            {aiOpen.has(it.link) && aiOn(state.settings, 'newsSummary') && (
               <AiSummary
                 className="mt-2"
                 autoLoad

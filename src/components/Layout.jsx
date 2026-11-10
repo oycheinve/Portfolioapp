@@ -5,6 +5,7 @@ import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
 import { useNotificationScheduler } from '../state/useNotificationScheduler.js';
 import { BetaBadge } from './ui.jsx';
+import { aiOn } from '../lib/aiFeatures.js';
 
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 // hidden: true = tymczasowo ukryta we wszystkich menu (widok i adres #/… nadal działają, kod bez zmian)
@@ -125,7 +126,7 @@ export function Layout({ view, onNavigate, children }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Budżet: podsumowanie AI minionego miesiąca – przy pierwszym otwarciu aplikacji w nowym miesiącu (w tle)
   useEffect(() => {
-    if (isModuleHidden(state.settings, 'budget')) return undefined;
+    if (isModuleHidden(state.settings, 'budget') || !aiOn(state.settings, 'budgetSummary')) return undefined;
     const t = setTimeout(() => {
       import('../lib/budgetAi.js')
         .then((m) => m.autoMonthlySummary())

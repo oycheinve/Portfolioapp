@@ -4,6 +4,8 @@ import { DAILY_KEY, LOG_LIMIT, budgetTotals, readBudgetLog, writeBudgetLog, dail
 import TripsBudget from '../components/budget/TripsBudget.jsx';
 import { ReceiptScanner, ReceiptsHistory } from '../components/budget/Receipts.jsx';
 import MonthSummary from '../components/budget/MonthSummary.jsx';
+import { useApp } from '../state/AppContext.jsx';
+import { aiOn } from '../lib/aiFeatures.js';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
 const monthName = (key) => {
@@ -77,6 +79,7 @@ export default function BudgetView() {
 }
 
 function MonthlyBudget() {
+  const { state: app } = useApp(); // Ustawienia → Funkcje AI (paragony, podsumowanie miesiąca)
   const [data, setData] = useState(readBudget);
   const [month, setMonth] = useState(() => monthKey());
   const saved = data[month];
@@ -231,7 +234,7 @@ function MonthlyBudget() {
           </div>
           {/* Paragony (BETA): skan / wgranie zdjęcia → weryfikacja albo zapis automatyczny → wydatki rozdzielone
               wyłącznie na kategorie tego budżetu (podział na kilka kategorii = osobne wpisy do cofnięcia) */}
-          {!editing && rows.length > 0 && (
+          {!editing && rows.length > 0 && aiOn(app.settings, 'receipts') && (
             <ReceiptScanner
               rows={rows}
               month={month}
@@ -245,7 +248,7 @@ function MonthlyBudget() {
         </div>
       </div>
       {/* Miniony miesiąc: podsumowanie od AI (archiwum; generowane automatycznie w nowym miesiącu) */}
-      {month < monthKey() && !editing && saved?.length > 0 && (
+      {month < monthKey() && !editing && saved?.length > 0 && aiOn(app.settings, 'budgetSummary') && (
         <div className="mb-3">
           <MonthSummary key={month} month={month} label={monthName(month)} />
         </div>

@@ -8,6 +8,7 @@ import { Card, Dropdown, EmptyState, Modal, Segmented } from '../components/ui.j
 import OperationFormModal, { emptyOperation } from '../components/cash/OperationFormModal.jsx';
 import { DividendsModal, InstrumentEditModal, PriceChartModal } from '../components/portfolio/RowModals.jsx';
 import EarningsAnalyst from '../components/portfolio/EarningsAnalyst.jsx';
+import { aiOn } from '../lib/aiFeatures.js';
 
 const PREFS_KEY = 'wealth-app-portfolio-filters';
 const VIEW_KEY = 'wealth-app-portfolio-mobile-view';
@@ -511,7 +512,7 @@ export default function PortfolioView({ onNavigate }) {
       </details>
 
       {/* Analityk wyników spółek (BETA): konsensus, Beat/Miss, kwartały – archiwum 12 mies. */}
-      <EarningsAnalyst />
+      {aiOn(state.settings, 'earnings') && <EarningsAnalyst />}
 
       <Modal open={!!opsFor} onClose={() => setOpsFor(null)} title={`Operacje: ${opsFor?.name || ''}`}>
         {opsFor && (
