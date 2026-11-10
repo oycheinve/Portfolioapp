@@ -132,7 +132,7 @@ async function callAi(payload) {
 export const requestReceipt = (image, mime = 'image/jpeg', budgetCategories = []) => callAi({ mode: 'receipt', image, mime, ...(budgetCategories.length ? { budgetCategories } : {}) });
 export const requestBudgetSummary = (data) => callAi({ mode: 'budget', ...data });
 // Analityk wyników: wyłącznie materiały użytkownika – files: [{ data: base64, mime, name }], history: liczby z archiwum
-export const requestEarnings = ({ query = '', text = '', files = [], history = [] }) => callAi({ mode: 'earnings', query, text, ...(files.length ? { files } : {}), ...(history.length ? { history } : {}) });
+export const requestEarnings = ({ query = '', text = '', files = [], history = [], profile = '' }) => callAi({ mode: 'earnings', query, text, ...(files.length ? { files } : {}), ...(history.length ? { history } : {}), ...(profile ? { profile } : {}) });
 export async function requestTaskCategories(titles) {
   const items = [...new Set(titles.map((t) => String(t || '').trim()).filter(Boolean))].slice(0, 80);
   if (!items.length) return {};

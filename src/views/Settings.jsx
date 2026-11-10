@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, Landmark, LayoutGrid, LineChart, Palette, Pencil, Plus, Radio, Scale, Target, Trash2, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, FileText, Landmark, LayoutGrid, LineChart, Palette, Pencil, Plus, Radio, Scale, Target, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
@@ -17,6 +17,7 @@ import InflationCard from '../components/settings/InflationCard.jsx';
 import CashRegister from './CashRegister.jsx';
 import AltPurchasesCard from '../components/alternatives/AltPurchasesCard.jsx';
 import JulkaIkeCard from '../components/settings/JulkaIkeCard.jsx';
+import CompanyProfilesCard from '../components/settings/CompanyProfilesCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
 // Konta i ustawienia: trzy kategorie (akordeon – otwarta najwyżej jedna), w środku płaskie kafelki podkategorii.
@@ -41,6 +42,7 @@ const SECTIONS = {
   modules: { title: 'Moduły i widok', hint: 'Widoczność modułów w menu, tryb weryfikacji paragonów', icon: LayoutGrid, render: () => <ModulesCard /> },
   appearance: { title: 'Wygląd', hint: 'Motyw: jasny, ciemny, różowy lub systemowy', icon: Palette, render: () => <AppearanceCard /> },
   'dividend-sync': { title: 'Dane dywidend', hint: 'Automatyczne daty i kwoty z Yahoo / historii wypłat', icon: CloudDownload, render: () => <DividendSyncCard /> },
+  'company-profiles': { title: 'Profile spółek', hint: 'Opis, profil i notatki – kontekst dla Analityka wyników', icon: FileText, render: () => <CompanyProfilesCard /> },
   fire: { title: 'Cele FIRE', hint: 'Rok, majątek i dochód docelowy', icon: Target, render: () => <FireGoalsCard /> },
   tax: { title: 'Podatki', hint: 'Parametry kalkulatora ulgi IKZE', icon: Scale, render: () => <TaxSection /> },
   prices: { title: 'Notowania', hint: 'Źródła cen i odświeżanie', icon: Radio, render: () => <PricesSection /> },
@@ -51,7 +53,7 @@ const SECTIONS = {
 };
 const GROUPS = [
   { id: 'assets', emoji: '💼', title: 'Portfel i Aktywa', subtitle: 'Konta · wpłaty i wypłaty · nieruchomości · limity · IKE - Julka', items: ['accounts', 'cash', 'other-assets', 'limits', 'julka'] },
-  { id: 'strategy', emoji: '📈', title: 'Strategie, Cele i Giełda', subtitle: 'Cele FIRE · podatki · notowania · dane dywidend', items: ['fire', 'tax', 'prices', 'dividend-sync'] },
+  { id: 'strategy', emoji: '📈', title: 'Strategie, Cele i Giełda', subtitle: 'Cele FIRE · podatki · notowania · dane dywidend · profile spółek', items: ['fire', 'tax', 'prices', 'dividend-sync', 'company-profiles'] },
   { id: 'system', emoji: '⚙️', title: 'System i Konto', subtitle: 'Motyw · moduły · konto i chmura · powiadomienia · inflacja · kopia zapasowa', items: ['appearance', 'modules', 'cloud', 'notifications', 'inflation', 'backup'] },
 ];
 const groupOf = (sectionId) => GROUPS.find((g) => g.items.includes(sectionId))?.id || null;

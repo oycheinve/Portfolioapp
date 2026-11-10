@@ -593,3 +593,7 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - **Wykresy**: wybór wykresu i odświeżanie w jednym wierszu, podsumowanie okresu w jednym zwartym panelu.
 - **Portfel**: wartość i zysk w jednym wierszu nad tabelą, krótszy pasek narzędzi, objaśnienia kolumn zwinięte.
 - **Poduszka finansowa**: najpierw podsumowanie z trzema równorzędnymi składnikami (Obligacje, Konta oszczędnościowe, PPK – od 0 zł), potem zakładki Obligacje / Oszczędności / PPK / Cel / Więcej (wybór zapamiętany).
+
+### Profile spółek (Ustawienia → Strategie, Cele i Giełda → Profile spółek)
+
+Opis działalności, branża i własne notatki (teza, na co patrzeć) dla dowolnej liczby spółek – każda zwinięta w jednym wierszu, edycja po rozwinięciu, przycisk „Dodaj spółki z portfela bez profilu” (branża z sektora walora). Zapis per użytkownik: `wealth-app-company-profiles-v1` (urządzenie + chmura). Analityk wyników automatycznie dołącza dopasowany profil (ticker / nazwa) jako blok `<profil_spolki>` – kontekst biznesowy do rozpoznania branży, doboru wskaźników i oceny względem tezy; liczby zawsze pochodzą z wgranych materiałów. W formularzu analityka widać, gdy profil zostanie użyty.

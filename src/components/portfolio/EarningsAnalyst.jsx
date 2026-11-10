@@ -6,6 +6,7 @@ import { requestEarnings } from '../../lib/newsAi.js';
 import { compressImage } from '../../lib/receipts.js';
 import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
+import { findProfile, hasContent, profileContext, readProfiles } from '../../lib/companyProfiles.js';
 import { formatDate } from '../../lib/format.js';
 import { BetaBadge, Card, ChartTooltip } from '../ui.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
@@ -59,6 +60,13 @@ export default function EarningsAnalyst() {
   const tickers = useMemo(() => [...new Set((state.instruments || []).map((i) => i.ticker || i.name).filter(Boolean))].sort(), [state.instruments]);
   const companies = useMemo(() => Object.entries(hist).map(([key, c]) => ({ key, ...c, count: Object.keys(c.periods || {}).length })).sort((a, b) => a.company.localeCompare(b.company, 'pl')), [hist]);
   const b64Used = files.reduce((n, f) => n + (f.data?.length || 0), 0);
+  // Profil spółki z Ustawień (kontekst dla AI): po tickerze / nazwie z pola albo wybranej spółki
+  const profiles = useMemo(readProfiles, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sel0 = hist[company];
+  const matched = useMemo(() => {
+    const p = query.trim() ? findProfile(profiles, { ticker: query.trim(), company: query.trim() }) : sel0 ? findProfile(profiles, { ticker: sel0.ticker, company: sel0.company }) : null;
+    return hasContent(p) ? p : null;
+  }, [profiles, query, sel0]);
 
   const addFiles = async (e) => {
     const picked = [...(e.target.files || [])];
@@ -115,7 +123,7 @@ export default function EarningsAnalyst() {
     const history = known ? companyPeriods(known).map(({ quarter, revenue, netIncome, ebitda, eps }) => ({ quarter, revenue, netIncome, ebitda, eps })) : [];
     setBusy('AI analizuje Twoje materiały…');
     try {
-      const res = await requestEarnings({ query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history });
+      const res = await requestEarnings({ query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile: profileContext(matched) });
       if (!res.analysis) throw new Error(res.error || 'Brak analizy');
       const entry = saveEarnings(res);
       setList(readEarnings());
@@ -197,6 +205,11 @@ export default function EarningsAnalyst() {
             </span>
           )}
         </div>
+        {matched && (
+          <p className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] text-violet-800 dark:bg-violet-500/10 dark:text-violet-200" aria-label="Profil spółki w kontekście">
+            Profil spółki {matched.ticker || matched.name} z Ustawień zostanie użyty jako kontekst
+          </p>
+        )}
         <p className="text-[11px] text-stone-500 dark:text-stone-400">Analityk korzysta wyłącznie z Twoich materiałów (bez wyszukiwania w internecie). Duże raporty PDF są zamieniane na tekst w przeglądarce.</p>
       </form>
 
