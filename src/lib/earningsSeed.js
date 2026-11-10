@@ -332,6 +332,15 @@ const EXTRA_HISTORY = {
     P('Q3 2023/24', 124.0, null, 16.7, { Przychody: 124.0, 'EBITDA znormalizowana': 32.4, 'Zysk netto j.d.': 16.7 }),
     P('Q4 2023/24', 141.8, null, 21.0, { Przychody: 141.8, 'EBITDA znormalizowana': 35.2, 'Zysk netto j.d.': 21.0 }),
   ],
+  // Digital Network: Q3 2025 z raportu kwartalnego (przychody, EBIT, zysk netto j.d.; EBITDA = 9M 34,9 − H1 21,5),
+  // Q4 2025 = cały 2025 − 9M 2025 (przychody 112,92 − 56,74; EBITDA 66,91 − 34,9; EBIT 50,52 − 25,8; zysk j.d. 37,61 − 20,4),
+  // Q3–Q4 2024 – przychody (raport Q3 2025 i tabela DM BOŚ), EBIT Q3 2024 z dynamiki r/r
+  DIG: [
+    P('Q3 2024', 18.6, null, null, { Przychody: 18.6, EBIT: 8.3 }),
+    P('Q4 2024', 27.3, null, null, { Przychody: 27.3 }),
+    P('Q3 2025', 20.9, 13.4, 8.3, { Przychody: 20.9, EBITDA: 13.4, EBIT: 10.5, 'Zysk netto j.d.': 8.3, 'Marża EBITDA': [64.2, '%'], 'Marża netto': [39.6, '%'] }),
+    P('Q4 2025', 56.2, 32.0, 17.2, { Przychody: 56.2, EBITDA: 32.0, EBIT: 24.7, 'Zysk netto j.d.': 17.2, 'Marża EBITDA': [57.0, '%'], 'Marża netto': [30.6, '%'] }),
+  ],
   CBF: [
     P('Q3 2025', 215.9, 75.5, 13.7, { Przychody: 215.9, 'EBITDA skorygowana': 75.5, EBITDA: 69.9, 'Zysk netto j.d.': 13.7 }),
     P('Q4 2025', 236.7, 82.4, 24.2, { Przychody: 236.7, 'EBITDA skorygowana': 82.4, 'Zysk netto j.d.': 24.2 }),
