@@ -341,12 +341,10 @@ function CompanyHistory({ company, profile }) {
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pl'))
       .map(([n]) => n);
   }, [periods]);
-  // Widok dopasowany do profilu: KPI z profilu jako osobne wykresy, reszta wskaźników w liście wyboru (KPI na górze ★)
+  // KPI z profilu: oznaczone ★ w liście i dodatkowo jako małe wykresy pod pełnym widokiem – nic nie jest pomijane
   const kpis = useMemo(() => profileKpis(profile, metricNames).slice(0, 6), [profile, metricNames]);
-  const ordered = [...kpis, ...metricNames.filter((n) => !kpis.includes(n))];
-  const rest = metricNames.filter((n) => !kpis.includes(n));
   const [metric, setMetric] = useState(null);
-  const m = metric && metricNames.includes(metric) ? metric : rest[0] || ordered[0];
+  const m = metric && metricNames.includes(metric) ? metric : metricNames[0];
   const mData = periods.filter((p) => p.metrics?.[m]).map((p) => ({ quarter: p.quarter, value: p.metrics[m].value }));
   const mUnit = periods.find((p) => p.metrics?.[m])?.metrics[m].unit || '';
   const lowerBetter = periods.find((p) => p.metrics?.[m])?.metrics[m].lowerIsBetter;
@@ -364,19 +362,9 @@ function CompanyHistory({ company, profile }) {
       </div>
       {profile && (
         <p className="-mt-1 text-[11px] text-blue-700/80 dark:text-blue-300/80">
-          Widok dopasowany do Twojego profilu {profile.ticker || profile.name}
-          {kpis.length ? ` – KPI: ${kpis.join(', ')}` : ' – dodaj KPI w Ustawieniach → Profile spółek, aby zobaczyć je na wykresach'}
+          Profil {profile.ticker || profile.name}: wszystkie wyniki poniżej, Twoje KPI oznaczone ★
+          {kpis.length ? ` (${kpis.join(', ')}) i zebrane na dole` : ' – dodaj KPI w Ustawieniach → Profile spółek'}
         </p>
-      )}
-      {kpis.length > 0 && (
-        <div>
-          <div className="mb-1 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Twoje KPI z profilu</div>
-          <div className="grid grid-cols-2 gap-2" aria-label="Wykresy KPI z profilu">
-            {kpis.map((n, i) => (
-              <KpiChart key={n} name={n} periods={periods} color={c(i % 5)} chrome={chrome} />
-            ))}
-          </div>
-        </div>
       )}
       {(has('revenue') || has('netIncome') || has('ebitda')) && (
         <div>
@@ -407,9 +395,9 @@ function CompanyHistory({ company, profile }) {
       {metricNames.length > 0 && (
         <div>
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">{kpis.length ? 'Pozostałe wskaźniki w czasie' : 'Wskaźnik branżowy w czasie'}</span>
+            <span className="text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Wskaźnik branżowy w czasie</span>
             <select value={m} onChange={(e) => setMetric(e.target.value)} aria-label="Wybór wskaźnika" className="h-8 max-w-[14rem] rounded-lg border border-stone-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-neutral-800">
-              {ordered.map((n) => (
+              {metricNames.map((n) => (
                 <option key={n} value={n}>
                   {kpis.includes(n) ? `★ ${n}` : n}
                 </option>
@@ -439,6 +427,16 @@ function CompanyHistory({ company, profile }) {
           </p>
         </div>
       )}
+      {kpis.length > 0 && (
+        <div>
+          <div className="mb-1 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Twoje KPI z profilu (dodatkowo)</div>
+          <div className="grid grid-cols-2 gap-2" aria-label="Wykresy KPI z profilu">
+            {kpis.map((n, i) => (
+              <KpiChart key={n} name={n} periods={periods} color={c(i % 5)} chrome={chrome} />
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -446,9 +444,9 @@ function CompanyHistory({ company, profile }) {
 function Analysis({ entry, onInterpret, interpreting, profile }) {
   const a0 = entry.analysis;
   const profileName = profile ? profile.ticker || profile.name : '';
-  // Wskaźniki z profilu (KPI / wymienione w opisie i notatkach) – na początku tabeli, oznaczone ★
+  // Wskaźniki z profilu (KPI / wymienione w opisie i notatkach) – tylko oznaczone ★; tabela pokazuje wszystkie w kolejności analizy
   const kpis = profileKpis(profile, a0.metrics.map((m) => m.name));
-  const a = kpis.length ? { ...a0, metrics: [...kpis.map((n) => a0.metrics.find((m) => m.name === n)), ...a0.metrics.filter((m) => !kpis.includes(m.name))] } : a0;
+  const a = a0;
   const it = a.interpretation;
   const hasCons = a.metrics.some((m) => m.consensus !== null && m.consensus !== undefined);
   const hasPrev = a.metrics.some((m) => m.previous !== null && m.previous !== undefined);

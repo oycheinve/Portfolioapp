@@ -64,5 +64,5 @@ export function profileKpis(p, names = []) {
 // Kontekst dla AI (zwięzły tekst)
 export function profileContext(p) {
   if (!hasContent(p)) return '';
-  return [`Spółka: ${p.name || p.ticker}${p.ticker && p.name ? ` (${p.ticker})` : ''}`, p.industry ? `Branża: ${p.industry}` : '', p.profile ? `Opis / profil działalności:\n${String(p.profile).slice(0, MAX_PROFILE_TEXT)}` : '', p.notes ? `Notatki inwestora (teza, na co patrzeć):\n${String(p.notes).slice(0, MAX_PROFILE_TEXT)}` : '', parseKpis(p.kpis).length ? `Kluczowe wskaźniki (KPI) inwestora – uwzględnij w metrics w tej kolejności, jeśli są w materiałach: ${parseKpis(p.kpis).join('; ')}` : ''].filter(Boolean).join('\n');
+  return [`Spółka: ${p.name || p.ticker}${p.ticker && p.name ? ` (${p.ticker})` : ''}`, p.industry ? `Branża: ${p.industry}` : '', p.profile ? `Opis / profil działalności:\n${String(p.profile).slice(0, MAX_PROFILE_TEXT)}` : '', p.notes ? `Notatki inwestora (teza, na co patrzeć):\n${String(p.notes).slice(0, MAX_PROFILE_TEXT)}` : '', parseKpis(p.kpis).length ? `Kluczowe wskaźniki (KPI) inwestora – dodaj je do metrics obok pełnego zestawu wyników (jeśli są w materiałach) i skup na nich komentarz: ${parseKpis(p.kpis).join('; ')}` : ''].filter(Boolean).join('\n');
 }
