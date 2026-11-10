@@ -215,9 +215,10 @@ export default function EarningsAnalyst() {
   };
 
   return (
+    // Domyślnie zwinięty przy każdym wejściu (bez zapamiętywania rozwinięcia)
     <Card
       collapsible
-      storageKey="fintrack-portfolio-open-earnings"
+      defaultOpen={false}
       icon={Sparkles}
       title={
         <>
