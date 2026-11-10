@@ -3,7 +3,7 @@
 // EBITDA (YTD). Przychody Q3 2026 – z pełnej tabeli (wersja 2 danych; wcześniej szacunek z marż ≈ 623 mln zł).
 // Dopisywane do bazy użytkownika jednorazowo (flaga), dalej historia buduje się z kolejnych analiz.
 import { PREFS_CHANGED_EVENT } from './budget.js';
-import { earningsKey, readEarnings, readHistory, recordHistory, saveEarnings } from './earnings.js';
+import { companyKey, earningsKey, readEarnings, readHistory, recordHistory, saveEarnings, writeHistory } from './earnings.js';
 
 export const SEED_KEY = 'wealth-app-earnings-seed-v1';
 // Wersja danych startowych: 2 – pełne przychody Q3 2026 (623,3 vs kons. 631,1)
@@ -373,7 +373,9 @@ export function applyExtras() {
   let changed = false;
   for (const key of Object.keys(EXTRA_HISTORY)) {
     if (!hist[key] || extraDone(key)) continue;
-    changed = recordExtras(key) || changed;
+    preserveOwn(key, () => {
+      changed = recordExtras(key) || changed;
+    });
   }
   return changed;
 }
@@ -395,16 +397,44 @@ const flagSet = (flag) => {
   }
 };
 // Spółki z danymi startowymi do zaproponowania: nie wczytane wcześniej i bez historii w bazie użytkownika
-export const availableSeeds = () => {
-  const hist = readHistory();
-  return COMPANY_SEEDS.filter((c) => !flagSet(c.flag) && !hist[c.key]).map(({ key, label }) => ({ key, label }));
-};
+// Spółki z danymi startowymi do wczytania: wystarczy, że nie były wczytane wcześniej – własna historia spółki nie blokuje
+// (dane startowe są dołączane do niej, a Twoje analizy i liczby mają pierwszeństwo – mergeSeed)
+export const availableSeeds = () => COMPANY_SEEDS.filter((c) => !flagSet(c.flag)).map(({ key, label }) => ({ key, label }));
+
+// Nałożenie Twoich danych na dane startowe: zapisana wartość (nie-null) i Twoje wskaźniki mają pierwszeństwo
+function overlay(seedP = {}, ownP = {}) {
+  const out = { ...seedP, ...Object.fromEntries(Object.entries(ownP).filter(([k, v]) => k !== 'metrics' && v !== null && v !== undefined)) };
+  out.metrics = { ...(seedP.metrics || {}), ...(ownP.metrics || {}) };
+  return out;
+}
+// Wykonanie zapisu danych startowych z ochroną Twojej historii spółki (okresy sprzed zapisu nakładane z powrotem)
+function preserveOwn(key, fn) {
+  const before = readHistory()[key];
+  fn();
+  if (!before) return;
+  const all = readHistory();
+  const c = all[key];
+  if (!c) return;
+  for (const [q, p] of Object.entries(before.periods || {})) c.periods[q] = overlay(c.periods[q], p);
+  all[key] = { ...c, company: before.company || c.company, ticker: before.ticker || c.ticker, industry: before.industry || c.industry, unit: before.unit || c.unit };
+  writeHistory(all);
+}
+// Zapis analiz startowych z pominięciem kwartałów, które masz z własnej analizy (Twoja analiza nie jest nadpisywana)
+function saveSeedAnalyses(key, data, now) {
+  const own = new Set(readEarnings().filter((e) => companyKey(e.analysis) === key && e.model !== SEED_MODEL).map((e) => e.key));
+  data.forEach((analysis, i) => {
+    if (!own.has(earningsKey(analysis))) saveEarnings({ analysis, sources: [], grounded: false, model: SEED_MODEL }, now - (data.length - i) * 1000);
+    else recordHistory(analysis, now); // tylko liczby w historii – uzupełnią braki, Twoje wartości wrócą w preserveOwn
+  });
+}
 export function applySeed(key, now = Date.now()) {
   if (key === 'XTB') return applyXtbSeed(now);
   const seed = COMPANY_SEEDS.find((c) => c.key === key);
   if (!seed || !availableSeeds().some((c) => c.key === key)) return false;
-  seed.data.forEach((analysis, i) => saveEarnings({ analysis, sources: [], grounded: false, model: SEED_MODEL }, now - (seed.data.length - i) * 1000));
-  if (!extraDone(key)) recordExtras(key);
+  preserveOwn(key, () => {
+    saveSeedAnalyses(key, seed.data, now);
+    if (!extraDone(key)) recordExtras(key);
+  });
   try {
     localStorage.setItem(seed.flag, new Date(now).toISOString());
     window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: seed.flag } }));
@@ -450,12 +480,14 @@ export function upgradeSeed(now = Date.now()) {
   return changed;
 }
 // Czy proponować / wczytać dane startowe: nie wczytane wcześniej i brak historii XTB w bazie użytkownika
-export const seedAvailable = () => !done() && !readHistory().XTB;
+export const seedAvailable = () => !done();
 export function applyXtbSeed(now = Date.now()) {
   if (!seedAvailable()) return false;
-  XTB_SEED.forEach((analysis, i) => saveEarnings({ analysis, sources: [], grounded: false, model: SEED_MODEL }, now - (XTB_SEED.length - i) * 1000));
+  preserveOwn('XTB', () => {
+    saveSeedAnalyses('XTB', XTB_SEED, now);
+    if (!extraDone('XTB')) recordExtras('XTB');
+  });
   setVersion();
-  if (!extraDone('XTB')) recordExtras('XTB');
   try {
     localStorage.setItem(SEED_KEY, new Date(now).toISOString());
     window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: SEED_KEY } }));

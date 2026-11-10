@@ -78,7 +78,7 @@ function readHistoryRaw() {
     return null;
   }
 }
-function writeHistory(h) {
+export function writeHistory(h) {
   try {
     localStorage.setItem(EARNINGS_HISTORY_KEY, JSON.stringify(h));
     window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: EARNINGS_HISTORY_KEY } }));
