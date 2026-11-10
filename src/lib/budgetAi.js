@@ -2,7 +2,7 @@
 // zakupy z dziennika, paragony, porównanie z poprzednim miesiącem) → /api/news-summary (tryb „budget”, czysty JSON).
 // Archiwum per użytkownik: `wealth-app-budget-ai-v1` { 'RRRR-MM': { summary, stats, at, seen } } (urządzenie + chmura).
 // Generowane automatycznie przy pierwszym otwarciu aplikacji w nowym miesiącu (za miesiąc poprzedni).
-import { PREFS_CHANGED_EVENT, budgetTotals, monthKey, readBudget, readBudgetLog, shiftMonth } from './budget.js';
+import { PREFS_CHANGED_EVENT, budgetTotals, monthKey, parseAmount, readBudget, readBudgetLog, shiftMonth } from './budget.js';
 import { readReceipts } from './receipts.js';
 import { requestBudgetSummary } from './newsAi.js';
 
@@ -12,7 +12,8 @@ export const monthLabel = (key) => {
   const [y, m] = key.split('-').map(Number);
   return `${MONTHS[m - 1]} ${y}`;
 };
-const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
+// Kwoty z tabeli bywają tekstem z przecinkiem („974,39”) – ten sam odczyt co w tabeli budżetu (inaczej plan = 0 zł)
+const money = (v) => Math.round(parseAmount(v) * 100) / 100;
 
 export function readBudgetAi() {
   try {
@@ -40,7 +41,8 @@ export function monthStats(month, data = readBudget(), log = readBudgetLog(), re
   const prev = prevRows.length ? budgetTotals(prevRows) : null;
   const categories = rows.map((r) => ({ name: r.name || '(bez nazwy)', type: r.type || '', planned: money(r.planned), spent: money(r.spent) }));
   const top = [...(log[month] || [])].sort((a, b) => b.amount - a.amount).slice(0, 10).map((e) => ({ name: e.name, amount: money(e.amount), note: e.note || '' }));
-  const overspent = categories.filter((c) => c.planned > 0 && c.spent > c.planned + 0.005).map((c) => ({ ...c, over: money(c.spent - c.planned) }));
+  // Przekroczenie tylko, gdy wydano więcej niż plan (równe lub mniejsze – w planie)
+  const overspent = categories.filter((c) => c.spent > c.planned + 0.005).map((c) => ({ ...c, over: money(c.spent - c.planned) }));
   return {
     month,
     label: monthLabel(month),

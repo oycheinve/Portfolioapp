@@ -11,7 +11,12 @@ export default function MonthSummary({ month, label }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const stats = entry?.stats || monthStats(month);
+  // Aktualne liczby z tabeli; zapisane podsumowanie powstałe z innych danych (np. zmieniony budżet albo wcześniejszy
+  // błędny odczyt kwot z przecinkiem) jest nieaktualne – przy otwarciu przygotowywane ponownie
+  const fresh = monthStats(month);
+  const sig = (st) => JSON.stringify((st?.categories || []).map((c) => [c.name, Number(c.planned) || 0, Number(c.spent) || 0]));
+  const stale = !!(entry && fresh && sig(entry.stats) !== sig(fresh));
+  const stats = fresh || entry?.stats;
   if (!stats) return null;
   const run = async () => {
     setBusy(true);
@@ -32,7 +37,7 @@ export default function MonthSummary({ month, label }) {
       writeBudgetAi(all);
       setEntry(all[month]);
     }
-    if (!entry && !busy) run();
+    if ((!entry || stale) && !busy) run();
   };
   const s = entry?.summary;
   const diff = stats.planned - stats.spent;
@@ -86,6 +91,7 @@ export default function MonthSummary({ month, label }) {
                 </p>
               )}
               {error && <p className="text-sm text-red-600 dark:text-red-400">Nie udało się przygotować podsumowania: {error}</p>}
+              {s && !busy && stale && <p className="mb-2 text-[11px] text-amber-700 dark:text-amber-400">Dane budżetu tego miesiąca zmieniły się od przygotowania podsumowania.</p>}
               {s && !busy && (
                 <div className="space-y-2 text-[13px] leading-relaxed">
                   <p className="font-semibold text-stone-800 dark:text-stone-100">{s.headline}</p>

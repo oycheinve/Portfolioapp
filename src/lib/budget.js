@@ -84,10 +84,12 @@ export function writeBudgetLog(log) {
 
 export const demoRows = () => DEMO_ROWS.map((r) => ({ id: newRowId(), ...r }));
 
-const num = (v) => {
+// Kwota z tabeli budżetu: liczba albo tekst z przecinkiem dziesiętnym i spacjami („974,39”, „1 234,50”)
+export const parseAmount = (v) => num(v);
+function num(v) {
   const n = Number(String(v ?? '').replace(/\s/g, '').replace(',', '.'));
   return Number.isFinite(n) ? n : 0;
-};
+}
 
 export function rowLeft(r) {
   return num(r.planned) - num(r.spent);
