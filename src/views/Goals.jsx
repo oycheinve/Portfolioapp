@@ -33,6 +33,23 @@ export default function GoalsView() {
   const [toDelete, setToDelete] = useState(null);
   const summary = useMemo(() => goalsSummary(state, year), [state, year]);
   const [review, setReview] = useState(null);
+  // Zakładka kategorii (zapamiętana na urządzeniu): „Wszystkie” albo jedna kategoria
+  const [tab, setTabState] = useState(() => {
+    try {
+      return localStorage.getItem('fintrack-goals-tab') || 'FINANCIAL'; // domyślnie pierwsza kategoria (mniej przewijania)
+    } catch {
+      return 'FINANCIAL';
+    }
+  });
+  const setTab = (t) => {
+    setTabState(t);
+    try {
+      localStorage.setItem('fintrack-goals-tab', t);
+    } catch {
+      // brak localStorage
+    }
+  };
+  const tabId = summary.byCategory.some((c) => c.id === tab) ? tab : 'ALL';
   const yearGoals = state.goals.filter((g) => Number(g.year) === year);
   const openGoals = yearGoals.filter((g) => g.status !== 'ARCHIVED');
   const closed = yearGoals.length > 0 && openGoals.length === 0;
@@ -81,71 +98,71 @@ export default function GoalsView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Wskaźnik zbiorczy */}
-      <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-6 dark:border-white/10 dark:bg-neutral-900">
-        <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+      {/* Wskaźnik zbiorczy – kompaktowy pasek: pierścień, wynik, rok i akcje */}
+      <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex items-center gap-3">
           <div className="relative shrink-0">
-            <Ring value={summary.overall} color={ringColor} track={isDark ? '#2c2c2a' : '#ecebe6'} label={`Postęp celów ${Math.round(summary.overall * 100)}%`} />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-3xl font-bold tabular">{formatPercent(summary.overall, { digits: 0 })}</span>
-              <span className="text-xs text-stone-500">celów {year}</span>
+            <Ring value={summary.overall} size={64} stroke={7} color={ringColor} track={isDark ? '#2c2c2a' : '#ecebe6'} label={`Postęp celów ${Math.round(summary.overall * 100)}%`} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-sm font-bold tabular">{formatPercent(summary.overall, { digits: 0 })}</span>
             </div>
           </div>
-          <div className="w-full min-w-0 flex-1 space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-                  <Target size={16} /> Cele roczne {year}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-lg font-semibold">
-                  Osiągnięte: {summary.done} z {summary.total}
-                  {closed && (
-                    <Badge tone="neutral">
-                      <Lock size={11} /> rok zamknięty
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <Select value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-auto" aria-label="Rok celów">
-                  {years.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </Select>
-                <Button variant="primary" icon={Plus} onClick={() => newGoal()}>
-                  Nowy cel
-                </Button>
-                {openGoals.length > 0 && year <= currentYear && (
-                  <Button icon={CalendarCheck} onClick={() => setReview(year)} title="Podsumowanie roku i kreator przenoszenia celów">
-                    Zamknij rok {year}
-                  </Button>
-                )}
-                {closed && (
-                  <Button variant="ghost" icon={Unlock} onClick={reopen}>
-                    Otwórz ponownie
-                  </Button>
-                )}
-              </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400">
+              <Target size={13} /> Cele roczne
+              <Select value={year} onChange={(e) => setYear(Number(e.target.value))} className="!h-7 w-auto !px-1.5 !py-0 text-xs" aria-label="Rok celów">
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </Select>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {summary.byCategory.map((c) => (
-                <div key={c.id} className="rounded-xl bg-stone-50 p-3 dark:bg-white/[0.03]">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-medium">{c.label}</span>
-                    <span className="tabular text-stone-500">
-                      {c.done}/{c.rows.length} · {formatPercent(c.pct, { digits: 0 })}
-                    </span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-200 dark:bg-white/10">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${c.pct * 100}%`, background: seriesColor(c.slot, isDark) }} />
-                  </div>
-                </div>
-              ))}
+            <div className="flex flex-wrap items-center gap-2 text-base font-semibold">
+              Osiągnięte: {summary.done} z {summary.total}
+              {closed && (
+                <Badge tone="neutral">
+                  <Lock size={11} /> rok zamknięty
+                </Badge>
+              )}
             </div>
-            <p className="text-[11px] text-stone-500">Wskaźnik zbiorczy = średni postęp wszystkich celów roku (każdy cel liczony maks. do 100%).</p>
           </div>
+          <Button variant="primary" icon={Plus} onClick={() => newGoal(tabId === 'ALL' ? undefined : tabId)} aria-label="Nowy cel">
+            <span className="hidden sm:inline">Nowy cel</span>
+          </Button>
+        </div>
+        {(openGoals.length > 0 && year <= currentYear) || closed ? (
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
+            {openGoals.length > 0 && year <= currentYear && (
+              <Button size="sm" icon={CalendarCheck} onClick={() => setReview(year)} title="Podsumowanie roku i kreator przenoszenia celów">
+                Zamknij rok {year}
+              </Button>
+            )}
+            {closed && (
+              <Button size="sm" variant="ghost" icon={Unlock} onClick={reopen}>
+                Otwórz ponownie
+              </Button>
+            )}
+          </div>
+        ) : null}
+        {/* Zakładki kategorii – szybkie przeskakiwanie zamiast przewijania; postęp każdej kategorii w zakładce */}
+        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4" role="tablist" aria-label="Kategorie celów">
+          {[{ id: 'ALL', label: 'Wszystkie', done: summary.done, rows: { length: summary.total }, pct: summary.overall, slot: 0 }, ...summary.byCategory].map((c) => {
+            const on = tabId === c.id;
+            return (
+              <button key={c.id} type="button" role="tab" aria-selected={on} onClick={() => setTab(c.id)} className={`min-w-0 rounded-xl border px-2.5 py-2 text-left transition-colors ${on ? 'border-blue-500 bg-blue-50 dark:border-blue-400/60 dark:bg-blue-500/10' : 'border-stone-200 hover:bg-stone-50 dark:border-white/10 dark:hover:bg-white/[0.03]'}`}>
+                <div className="flex items-baseline justify-between gap-1 text-xs">
+                  <span className="truncate font-semibold">{c.label}</span>
+                  <span className="shrink-0 text-[10px] text-stone-500 tabular">
+                    {c.done}/{c.rows.length}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-stone-200 dark:bg-white/10">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${c.pct * 100}%`, background: seriesColor(c.slot, isDark) }} />
+                </div>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -154,8 +171,8 @@ export default function GoalsView() {
           <EmptyState icon={Target} title={`Brak celów na ${year}`} description="Dodaj cele finansowe, rozwojowe i inne – postęp policzy się automatycznie." action={<Button variant="primary" icon={Plus} onClick={() => newGoal()}>Dodaj cel</Button>} />
         </Card>
       ) : (
-        <div className="grid items-start gap-4 sm:gap-6 xl:grid-cols-3">
-          {summary.byCategory.map((c) => (
+        <div className={`grid items-start gap-4 sm:gap-6 ${tabId === 'ALL' ? 'xl:grid-cols-3' : ''}`}>
+          {summary.byCategory.filter((c) => tabId === 'ALL' || c.id === tabId).map((c) => (
             <Card
               key={c.id}
               title={c.label}
@@ -172,7 +189,7 @@ export default function GoalsView() {
                     const archived = goal.status === 'ARCHIVED';
                     const auto = goal.source && goal.source !== 'MANUAL' && !archived;
                     return (
-                      <li key={goal.id} className="px-4 py-3 sm:px-5">
+                      <li key={goal.id} className="px-4 py-2.5 sm:px-5">
                         <div className="flex items-start gap-2">
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -210,13 +227,17 @@ export default function GoalsView() {
                               </Badge>
                             )}
                           </div>
-                          <span className={`text-lg font-bold tabular ${done ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>{formatPercent(pct, { digits: 0 })}</span>
+                          <div className="flex shrink-0 items-start gap-0.5">
+                            <span className={`mr-1 text-base font-bold tabular ${done ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>{formatPercent(pct, { digits: 0 })}</span>
+                            {!archived && <IconButton icon={Pencil} label="Edytuj cel" onClick={() => setForm({ ...goal })} className="h-7 w-7" />}
+                            <IconButton icon={Trash2} label="Usuń cel" onClick={() => setToDelete(goal)} className="h-7 w-7 hover:text-red-600" />
+                          </div>
                         </div>
-                        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-stone-100 dark:bg-white/5">
+                        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-stone-100 dark:bg-white/5">
                           <div className="h-full rounded-full transition-all" style={{ width: `${capped * 100}%`, background: done ? '#0ca30c' : seriesColor(c.slot, isDark) }} />
                         </div>
+                        {!auto && !archived && (
                         <div className="mt-2 flex items-center gap-1">
-                          {!auto && !archived && (
                             <>
                               <button type="button" aria-label="Zmniejsz" onClick={() => bump(goal, -1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 hover:bg-stone-100 dark:border-white/10 dark:hover:bg-white/5">
                                 <Minus size={14} />
@@ -234,11 +255,8 @@ export default function GoalsView() {
                                 <Plus size={14} />
                               </button>
                             </>
-                          )}
-                          <span className="ml-auto" />
-                          {!archived && <IconButton icon={Pencil} label="Edytuj cel" onClick={() => setForm({ ...goal })} className="h-8 w-8" />}
-                          <IconButton icon={Trash2} label="Usuń cel" onClick={() => setToDelete(goal)} className="h-8 w-8 hover:text-red-600" />
                         </div>
+                        )}
                       </li>
                     );
                   })}

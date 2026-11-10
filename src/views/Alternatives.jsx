@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bitcoin, Coins, Gem, ListPlus, RefreshCw, Settings2 } from 'lucide-react';
+import { Bitcoin, ChevronDown, Coins, Gem, ListPlus, RefreshCw, Settings2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { TROY_OZ_G, altQuotesStale, altSettings, alternativesValue, fetchAltQuotes } from '../lib/alternatives.js';
 import { formatDate, formatDateTime, formatPLN } from '../lib/format.js';
@@ -44,83 +44,105 @@ export default function AlternativesView({ onNavigate }) {
     if (altQuotesStale(latest.current)) refresh(true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Rozwinięte wiersze aktywów (zapamiętane na urządzeniu)
+  const [open, setOpenState] = useState(() => {
+    const o = {};
+    for (const id of ['gold', 'silver', 'btc', 'eth']) {
+      try {
+        o[id] = localStorage.getItem(`fintrack-alt-open-${id}`) === '1';
+      } catch {
+        // brak localStorage
+      }
+    }
+    return o;
+  });
+  const toggleOpen = (id) =>
+    setOpenState((o) => {
+      const next = { ...o, [id]: !o[id] };
+      try {
+        localStorage.setItem(`fintrack-alt-open-${id}`, next[id] ? '1' : '0');
+      } catch {
+        // brak localStorage
+      }
+      return next;
+    });
   const usd = alt.quotes?.fx?.USD;
   const fxDay = usd?.price && usd?.prevClose ? usd.price / usd.prevClose - 1 : null;
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <section className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900" aria-label="Surowce i Krypto">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-              <Gem size={18} />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-base font-semibold">
-                Surowce i Krypto
-                <BetaBadge />
-              </h2>
-              <p className="text-xs text-stone-500 dark:text-stone-400">Złoto, srebro, Bitcoin i Ethereum – ceny na żywo z Yahoo Finance</p>
-            </div>
-          </div>
-          <Button size="sm" icon={RefreshCw} onClick={() => refresh(false)} disabled={busy} aria-label="Odśwież notowania surowców i krypto">
-            {busy ? 'Pobieranie…' : 'Odśwież'}
-          </Button>
+      {/* Podsumowanie (jeden zwarty pasek): wartość, zmiana dzienna, wynik od zakupu */}
+      <section className="min-w-0 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900" aria-label="Surowce i Krypto">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+            <Gem size={16} />
+          </span>
+          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
+            Surowce i Krypto
+            <BetaBadge />
+          </h2>
+          <button type="button" onClick={() => refresh(false)} disabled={busy} aria-label="Odśwież notowania surowców i krypto" title="Odśwież notowania" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-50 dark:border-white/10 dark:text-stone-300 dark:hover:bg-white/5">
+            <RefreshCw size={15} className={busy ? 'animate-spin' : ''} />
+          </button>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2.5">
-          <div className="min-w-0 rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-white/[0.03]">
-            <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">Wartość łącznie</div>
-            <div className="truncate text-xl font-semibold tabular">{formatPLN(v.value)}</div>
-            <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">{v.inNetWorth ? 'w Majątku Całkowitym' : 'poza Majątkiem Całkowitym'}</div>
+        <div className="mt-2.5 grid grid-cols-3 gap-2">
+          <div className="min-w-0">
+            <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">Wartość</div>
+            <div className="truncate text-base font-semibold tabular">{formatPLN(v.value)}</div>
           </div>
-          <div className="min-w-0 rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-white/[0.03]">
-            <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">Zmiana dzienna (1D)</div>
-            <div className={`truncate text-xl font-semibold tabular ${tone(v.dayChange)}`}>{signPLN(v.dayChange)}</div>
-            <div className={`truncate text-[11px] tabular ${tone(v.dayChange)}`}>{pctTxt(v.dayPct)}</div>
+          <div className="min-w-0">
+            <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">Dziś (1D)</div>
+            <div className={`truncate text-base font-semibold tabular ${tone(v.dayChange)}`}>{signPLN(v.dayChange)}</div>
+            <div className={`truncate text-[10px] tabular ${tone(v.dayChange)}`}>{pctTxt(v.dayPct)}</div>
           </div>
-          <div className={`col-span-2 min-w-0 rounded-xl px-3 py-2.5 ${v.pl === null ? 'bg-stone-50 dark:bg-white/[0.03]' : v.pl >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-red-50 dark:bg-red-500/10'}`}>
-            <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">Zysk / strata od zakupu</div>
+          <div className="min-w-0">
+            <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">Wynik od zakupu</div>
             {v.pl === null ? (
-              <div className="text-sm text-stone-500 dark:text-stone-400">Wpisz średnią cenę zakupu w karcie aktywa</div>
+              <div className="truncate text-xs text-stone-400">wpisz cenę zakupu</div>
             ) : (
               <>
-                <div className={`truncate text-xl font-semibold tabular ${tone(v.pl)}`}>
-                  {signPLN(v.pl)} <span className="text-base">({pctTxt(v.plPct)})</span>
-                </div>
-                <div className="truncate text-[11px] text-stone-500 dark:text-stone-400">koszt zakupu {formatPLN(v.cost)}{v.plCount < v.held.length ? ` · ${v.plCount} z ${v.held.length} pozycji z ceną zakupu` : ''}</div>
+                <div className={`truncate text-base font-semibold tabular ${tone(v.pl)}`}>{signPLN(v.pl)}</div>
+                <div className={`truncate text-[10px] tabular ${tone(v.pl)}`}>{pctTxt(v.plPct)}</div>
               </>
             )}
           </div>
         </div>
-        <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">
-          {v.quotesAt ? `Notowania: ${formatDateTime(v.quotesAt)} · ${alt.quotes?.source || 'Yahoo'}` : 'Brak notowań – odśwież'}
+        <p className="mt-2 truncate text-[10px] text-stone-400" title={v.missingPrices.length ? `brak ceny: ${v.missingPrices.join(', ')}` : undefined}>
+          {v.quotesAt ? `Notowania ${formatDateTime(v.quotesAt)}` : 'Brak notowań – odśwież'}
           {usd?.price ? ` · USD/PLN ${usd.price.toLocaleString('pl-PL', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} (${pctTxt(fxDay)})` : ''}
-          {v.missingPrices.length ? ` · brak ceny: ${v.missingPrices.join(', ')}` : ''}
+          {v.inNetWorth ? ' · w majątku' : ' · poza majątkiem'}
         </p>
       </section>
 
+      {/* Aktywa – zwarte wiersze; dotknięcie rozwija szczegóły (cena, ilość, cena zakupu, wynik) */}
+      <section className="min-w-0 divide-y divide-stone-100 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm dark:divide-white/5 dark:border-white/10 dark:bg-neutral-900" aria-label="Aktywa surowce i krypto">
       {v.positions.map((p) => {
         const Icon = ICONS[p.id];
         const holding = alt.holdings?.[p.id] || {};
-        const summary = p.qty > 0 ? `${qtyTxt(p)} · ${formatPLN(p.value)}${p.pl !== null ? ` · wynik ${pctTxt(p.plPct)}` : ''} · 1D ${pctTxt(p.dayPct)}` : p.hasPrice ? `${formatPLN(p.unitPricePLN)} / ${p.metal ? (p.unit === 'g' ? 'g' : 'oz') : 'szt.'} · brak pozycji` : 'brak pozycji';
+        const isOpen = !!open[p.id];
         return (
-          <Card
-            key={p.id}
-            collapsible
-            defaultOpen={p.qty > 0}
-            storageKey={`fintrack-alt-open-${p.id}`}
-            title={
-              <>
-                {p.label} <span className="font-normal text-stone-400">({p.short})</span>
-              </>
-            }
-            summary={summary}
-            icon={Icon}
-          >
-            <div className="flex items-center gap-3">
-              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${TONE[p.id]}`}>
-                <Icon size={20} />
+          <div key={p.id}>
+            <button type="button" onClick={() => toggleOpen(p.id)} aria-expanded={isOpen} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-stone-50 sm:px-4 dark:hover:bg-white/[0.03]">
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${TONE[p.id]}`}>
+                <Icon size={16} />
               </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">
+                  {p.label} <span className="font-normal text-stone-400">({p.short})</span>
+                </span>
+                <span className="block truncate text-[11px] text-stone-500 tabular dark:text-stone-400">{p.qty > 0 ? qtyTxt(p) : p.hasPrice ? `${formatPLN(p.unitPricePLN)} / ${p.metal ? (p.unit === 'g' ? 'g' : 'oz') : 'szt.'}` : 'brak notowania'}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="block text-sm font-semibold tabular">{p.qty > 0 ? formatPLN(p.value) : '—'}</span>
+                <span className={`block text-[11px] tabular ${tone(p.qty > 0 ? p.dayChange : p.priceDayPct || 0)}`}>
+                  {p.qty > 0 && p.pl !== null ? `${pctTxt(p.plPct)} · ` : ''}1D {pctTxt(p.qty > 0 ? p.dayPct : p.priceDayPct)}
+                </span>
+              </span>
+              <ChevronDown size={16} className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isOpen && (
+            <div className="border-t border-stone-100 bg-stone-50/50 px-3 py-3 sm:px-4 dark:border-white/5 dark:bg-white/[0.015]">
+            <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] text-stone-500 dark:text-stone-400">Cena rynkowa{p.metal ? ` (${p.unit === 'g' ? '1 g' : '1 uncja trojańska'})` : ''}</div>
                 <div className="text-lg font-semibold tabular">{p.hasPrice ? formatPLN(p.unitPricePLN) : '—'}</div>
@@ -269,9 +291,12 @@ export default function AlternativesView({ onNavigate }) {
                 <div className={`truncate text-[11px] tabular ${tone(p.dayChange)}`}>{pctTxt(p.dayPct)} w PLN</div>
               </div>
             </div>
-          </Card>
+            </div>
+            )}
+          </div>
         );
       })}
+      </section>
 
       <Card collapsible storageKey="fintrack-alt-open-settings" title="Ustawienia modułu" summary={v.inNetWorth ? 'wliczane do Majątku Całkowitego' : 'poza Majątkiem Całkowitym'} icon={Settings2}>
         <Toggle checked={v.inNetWorth} onChange={(on) => save({ includeInNetWorth: on })} label="Doliczaj do Majątku Całkowitego" description="Pulpit (Net Worth), cele majątku i udział poduszki. W zakładce Portfel pozycje można ukryć filtrem kategorii „Surowce i krypto”." />

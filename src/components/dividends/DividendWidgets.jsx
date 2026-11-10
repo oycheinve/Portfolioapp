@@ -28,16 +28,16 @@ export function DividendKpis() {
     { label: 'Stopa dywidendy portfela', value: formatPercent(k.yield), sub: `YoC ${formatPercent(k.yieldOnCost)} · ${formatPLN(k.forwardNet)}/rok netto`, icon: Sparkles },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
       {tiles.map((t) => {
         const Icon = t.icon;
         return (
-          <div key={t.label} className="min-w-0 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
+          <div key={t.label} className="min-w-0 rounded-2xl border border-stone-200 bg-white px-3 py-2.5 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
             <div className="flex items-center gap-1.5 text-[11px] text-stone-500 sm:text-xs dark:text-stone-400">
               <Icon size={14} className="shrink-0" />
               <span className="truncate">{t.label}</span>
             </div>
-            <div className={`mt-1 truncate text-lg font-semibold tabular sm:text-xl ${t.tone || ''}`}>{t.value}</div>
+            <div className={`mt-0.5 truncate text-base font-semibold tabular sm:text-xl ${t.tone || ''}`}>{t.value}</div>
             <div className="truncate text-[11px] text-stone-500 dark:text-stone-500">{t.sub}</div>
           </div>
         );

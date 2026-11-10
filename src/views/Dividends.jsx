@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { BarChart3, CalendarClock, CalendarDays, ChevronLeft, ChevronRight, ListChecks, Waves } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { DividendCalendar, DividendKpis } from '../components/dividends/DividendWidgets.jsx';
@@ -7,7 +7,7 @@ import { useDividendAutoSync } from '../components/dividends/DividendSyncCard.js
 import CashFlowView from './CashFlow.jsx';
 import { upcomingReminders } from '../lib/dividends.js';
 import { formatDate } from '../lib/format.js';
-import { Accordion, Badge, BetaBadge, Card } from '../components/ui.jsx';
+import { Badge, BetaBadge, Card, Segmented } from '../components/ui.jsx';
 
 // Najbliższe daty dywidendowe (odcięcie i wypłata) – zwięzła lista pod kalendarzem
 function UpcomingList() {
@@ -35,11 +35,12 @@ function UpcomingList() {
   );
 }
 
-// Dywidendy: zwijana lista – rozwinięta jest jedna wybrana sekcja, strona pozostaje krótka
+// Dywidendy: zakładki (Podsumowanie / Kalendarz / Rejestr) – widoczna jedna sekcja, strona pozostaje krótka
 const ITEMS = [
-  { id: 'summary', title: 'Podsumowanie', subtitle: 'Dywidendy roczne, stopa dywidendy, prognoza 12 mies.', icon: BarChart3, render: () => <DividendKpis /> },
+  { id: 'summary', short: 'Podsumowanie', title: 'Podsumowanie', subtitle: 'Dywidendy roczne, stopa dywidendy, prognoza 12 mies.', icon: BarChart3, render: () => <DividendKpis /> },
   {
     id: 'calendar',
+    short: 'Kalendarz',
     title: 'Kalendarz i przypomnienia',
     subtitle: '12 miesięcy wypłat oraz najbliższe dni odcięcia i wypłaty',
     icon: CalendarDays,
@@ -50,12 +51,29 @@ const ITEMS = [
       </>
     ),
   },
-  { id: 'register', title: 'Rejestr wypłat', subtitle: 'Harmonogram dywidend, statusy i księgowanie wypłat', icon: ListChecks, render: () => <ScheduleCard /> },
+  { id: 'register', short: 'Rejestr wypłat', title: 'Rejestr wypłat', subtitle: 'Harmonogram dywidend, statusy i księgowanie wypłat', icon: ListChecks, render: () => <ScheduleCard /> },
 ];
 
 // Cash Flow Forecast (BETA) – osobna podzakładka Dywidend (#/dividends/cashflow, pełny widok z powrotem do listy)
+const TAB_KEY = 'wealth-app-dividends-tab';
 export default function DividendsView({ param, onNavigate }) {
   useDividendAutoSync();
+  const [tab, setTabState] = useState(() => {
+    try {
+      return localStorage.getItem(TAB_KEY) || 'summary';
+    } catch {
+      return 'summary';
+    }
+  });
+  const setTab = (t) => {
+    setTabState(t);
+    try {
+      localStorage.setItem(TAB_KEY, t);
+    } catch {
+      // brak localStorage
+    }
+  };
+  const active = ITEMS.find((i) => i.id === tab) || ITEMS[0];
   if (param === 'cashflow') {
     return (
       <div className="space-y-3">
@@ -72,10 +90,10 @@ export default function DividendsView({ param, onNavigate }) {
       <button
         type="button"
         onClick={() => onNavigate?.('dividends/cashflow')}
-        className="flex w-full items-center gap-3 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 px-4 py-3 text-left transition-colors hover:bg-emerald-50 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
+        className="flex w-full items-center gap-3 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 px-3 py-2 text-left transition-colors hover:bg-emerald-50 dark:border-emerald-400/15 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/10"
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-          <Waves size={18} />
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+          <Waves size={16} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">
@@ -86,7 +104,12 @@ export default function DividendsView({ param, onNavigate }) {
         </span>
         <ChevronRight size={18} className="shrink-0 text-stone-400" />
       </button>
-      <Accordion items={ITEMS} storageKey="wealth-app-dividends-open-v2" defaultOpen={['summary']} exclusive />
+      <div className="flex justify-center">
+        <Segmented value={active.id} onChange={setTab} ariaLabel="Sekcje dywidend" options={ITEMS.map((i) => ({ value: i.id, label: i.short }))} />
+      </div>
+      <section aria-label={active.title} className="space-y-3">
+        {active.render()}
+      </section>
     </div>
   );
 }
