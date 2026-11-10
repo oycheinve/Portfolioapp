@@ -44,11 +44,25 @@ function writeEarnings(list) {
 }
 // Zapis analizy: rotacja (12 mies.) + nadpisanie wpisu o tym samym kluczu [Spółka + Kwartał]
 export function saveEarnings({ analysis, sources = [], grounded = false, searchNote = '', model = '' }, now = Date.now()) {
-  const entry = { key: earningsKey(analysis), analysis, sources, grounded, ...(searchNote ? { searchNote } : {}), model, at: new Date(now).toISOString() };
+  const key = earningsKey(analysis);
+  const prev = readEarnings(now).find((e) => e.key === key);
+  // Aktualizacja tych samych danych (np. nowa wersja danych startowych) zachowuje dopisaną wcześniej interpretację AI
+  if (!analysis.interpretation && prev?.analysis?.interpretation && prev.model === model) analysis = { ...analysis, interpretation: prev.analysis.interpretation };
+  const entry = { key, analysis, sources, grounded, ...(searchNote ? { searchNote } : {}), model, at: new Date(now).toISOString() };
   const list = readEarnings(now).filter((e) => e.key !== entry.key);
   writeEarnings([entry, ...list]);
   recordHistory(analysis, now);
   return entry;
+}
+
+// Dopisanie interpretacji AI do zapisanej analizy (bez zmiany daty zapisu i historii liczb)
+export function setInterpretation(key, interpretation) {
+  const list = readEarnings();
+  const i = list.findIndex((e) => e.key === key);
+  if (i < 0) return null;
+  list[i] = { ...list[i], analysis: { ...list[i].analysis, interpretation } };
+  writeEarnings(list);
+  return list[i];
 }
 
 // ── Historia spółek (bez rotacji) ──

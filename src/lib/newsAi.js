@@ -133,6 +133,8 @@ export const requestReceipt = (image, mime = 'image/jpeg', budgetCategories = []
 export const requestBudgetSummary = (data) => callAi({ mode: 'budget', ...data });
 // Analityk wyników: wyłącznie materiały użytkownika – files: [{ data: base64, mime, name }], history: liczby z archiwum
 export const requestEarnings = ({ query = '', text = '', files = [], history = [], profile = '' }) => callAi({ mode: 'earnings', query, text, ...(files.length ? { files } : {}), ...(history.length ? { history } : {}), ...(profile ? { profile } : {}) });
+// Interpretacja zapisanej analizy (np. danych startowych): liczby z analizy + historia spółki + profil z Ustawień
+export const requestEarningsInterpretation = ({ analysis, history = [], profile = '' }) => callAi({ mode: 'earnings-interpret', analysis, ...(history.length ? { history } : {}), ...(profile ? { profile } : {}) });
 export async function requestTaskCategories(titles) {
   const items = [...new Set(titles.map((t) => String(t || '').trim()).filter(Boolean))].slice(0, 80);
   if (!items.length) return {};

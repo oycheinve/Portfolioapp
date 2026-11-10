@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { FileText, Image as ImageIcon, Loader2, Paperclip, Sparkles, Trash2, X } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { requestEarnings } from '../../lib/newsAi.js';
+import { requestEarnings, requestEarningsInterpretation } from '../../lib/newsAi.js';
 import { compressImage } from '../../lib/receipts.js';
-import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, surprise } from '../../lib/earnings.js';
+import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, readProfiles } from '../../lib/companyProfiles.js';
 import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
@@ -166,6 +166,26 @@ export default function EarningsAnalyst() {
     }
   };
 
+  // Interpretacja AI zapisanej analizy (także danych startowych): liczby + historia spółki + profil z Ustawień
+  const [interpreting, setInterpreting] = useState('');
+  const interpret = async (entry) => {
+    if (interpreting) return;
+    const a = entry.analysis;
+    const h = hist[companyKey(a)];
+    const history = h ? companyPeriods(h).map(({ quarter, revenue, netIncome, ebitda }) => ({ quarter, revenue, netIncome, ebitda })) : [];
+    setInterpreting(entry.key);
+    try {
+      const res = await requestEarningsInterpretation({ analysis: a, history, profile: profileContext(findProfile(readProfiles(), a)) });
+      if (!res.interpretation) throw new Error(res.error || 'Brak interpretacji');
+      setInterpretation(entry.key, res.interpretation);
+      setList(readEarnings());
+    } catch (err) {
+      actions.notify(`Interpretacja AI: ${err.message}`, 'warn');
+    } finally {
+      setInterpreting('');
+    }
+  };
+
   const sel = companies.find((c) => c.key === company) || null;
   const entries = list.filter((e) => companyKey(e.analysis) === company).sort((x, y) => periodOrder(y.analysis.quarter) - periodOrder(x.analysis.quarter));
   const open = entries.find((e) => e.key === openKey) || entries[0] || null;
@@ -278,7 +298,7 @@ export default function EarningsAnalyst() {
               </span>
             ))}
           </div>
-          {open && <Analysis entry={open} />}
+          {open && <Analysis entry={open} onInterpret={() => interpret(open)} interpreting={interpreting === open.key} />}
         </div>
       )}
       {sel && (
@@ -389,8 +409,9 @@ function CompanyHistory({ company }) {
   );
 }
 
-function Analysis({ entry }) {
+function Analysis({ entry, onInterpret, interpreting }) {
   const a = entry.analysis;
+  const it = a.interpretation;
   const hasCons = a.metrics.some((m) => m.consensus !== null && m.consensus !== undefined);
   const hasPrev = a.metrics.some((m) => m.previous !== null && m.previous !== undefined);
   const refCol = hasCons ? 'consensus' : hasPrev ? 'previous' : null;
@@ -443,6 +464,8 @@ function Analysis({ entry }) {
         </div>
       )}
 
+      <Interpretation it={it} onInterpret={onInterpret} busy={interpreting} />
+
       {(a.highlights.length > 0 || a.risks.length > 0 || a.outlook) && (
         <div className="grid gap-3 sm:grid-cols-2">
           {a.highlights.length > 0 && (
@@ -480,5 +503,55 @@ function Analysis({ entry }) {
         {refCol === 'consensus' ? 'Ocena względem podanego konsensusu' : refCol === 'previous' ? 'Ocena względem tego samego okresu rok wcześniej' : 'Brak punktu odniesienia – dopisz konsensus albo wgraj raport z danymi porównawczymi'}. Na podstawie Twoich materiałów – AI może się mylić. Zapisano {new Date(entry.at).toLocaleString('pl-PL')}.
       </p>
     </article>
+  );
+}
+
+// Omówienie wyników jak w komentarzu analityka: narracja, czynniki, jakość wyniku, wniosek dla inwestora
+function Interpretation({ it, onInterpret, busy }) {
+  const btn = (label) => (
+    <button type="button" onClick={onInterpret} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-400/30 dark:bg-transparent dark:text-blue-300 dark:hover:bg-blue-500/10">
+      {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+      {busy ? 'AI interpretuje…' : label}
+    </button>
+  );
+  if (!it) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-blue-200 p-3 text-[13px] text-stone-600 dark:border-blue-400/25 dark:text-stone-300">
+        <span>Szersze omówienie: co napędziło wynik, jakość zysku i wniosek dla inwestora.</span>
+        {btn('Interpretuj wyniki (AI)')}
+      </div>
+    );
+  }
+  return (
+    <section aria-label="Interpretacja AI" className="space-y-2.5 rounded-xl bg-blue-50/60 p-3 text-[13px] leading-relaxed dark:bg-blue-500/[0.06]">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wide text-blue-800 uppercase dark:text-blue-300">
+          <Sparkles size={13} /> Interpretacja AI
+        </div>
+        {btn('Odśwież')}
+      </div>
+      {it.summary && <p>{it.summary}</p>}
+      {it.drivers?.length > 0 && (
+        <div>
+          <div className="text-[11px] font-semibold text-stone-500 dark:text-stone-400">Co napędziło wynik</div>
+          <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
+            {it.drivers.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {it.quality && (
+        <div>
+          <div className="text-[11px] font-semibold text-stone-500 dark:text-stone-400">Jakość wyniku</div>
+          <p>{it.quality}</p>
+        </div>
+      )}
+      {it.takeaway && (
+        <p className="rounded-lg bg-white/70 px-2.5 py-2 dark:bg-white/5">
+          <strong>Wniosek dla inwestora:</strong> {it.takeaway}
+        </p>
+      )}
+    </section>
   );
 }
