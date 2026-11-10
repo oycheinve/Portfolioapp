@@ -6,7 +6,7 @@ import { requestEarnings, requestEarningsInterpretation } from '../../lib/newsAi
 import { compressImage } from '../../lib/receipts.js';
 import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
-import { findProfile, hasContent, profileContext, readProfiles } from '../../lib/companyProfiles.js';
+import { findProfile, hasContent, profileContext, profileKpis, readProfiles } from '../../lib/companyProfiles.js';
 import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
 import { formatDate } from '../../lib/format.js';
 import { BetaBadge, Card, ChartTooltip } from '../ui.jsx';
@@ -293,7 +293,7 @@ export default function EarningsAnalyst() {
         </div>
       )}
 
-      {sel && <CompanyHistory company={sel} />}
+      {sel && <CompanyHistory company={sel} profile={profileFor({ ticker: sel.ticker, company: sel.company })} />}
 
       {sel && entries.length > 0 && (
         <div className="mt-4">
@@ -309,7 +309,7 @@ export default function EarningsAnalyst() {
               </span>
             ))}
           </div>
-          {open && <Analysis entry={open} onInterpret={() => interpret(open)} interpreting={interpreting === open.key} profileName={(() => { const p = profileFor(open.analysis); return p ? p.ticker || p.name : ''; })()} />}
+          {open && <Analysis entry={open} onInterpret={() => interpret(open)} interpreting={interpreting === open.key} profile={profileFor(open.analysis)} />}
         </div>
       )}
       {sel && (
@@ -325,7 +325,10 @@ export default function EarningsAnalyst() {
 }
 
 // Historia spółki: wyniki kwartalne (przychody, zysk netto, EBITDA) i wybrany wskaźnik branżowy w czasie
-function CompanyHistory({ company }) {
+// Etykieta tego samego okresu rok wcześniej (także rok obrotowy „Q1 2025/26” → „Q1 2024/25”)
+const prevYearOf = (q) => String(q).replace(/((?:19|20)\d{2})(?:\/(\d{2}))?$/, (_, y, f) => `${Number(y) - 1}${f ? `/${String((Number(f) + 99) % 100).padStart(2, '0')}` : ''}`);
+
+function CompanyHistory({ company, profile }) {
   const { isDark } = useApp();
   const chrome = chartChrome(isDark);
   const c = (i) => seriesColor(i, isDark);
@@ -338,8 +341,12 @@ function CompanyHistory({ company }) {
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pl'))
       .map(([n]) => n);
   }, [periods]);
+  // Widok dopasowany do profilu: KPI z profilu jako osobne wykresy, reszta wskaźników w liście wyboru (KPI na górze ★)
+  const kpis = useMemo(() => profileKpis(profile, metricNames).slice(0, 6), [profile, metricNames]);
+  const ordered = [...kpis, ...metricNames.filter((n) => !kpis.includes(n))];
+  const rest = metricNames.filter((n) => !kpis.includes(n));
   const [metric, setMetric] = useState(null);
-  const m = metric && metricNames.includes(metric) ? metric : metricNames[0];
+  const m = metric && metricNames.includes(metric) ? metric : rest[0] || ordered[0];
   const mData = periods.filter((p) => p.metrics?.[m]).map((p) => ({ quarter: p.quarter, value: p.metrics[m].value }));
   const mUnit = periods.find((p) => p.metrics?.[m])?.metrics[m].unit || '';
   const lowerBetter = periods.find((p) => p.metrics?.[m])?.metrics[m].lowerIsBetter;
@@ -351,10 +358,26 @@ function CompanyHistory({ company }) {
           {company.company} {company.ticker && <span className="text-stone-400">({company.ticker})</span>}
         </h3>
         <span className="text-xs text-stone-500 dark:text-stone-400">
-          {company.industry ? `${company.industry} · ` : ''}
+          {profile?.industry || company.industry ? `${profile?.industry || company.industry} · ` : ''}
           {periods.length} {periods.length === 1 ? 'okres' : 'okresów'} w historii{company.unit ? ` · ${company.unit}` : ''}
         </span>
       </div>
+      {profile && (
+        <p className="-mt-1 text-[11px] text-blue-700/80 dark:text-blue-300/80">
+          Widok dopasowany do Twojego profilu {profile.ticker || profile.name}
+          {kpis.length ? ` – KPI: ${kpis.join(', ')}` : ' – dodaj KPI w Ustawieniach → Profile spółek, aby zobaczyć je na wykresach'}
+        </p>
+      )}
+      {kpis.length > 0 && (
+        <div>
+          <div className="mb-1 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Twoje KPI z profilu</div>
+          <div className="grid grid-cols-2 gap-2" aria-label="Wykresy KPI z profilu">
+            {kpis.map((n, i) => (
+              <KpiChart key={n} name={n} periods={periods} color={c(i % 5)} chrome={chrome} />
+            ))}
+          </div>
+        </div>
+      )}
       {(has('revenue') || has('netIncome') || has('ebitda')) && (
         <div>
           <div className="mb-1 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Wyniki kwartalne</div>
@@ -384,11 +407,11 @@ function CompanyHistory({ company }) {
       {metricNames.length > 0 && (
         <div>
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Wskaźnik branżowy w czasie</span>
+            <span className="text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">{kpis.length ? 'Pozostałe wskaźniki w czasie' : 'Wskaźnik branżowy w czasie'}</span>
             <select value={m} onChange={(e) => setMetric(e.target.value)} aria-label="Wybór wskaźnika" className="h-8 max-w-[14rem] rounded-lg border border-stone-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-neutral-800">
-              {metricNames.map((n) => (
+              {ordered.map((n) => (
                 <option key={n} value={n}>
-                  {n}
+                  {kpis.includes(n) ? `★ ${n}` : n}
                 </option>
               ))}
             </select>
@@ -420,8 +443,12 @@ function CompanyHistory({ company }) {
   );
 }
 
-function Analysis({ entry, onInterpret, interpreting, profileName }) {
-  const a = entry.analysis;
+function Analysis({ entry, onInterpret, interpreting, profile }) {
+  const a0 = entry.analysis;
+  const profileName = profile ? profile.ticker || profile.name : '';
+  // Wskaźniki z profilu (KPI / wymienione w opisie i notatkach) – na początku tabeli, oznaczone ★
+  const kpis = profileKpis(profile, a0.metrics.map((m) => m.name));
+  const a = kpis.length ? { ...a0, metrics: [...kpis.map((n) => a0.metrics.find((m) => m.name === n)), ...a0.metrics.filter((m) => !kpis.includes(m.name))] } : a0;
   const it = a.interpretation;
   const hasCons = a.metrics.some((m) => m.consensus !== null && m.consensus !== undefined);
   const hasPrev = a.metrics.some((m) => m.previous !== null && m.previous !== undefined);
@@ -457,6 +484,11 @@ function Analysis({ entry, onInterpret, interpreting, profileName }) {
                 return (
                   <tr key={m.name}>
                     <td className="px-2.5 py-1.5 break-words">
+                      {kpis.includes(m.name) && (
+                        <span className="mr-0.5 text-blue-600 dark:text-blue-400" title="Wskaźnik z Twojego profilu spółki">
+                          ★
+                        </span>
+                      )}
                       {m.name}
                       {m.unit && <span className="block text-[10px] text-stone-400">{m.unit}</span>}
                     </td>
@@ -587,5 +619,48 @@ function Interpretation({ it, onInterpret, busy, profileName, profileUsed }) {
         </p>
       )}
     </section>
+  );
+}
+
+// Mały wykres jednego KPI z profilu: ostatnia wartość, zmiana r/r (p.p. dla %), słupki w czasie
+function KpiChart({ name, periods, color, chrome }) {
+  const data = periods.filter((p) => p.metrics?.[name]).map((p) => ({ quarter: p.quarter, value: p.metrics[name].value }));
+  const meta = periods.find((p) => p.metrics?.[name])?.metrics[name] || {};
+  const last = data[data.length - 1];
+  const prev = last ? data.find((d) => d.quarter === prevYearOf(last.quarter)) : null;
+  const pct = meta.unit === '%';
+  const diff = last && prev && last.value !== null && prev.value !== null ? (pct ? last.value - prev.value : prev.value ? ((last.value - prev.value) / Math.abs(prev.value)) * 100 : null) : null;
+  const good = diff === null ? null : meta.lowerIsBetter ? diff < 0 : diff > 0;
+  return (
+    <div className="min-w-0 rounded-xl border border-stone-200 p-2 dark:border-white/10" aria-label={`KPI ${name}`}>
+      <div className="truncate text-[11px] font-semibold text-stone-600 dark:text-stone-300" title={name}>
+        {name}
+      </div>
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="text-sm font-semibold tabular">
+          {last ? nf(last.value, 1) : '—'}
+          {meta.unit && meta.unit !== 'mln PLN' ? <span className="text-[10px] font-normal text-stone-400"> {meta.unit}</span> : null}
+        </span>
+        {diff !== null && (
+          <span className={`text-[10px] font-semibold ${good ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`} title="Zmiana r/r">
+            {diff >= 0 ? '+' : ''}
+            {nf(diff, 1)}
+            {pct ? ' p.p.' : '%'} r/r
+          </span>
+        )}
+      </div>
+      <div className="h-16">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+            <XAxis dataKey="quarter" hide />
+            <Tooltip content={<ChartTooltip formatter={(v) => `${nf(v)}${meta.unit ? ` ${meta.unit}` : ''}`} />} cursor={{ fill: chrome.grid }} />
+            <Bar dataKey="value" name={name} fill={color} radius={[3, 3, 0, 0]} maxBarSize={18} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="text-[10px] text-stone-400">
+        {data.length ? `${data[0].quarter} – ${last.quarter}` : 'brak danych'}
+      </div>
+    </div>
   );
 }

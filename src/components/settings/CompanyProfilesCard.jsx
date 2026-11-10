@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, Plus, Trash2, Wand2 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { MAX_PROFILE_TEXT, hasContent, makeProfile, readProfiles, writeProfiles } from '../../lib/companyProfiles.js';
+import { MAX_PROFILE_TEXT, hasContent, makeProfile, parseKpis, readProfiles, writeProfiles } from '../../lib/companyProfiles.js';
+import { companyKey, companyPeriods, readHistory } from '../../lib/earnings.js';
 import { Card, Field, Input } from '../ui.jsx';
 
 const area = 'w-full min-w-0 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 dark:border-white/10 dark:bg-neutral-800';
@@ -16,6 +17,16 @@ export default function CompanyProfilesCard() {
   const save = (next) => {
     setList(next);
     writeProfiles(next);
+  };
+  // Nazwy wskaźników z historii Analityka dla danej spółki – podpowiedzi do pola KPI
+  const hist = useMemo(readHistory, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const metricsOf = (p) => {
+    const h = hist[companyKey({ ticker: p.ticker })] || hist[companyKey({ company: p.name })];
+    const count = {};
+    for (const per of h ? companyPeriods(h) : []) for (const n of Object.keys(per.metrics || {})) count[n] = (count[n] || 0) + 1;
+    return Object.entries(count)
+      .sort((a, b) => b[1] - a[1])
+      .map(([n]) => n);
   };
   const update = (id, patch) => save(list.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: new Date().toISOString() } : p)));
   // Spółki z portfela (akcje, które masz) jeszcze bez profilu – szybkie dodanie
@@ -40,7 +51,7 @@ export default function CompanyProfilesCard() {
   return (
     <Card title="Profile spółek" subtitle="Opis działalności, profil i notatki – kontekst dla Analityka wyników" icon={Wand2}>
       <p className="mb-3 text-[12px] text-stone-500 dark:text-stone-400">
-        Wklej opis spółki (segmenty, model biznesowy, kluczowe wskaźniki branży) i swoje notatki (teza inwestycyjna, na co patrzeć w wynikach). Analityk wyników dołączy profil do analizy wgranych PDF-ów, tekstów i zdjęć – liczby zawsze pochodzą z Twoich materiałów.
+        Wklej opis spółki (segmenty, model biznesowy), wybierz kluczowe wskaźniki (KPI) i dopisz notatki (teza inwestycyjna, na co patrzeć). Analityk wyników dopasowuje do profilu całą spółkę: dobór i kolejność wskaźników, wykresy KPI, omówienie i ocenę względem Twojej tezy – liczby zawsze pochodzą z Twoich materiałów.
       </p>
       <form onSubmit={add} className="flex gap-2">
         <Input value={draft} onChange={(e) => setDraft(e.target.value)} list="profile-tickers" placeholder="Ticker lub nazwa, np. PKO, Grupa Kęty" aria-label="Nowa spółka – ticker lub nazwa" />
@@ -88,6 +99,22 @@ export default function CompanyProfilesCard() {
                   <Field label="Opis i profil działalności" hint={`${(p.profile || '').length} / ${MAX_PROFILE_TEXT} znaków`}>
                     <textarea rows={5} maxLength={MAX_PROFILE_TEXT} value={p.profile || ''} onChange={(e) => update(p.id, { profile: e.target.value })} placeholder="Segmenty, źródła przychodów, model biznesowy, sezonowość, kluczowe wskaźniki branży…" aria-label={`Profil – ${p.ticker || p.name}`} className={area} />
                   </Field>
+                  <Field label="Kluczowe wskaźniki (KPI)" hint="Po przecinku, w kolejności ważności – Analityk pokaże je pierwsze w tabelach i na wykresach">
+                    <Input value={p.kpis || ''} onChange={(e) => update(p.id, { kpis: e.target.value.slice(0, 600) })} placeholder="np. Marża EBITDA, Przychody LFL, Dług netto / EBITDA" aria-label={`KPI – ${p.ticker || p.name}`} />
+                  </Field>
+                  {(() => {
+                    const have = new Set(parseKpis(p.kpis).map((k) => k.toLowerCase()));
+                    const sug = metricsOf(p).filter((n) => !have.has(n.toLowerCase())).slice(0, 14);
+                    return sug.length ? (
+                      <div className="-mt-1 flex flex-wrap gap-1.5" aria-label="Podpowiedzi KPI z historii spółki">
+                        {sug.map((n) => (
+                          <button key={n} type="button" onClick={() => update(p.id, { kpis: [...parseKpis(p.kpis), n].join(', ') })} className="rounded-full border border-stone-200 px-2 py-0.5 text-[11px] text-stone-600 hover:border-blue-400 hover:text-blue-700 dark:border-white/10 dark:text-stone-300">
+                            + {n}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                   <Field label="Moje notatki" hint={`${(p.notes || '').length} / ${MAX_PROFILE_TEXT} znaków`}>
                     <textarea rows={3} maxLength={MAX_PROFILE_TEXT} value={p.notes || ''} onChange={(e) => update(p.id, { notes: e.target.value })} placeholder="Teza inwestycyjna, ryzyka, na co patrzeć w kolejnych wynikach…" aria-label={`Notatki – ${p.ticker || p.name}`} className={area} />
                   </Field>
