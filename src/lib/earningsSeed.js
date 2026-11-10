@@ -1,9 +1,9 @@
-// Dane startowe Analityka wyników (XTB, LPP, Synektik, cyber_Folks – niżej). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
+// Dane startowe Analityka wyników (XTB, LPP, Synektik, cyber_Folks, Grupa Kęty – niżej) + starsze okresy (EXTRA_HISTORY). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
 // użytkownika). Wartości sprzed roku i z Q4 2025 wyliczone z podanych zmian r/r i q/q, EBITDA Q1 2026 z narastającej
 // EBITDA (YTD). Przychody Q3 2026 – z pełnej tabeli (wersja 2 danych; wcześniej szacunek z marż ≈ 623 mln zł).
 // Dopisywane do bazy użytkownika jednorazowo (flaga), dalej historia buduje się z kolejnych analiz.
 import { PREFS_CHANGED_EVENT } from './budget.js';
-import { earningsKey, readEarnings, readHistory, saveEarnings } from './earnings.js';
+import { earningsKey, readEarnings, readHistory, recordHistory, saveEarnings } from './earnings.js';
 
 export const SEED_KEY = 'wealth-app-earnings-seed-v1';
 // Wersja danych startowych: 2 – pełne przychody Q3 2026 (623,3 vs kons. 631,1)
@@ -211,12 +211,128 @@ export const CBF_SEED = [
   },
 ];
 
+// Grupa Kęty (KTY): Q1–Q3 2026 vs konsensus PAP Biznes (wyniki finalne z raportów; Q2 2026 – z wyników 9M minus Q1 i Q3,
+// zgodne z raportem: EBITDA 379, zysk netto j.d. 241). Q1–Q3 2025 – z raportów (Q2 2025 z 9M 2025), Q4 2025 – szacunki
+// spółki potwierdzone raportem rocznym. Konsensus PAP porównywano z szacunkami spółki; tu – z wynikami finalnymi.
+const ktyBase = { company: 'Grupa Kęty', ticker: 'KTY', industry: 'Przemysł: aluminium (systemy aluminiowe, wyroby wyciskane) i opakowania giętkie', currency: 'PLN', unit: 'mln PLN', basis: 'consensus', outlook: '', risks: [] };
+export const KTY_SEED = [
+  {
+    ...ktyBase,
+    quarter: 'Q1 2026',
+    periodEnd: '2026-03-31',
+    verdict: 'beat',
+    headline: 'Q1 2026: zysk netto j.d. 145 mln zł (+15,7% vs kons.) i EBITDA 257 mln zł (+10,4%) powyżej konsensusu przy przychodach 1374 mln zł poniżej (−3,2%).',
+    metrics: [m('Przychody', 1374, 1419.8, 1354), m('EBITDA', 257, 232.8, 228), m('EBIT', 196, null, 169), m('Zysk netto j.d.', 145, 125.3, 121), m('Marża EBITDA', 18.7, null, 16.8, '%'), m('Marża EBIT', 14.3, null, 12.5, '%'), m('Marża netto', 10.6, null, 8.9, '%')],
+    quarters: [
+      { quarter: 'Q1 2025', revenue: 1354, netIncome: 121, ebitda: 228, eps: null },
+      { quarter: 'Q4 2025', revenue: 1265, netIncome: 93, ebitda: 205, eps: null },
+      { quarter: 'Q1 2026', revenue: 1374, netIncome: 145, ebitda: 257, eps: null },
+    ],
+    highlights: ['Przychody +1,5% r/r, EBITDA +12,7% r/r, zysk netto j.d. +19,8% r/r', 'Wynik finalny wyższy od szacunków spółki (zysk netto 132 → 145 mln zł, EBITDA 242 → 257 mln zł)', 'Q4 2025 (szacunki spółki): przychody 1265 mln zł, EBITDA 205 mln zł, zysk netto j.d. 93 mln zł'],
+  },
+  {
+    ...ktyBase,
+    quarter: 'Q2 2026',
+    periodEnd: '2026-06-30',
+    verdict: 'beat',
+    headline: 'Q2 2026 wyraźnie powyżej konsensusu: zysk netto j.d. 241 mln zł (+14,3% vs kons.), EBITDA 379 mln zł (+11,5%).',
+    metrics: [m('Przychody', 1654, null, 1442), m('EBITDA', 379, 340, 295), m('EBIT', 318, null, 235), m('Zysk netto j.d.', 241, 210.8, 169), m('Marża EBITDA', 22.9, null, 20.5, '%'), m('Marża EBIT', 19.2, null, 16.3, '%'), m('Marża netto', 14.6, null, 11.7, '%')],
+    quarters: [
+      { quarter: 'Q2 2025', revenue: 1442, netIncome: 169, ebitda: 295, eps: null },
+      { quarter: 'Q1 2026', revenue: 1374, netIncome: 145, ebitda: 257, eps: null },
+      { quarter: 'Q2 2026', revenue: 1654, netIncome: 241, ebitda: 379, eps: null },
+    ],
+    highlights: ['Przychody +14,7% r/r, EBITDA +28,5% r/r, EBIT +35,3% r/r, zysk netto j.d. +42,6% r/r', 'Wynik finalny powyżej szacunków spółki (zysk netto 234 → 241 mln zł, EBITDA 375 → 379 mln zł)'],
+  },
+  {
+    ...ktyBase,
+    quarter: 'Q3 2026',
+    periodEnd: '2026-09-30',
+    verdict: 'beat',
+    headline: 'Q3 2026 zgodnie z oczekiwaniami / lekko powyżej: przychody 1635 mln zł (+4,1% vs kons.), zysk netto j.d. 208 mln zł (+4,1%), EBITDA 331 mln zł (+1,7%).',
+    metrics: [m('Przychody', 1635, 1570, 1447), m('EBITDA', 331, 325.5, 294), m('EBIT', 270, null, 234), m('Zysk netto j.d.', 208, 199.8, 176), m('Marża EBITDA', 20.2, null, 20.3, '%'), m('Marża EBIT', 16.5, null, 16.2, '%'), m('Marża netto', 12.7, null, 12.2, '%')],
+    quarters: [
+      { quarter: 'Q3 2025', revenue: 1447, netIncome: 176, ebitda: 294, eps: null },
+      { quarter: 'Q2 2026', revenue: 1654, netIncome: 241, ebitda: 379, eps: null },
+      { quarter: 'Q3 2026', revenue: 1635, netIncome: 208, ebitda: 331, eps: null },
+    ],
+    highlights: ['Przychody +13,0% r/r, EBITDA +12,6% r/r, zysk netto j.d. +18,2% r/r', 'Narastająco 9M 2026: przychody 4663 mln zł (+9,9%), EBITDA 967 mln zł (+18,4%), zysk netto j.d. 594 mln zł (+27,5%)', 'Wynik finalny powyżej szacunków spółki (zysk netto 201 → 208 mln zł)'],
+  },
+];
+
+// Starsze okresy (tylko liczby w historii, bez pełnych analiz) – źródła publiczne: komunikaty spółek i tabele PAP Biznes
+const P = (quarter, revenue, ebitda, netIncome, metrics) => ({ quarter, revenue, ebitda, netIncome, metrics });
+const EXTRA_HISTORY = {
+  XTB: [
+    P('Q1 2024', 556.0, 355.7, 302.8, { Przychody: 556.0, EBIT: 351.0, 'Zysk netto j.d.': 302.8, 'Marża EBIT': [63.1, '%'], 'Marża netto': [54.5, '%'] }),
+    P('Q2 2024', 382.1, null, 160.3, { Przychody: 382.1, EBIT: 176.7, 'Zysk netto j.d.': 160.3, 'Marża EBIT': [46.2, '%'], 'Marża netto': [42.0, '%'] }),
+    P('Q3 2024', 470.2, null, 203.8, { Przychody: 470.2, EBIT: 261.7, 'Zysk netto j.d.': 203.8, 'Marża EBIT': [55.7, '%'], 'Marża netto': [43.3, '%'] }),
+    P('Q4 2024', 465.4, 205.8, 192.6, { Przychody: 465.4, EBITDA: 205.8, EBIT: 200.7, 'Zysk netto j.d.': 192.6, 'Marża EBIT': [43.1, '%'], 'Marża netto': [41.4, '%'] }),
+  ],
+  LPP: [
+    P('Q1 2024', 4306, 795, 276, { Przychody: 4306, EBITDA: 795, EBIT: 411, 'Zysk netto j.d.': 276, 'Marża EBITDA': [18.5, '%'], 'Marża EBIT': [9.5, '%'], 'Marża netto': [6.4, '%'] }),
+    P('Q2 2024', 5005, 1018, 444, { Przychody: 5005, EBITDA: 1018, EBIT: 611, 'Zysk netto j.d.': 444, 'Marża EBITDA': [20.3, '%'], 'Marża EBIT': [12.2, '%'], 'Marża netto': [8.9, '%'] }),
+    P('Q3 2024', 5212, 1157, 579, { Przychody: 5212, EBITDA: 1157, EBIT: 731, 'Zysk netto j.d.': 579, 'Marża EBITDA': [22.2, '%'], 'Marża EBIT': [14.0, '%'], 'Marża netto': [11.1, '%'] }),
+  ],
+  SNT: [
+    P('Q1 2023/24', 271.3, null, 34.7, { Przychody: 271.3, 'EBITDA znormalizowana': 53.2, 'Zysk netto j.d.': 34.7 }),
+    P('Q2 2023/24', 87.7, null, 12.2, { Przychody: 87.7, 'EBITDA znormalizowana': 25.6, 'Zysk netto j.d.': 12.2 }),
+    P('Q3 2023/24', 124.0, null, 16.7, { Przychody: 124.0, 'EBITDA znormalizowana': 32.4, 'Zysk netto j.d.': 16.7 }),
+    P('Q4 2023/24', 141.8, null, 21.0, { Przychody: 141.8, 'EBITDA znormalizowana': 35.2, 'Zysk netto j.d.': 21.0 }),
+  ],
+  CBF: [
+    P('Q3 2025', 215.9, 75.5, 13.7, { Przychody: 215.9, 'EBITDA skorygowana': 75.5, EBITDA: 69.9, 'Zysk netto j.d.': 13.7 }),
+    P('Q4 2025', 236.7, 82.4, 24.2, { Przychody: 236.7, 'EBITDA skorygowana': 82.4, 'Zysk netto j.d.': 24.2 }),
+  ],
+};
+function recordExtras(key) {
+  const seed = COMPANY_SEEDS.find((c) => c.key === key);
+  const extra = EXTRA_HISTORY[key];
+  if (!seed || !extra) return false;
+  const first = seed.data[0];
+  for (const e of extra) {
+    recordHistory({
+      company: first.company,
+      ticker: first.ticker,
+      industry: first.industry,
+      unit: first.unit,
+      quarter: e.quarter,
+      quarters: [{ quarter: e.quarter, revenue: e.revenue, ebitda: e.ebitda, netIncome: e.netIncome, eps: null }],
+      metrics: Object.entries(e.metrics).map(([name, v]) => ({ name, actual: Array.isArray(v) ? v[0] : v, previous: null, unit: Array.isArray(v) ? v[1] : 'mln PLN' })),
+    });
+  }
+  try {
+    localStorage.setItem(`wealth-app-earnings-extra-${key.toLowerCase()}-v1`, new Date().toISOString());
+  } catch {
+    // brak localStorage
+  }
+  return true;
+}
+const extraDone = (key) => {
+  try {
+    return !!localStorage.getItem(`wealth-app-earnings-extra-${key.toLowerCase()}-v1`);
+  } catch {
+    return true;
+  }
+};
+// Dopisanie starszych okresów u użytkowników, którzy dane startowe wczytali wcześniej (jednorazowo na spółkę)
+export function applyExtras() {
+  const hist = readHistory();
+  let changed = false;
+  for (const key of Object.keys(EXTRA_HISTORY)) {
+    if (!hist[key] || extraDone(key)) continue;
+    changed = recordExtras(key) || changed;
+  }
+  return changed;
+}
+
 // Rejestr danych startowych (dowolna liczba spółek): każda ma własną flagę „wczytane” per użytkownik
 export const COMPANY_SEEDS = [
   { key: 'XTB', label: 'XTB (Q1–Q3 2026 vs konsensus)', flag: SEED_KEY, data: XTB_SEED },
   { key: 'LPP', label: 'LPP (Q4 2025 – Q2 2026 vs konsensus)', flag: 'wealth-app-earnings-seed-lpp-v1', data: LPP_SEED },
   { key: 'SNT', label: 'Synektik (Q1–Q3 2025/26 vs konsensus)', flag: 'wealth-app-earnings-seed-snt-v1', data: SNT_SEED },
   { key: 'CBF', label: 'cyber_Folks (Q1–Q2 2026, raporty kwartalne)', flag: 'wealth-app-earnings-seed-cbf-v1', data: CBF_SEED },
+  { key: 'KTY', label: 'Grupa Kęty (Q1–Q3 2026 vs konsensus)', flag: 'wealth-app-earnings-seed-kty-v1', data: KTY_SEED },
 ];
 const flagSet = (flag) => {
   try {
@@ -235,6 +351,7 @@ export function applySeed(key, now = Date.now()) {
   const seed = COMPANY_SEEDS.find((c) => c.key === key);
   if (!seed || !availableSeeds().some((c) => c.key === key)) return false;
   seed.data.forEach((analysis, i) => saveEarnings({ analysis, sources: [], grounded: false, model: SEED_MODEL }, now - (seed.data.length - i) * 1000));
+  if (!extraDone(key)) recordExtras(key);
   try {
     localStorage.setItem(seed.flag, new Date(now).toISOString());
     window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: seed.flag } }));
@@ -285,6 +402,7 @@ export function applyXtbSeed(now = Date.now()) {
   if (!seedAvailable()) return false;
   XTB_SEED.forEach((analysis, i) => saveEarnings({ analysis, sources: [], grounded: false, model: SEED_MODEL }, now - (XTB_SEED.length - i) * 1000));
   setVersion();
+  if (!extraDone('XTB')) recordExtras('XTB');
   try {
     localStorage.setItem(SEED_KEY, new Date(now).toISOString());
     window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: SEED_KEY } }));

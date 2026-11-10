@@ -7,7 +7,7 @@ import { compressImage } from '../../lib/receipts.js';
 import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, readProfiles } from '../../lib/companyProfiles.js';
-import { applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
+import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
 import { formatDate } from '../../lib/format.js';
 import { BetaBadge, Card, ChartTooltip } from '../ui.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
@@ -74,7 +74,9 @@ export default function EarningsAnalyst() {
   };
   useEffect(() => {
     // Wcześniej wczytane dane startowe → aktualizacja do nowej wersji (np. pełne przychody Q3 2026)
-    if (upgradeSeed()) {
+    // Starsze okresy dla spółek wczytanych wcześniej + aktualizacja wersji danych startowych
+    const extras = applyExtras();
+    if (upgradeSeed() || extras) {
       setList(readEarnings());
       setHist(readHistory());
     }
