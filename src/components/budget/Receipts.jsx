@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { Camera, Check, ChevronDown, Loader2, Pencil, Plus, Receipt, Split, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, Check, ChevronDown, Image as ImageIcon, Loader2, Pencil, Plus, Receipt, Split, Trash2, X } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { applyMemory, assignBudgetRows, itemShare, cacheReceipt, cachedReceipt, compressImage, imageHash, learnBudget, learnFromReceipt, readReceipts, receiptParts, receiptRows, receiptTotals, writeReceipts } from '../../lib/receipts.js';
 import { requestReceipt } from '../../lib/newsAi.js';
@@ -33,10 +33,18 @@ export function ReceiptScanner({ rows, onSave, month }) {
     return saved;
   };
 
-  const onFile = async (e) => {
+  // Aparat w aplikacji (getUserMedia): przeglądarka nie przechodzi w tło, więc Android nie zamyka jej z braku pamięci
+  // („Zbyt mało pamięci, by ukończyć poprzednią operację” przy zewnętrznej aplikacji aparatu). Bez dostępu – wybór pliku.
+  const galleryRef = useRef(null);
+  const [camera, setCamera] = useState(false);
+  const canLiveCamera = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+  const startScan = () => (canLiveCamera ? setCamera(true) : fileRef.current?.click());
+  const onFile = (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (file) processImage(file);
+  };
+  const processImage = async (file) => {
     setBusy('Przygotowanie zdjęcia…');
     try {
       const img = await compressImage(file);
@@ -63,9 +71,10 @@ export function ReceiptScanner({ rows, onSave, month }) {
   return (
     <>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} aria-label="Zdjęcie paragonu" />
+      <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={onFile} aria-label="Zdjęcie paragonu z galerii" />
       <button
         type="button"
-        onClick={() => fileRef.current?.click()}
+        onClick={startScan}
         disabled={!!busy || !receiptRows(rows).length}
         title="Zeskanuj albo wgraj zdjęcie paragonu"
         className="inline-flex h-8 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-200"
@@ -77,6 +86,23 @@ export function ReceiptScanner({ rows, onSave, month }) {
           </span>
         )}
       </button>
+      {camera && (
+        <CameraCapture
+          onCapture={(blob) => {
+            setCamera(false);
+            processImage(blob);
+          }}
+          onGallery={() => {
+            setCamera(false);
+            galleryRef.current?.click();
+          }}
+          onSystemCamera={() => {
+            setCamera(false);
+            fileRef.current?.click();
+          }}
+          onClose={() => setCamera(false)}
+        />
+      )}
       {draft && (
         <ReceiptReview
           receipt={draft}
@@ -89,6 +115,116 @@ export function ReceiptScanner({ rows, onSave, month }) {
         />
       )}
     </>
+  );
+}
+
+// Aparat w aplikacji: podgląd tylnej kamery na żywo i zdjęcie klatki (≤ 1920 px, JPEG) – bez uruchamiania osobnej
+// aplikacji aparatu. Strumień zatrzymywany przy zamknięciu. Brak uprawnień / kamery → komunikat i wybór: aparat
+// systemowy albo galeria (kliknięcie użytkownika – przeglądarki blokują otwieranie wyboru pliku bez gestu).
+function CameraCapture({ onCapture, onGallery, onSystemCamera, onClose }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [shooting, setShooting] = useState(false);
+  const [error, setError] = useState('');
+  const stop = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  };
+  useEffect(() => {
+    let alive = true;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false })
+      .then((stream) => {
+        if (!alive) return stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = stream;
+        const v = videoRef.current;
+        if (v) {
+          v.srcObject = stream;
+          v.play().catch(() => {});
+        }
+      })
+      .catch((err) => alive && setError(err?.name === 'NotAllowedError' ? 'Brak zgody na użycie aparatu w aplikacji (możesz ją włączyć w ustawieniach strony w przeglądarce).' : 'Nie udało się uruchomić aparatu w aplikacji.'));
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const shoot = () => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    setShooting(true);
+    const scale = Math.min(1, 1920 / Math.max(v.videoWidth, v.videoHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(v.videoWidth * scale);
+    canvas.height = Math.round(v.videoHeight * scale);
+    canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) => {
+        canvas.width = 0;
+        canvas.height = 0;
+        stop();
+        if (blob) onCapture(blob);
+        else {
+          setShooting(false);
+          setError('Nie udało się zapisać zdjęcia.');
+        }
+      },
+      'image/jpeg',
+      0.9,
+    );
+  };
+  return (
+    <div className="fixed inset-0 z-[70] flex flex-col bg-black" role="dialog" aria-modal="true" aria-label="Aparat – zdjęcie paragonu">
+      <div className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 text-white">
+        <span className="text-sm font-semibold">Zrób zdjęcie całego paragonu</span>
+        <button
+          type="button"
+          onClick={() => {
+            stop();
+            onClose();
+          }}
+          aria-label="Zamknij aparat"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10"
+        >
+          <X size={18} />
+        </button>
+      </div>
+      <div className="relative min-h-0 flex-1">
+        <video ref={videoRef} playsInline muted autoPlay onLoadedData={() => setReady(true)} className="h-full w-full object-contain" aria-label="Podgląd aparatu" />
+        {error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-sm text-white/90">
+            <p>{error}</p>
+            <button type="button" onClick={onSystemCamera} className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 font-semibold text-neutral-900">
+              <Camera size={16} /> Aparat telefonu
+            </button>
+            <p className="text-[11px] text-white/60">albo wybierz zdjęcie przyciskiem „Z galerii” poniżej</p>
+          </div>
+        )}
+        {!ready && !error && (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">
+            <Loader2 size={20} className="mr-2 animate-spin" /> Uruchamianie aparatu…
+          </div>
+        )}
+      </div>
+      <div className="flex items-center justify-around px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <button
+          type="button"
+          onClick={() => {
+            stop();
+            onGallery();
+          }}
+          className="inline-flex flex-col items-center gap-1 text-xs text-white/90"
+        >
+          <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
+            <ImageIcon size={20} />
+          </span>
+          Z galerii
+        </button>
+        <button type="button" onClick={shoot} disabled={!ready || shooting} aria-label="Zrób zdjęcie" className="h-16 w-16 rounded-full border-4 border-white bg-white/90 disabled:opacity-50" />
+        <span className="w-11" aria-hidden="true" />
+      </div>
+    </div>
   );
 }
 

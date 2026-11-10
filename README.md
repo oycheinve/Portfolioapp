@@ -584,6 +584,10 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - **Ocena pozycji bez konsensusu**: gdy konsensus jest tylko dla części wskaźników (np. PAP podaje EBITDA i zysk, a nie przychody / marże), pozostałe wiersze są oceniane względem tego samego okresu rok wcześniej (`metricRef`: > 2%, dla % > 0,5 p.p.; „mniej = lepiej” odwrotnie) i oznaczone „rok wcz.” / „r/r” – „BEZ OCENY” tylko przy braku obu punktów odniesienia. Działa dla zapisanych analiz i danych startowych; prompt AI ocenia takie pozycje r/r.
 - **XTB – dane operacyjne** (wersja 3 danych startowych, raporty bieżące spółki): nowi klienci, aktywni klienci (tys.), depozyty netto (mln zł) za Q1 2025 – Q3 2026 (+ Q3 2024 częściowo) i aktywa klientów (Q3 2026), oceniane r/r. Dotychczasowi użytkownicy dostają je automatycznie (`upgradeSeed` v3 + `EXTRA_VERSION.XTB = 2`), Twoje wartości mają pierwszeństwo.
 
+### Skanowanie paragonów – aparat w aplikacji
+
+- „Skanuj paragon” otwiera aparat wewnątrz aplikacji (`getUserMedia`, tylna kamera, podgląd na żywo, zdjęcie klatki ≤ 1920 px) – przeglądarka nie przechodzi w tło, więc Android nie zamyka jej z braku pamięci (komunikat „Zbyt mało pamięci, by ukończyć poprzednią operację” przy zewnętrznej aplikacji aparatu). Przycisk „Z galerii” – wybór gotowego zdjęcia; bez zgody na aparat / bez kamery – komunikat i przycisk „Aparat telefonu” (dotychczasowy tryb). Strumień kamery zatrzymywany od razu po zdjęciu lub zamknięciu.
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.
