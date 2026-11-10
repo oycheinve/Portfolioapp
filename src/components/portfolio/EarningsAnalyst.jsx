@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { FileText, Image as ImageIcon, Loader2, Paperclip, Sparkles, Trash2, X } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
@@ -7,6 +7,7 @@ import { compressImage } from '../../lib/receipts.js';
 import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, readProfiles } from '../../lib/companyProfiles.js';
+import { applyXtbSeed, seedAvailable } from '../../lib/earningsSeed.js';
 import { formatDate } from '../../lib/format.js';
 import { BetaBadge, Card, ChartTooltip } from '../ui.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
@@ -57,6 +58,21 @@ export default function EarningsAnalyst() {
   const [company, setCompany] = useState(() => companyKey(readEarnings()[0]?.analysis || {}) || Object.keys(readHistory())[0] || null);
   const [openKey, setOpenKey] = useState(() => readEarnings()[0]?.key || null);
   const fileRef = useRef(null);
+  // Dane startowe XTB (Q1–Q3 2026 vs konsensus): wczytywane automatycznie, gdy XTB jest w portfelu, inaczej – przyciskiem
+  const [seedOffer, setSeedOffer] = useState(seedAvailable);
+  const loadSeed = () => {
+    if (applyXtbSeed()) {
+      setList(readEarnings());
+      setHist(readHistory());
+      setCompany('XTB');
+      setOpenKey(readEarnings().find((e) => e.analysis.ticker === 'XTB')?.key || null);
+      actions.notify('Dodano dane startowe XTB: Q1–Q3 2026 vs konsensus', 'success');
+    }
+    setSeedOffer(false);
+  };
+  useEffect(() => {
+    if (seedOffer && (state.instruments || []).some((i) => String(i.ticker || '').toUpperCase() === 'XTB')) loadSeed();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const tickers = useMemo(() => [...new Set((state.instruments || []).map((i) => i.ticker || i.name).filter(Boolean))].sort(), [state.instruments]);
   const companies = useMemo(() => Object.entries(hist).map(([key, c]) => ({ key, ...c, count: Object.keys(c.periods || {}).length })).sort((a, b) => a.company.localeCompare(b.company, 'pl')), [hist]);
   const b64Used = files.reduce((n, f) => n + (f.data?.length || 0), 0);
@@ -213,6 +229,11 @@ export default function EarningsAnalyst() {
         <p className="text-[11px] text-stone-500 dark:text-stone-400">Analityk korzysta wyłącznie z Twoich materiałów (bez wyszukiwania w internecie). Duże raporty PDF są zamieniane na tekst w przeglądarce.</p>
       </form>
 
+      {seedOffer && (
+        <button type="button" onClick={loadSeed} className="mt-3 inline-flex items-center gap-1 rounded-full border border-dashed border-violet-300 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50 dark:border-violet-400/40 dark:text-violet-300 dark:hover:bg-violet-500/10">
+          + Dodaj dane startowe XTB (Q1–Q3 2026 vs konsensus)
+        </button>
+      )}
       {companies.length > 0 && (
         <div className="mt-4">
           <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Moje spółki</div>
@@ -398,7 +419,7 @@ function Analysis({ entry }) {
                     {/* Kolor odchylenia wg oceny (np. wyższe koszty = MISS), nie wg znaku */}
                     <td className="px-2 py-1.5 text-right">
                       <Verdict v={m.verdict} />
-                      <span className={`mt-0.5 block text-[11px] ${m.verdict === 'beat' ? 'text-emerald-700 dark:text-emerald-400' : m.verdict === 'miss' ? 'text-red-600 dark:text-red-400' : 'text-stone-500 dark:text-stone-400'}`}>{s === null ? '' : `${s >= 0 ? '+' : ''}${nf(s, 1)}%`}</span>
+                      <span className={`mt-0.5 block text-[11px] ${m.verdict === 'beat' ? 'text-emerald-700 dark:text-emerald-400' : m.verdict === 'miss' ? 'text-red-600 dark:text-red-400' : 'text-stone-500 dark:text-stone-400'}`}>{m.unit === '%' && ref !== null && ref !== undefined && m.actual !== null ? `${m.actual - ref >= 0 ? '+' : ''}${nf(m.actual - ref, 1)} p.p.` : s === null ? '' : `${s >= 0 ? '+' : ''}${nf(s, 1)}%`}</span>
                     </td>
                   </tr>
                 );
