@@ -333,11 +333,14 @@ const EXTRA_HISTORY = {
     P('Q4 2023/24', 141.8, null, 21.0, { Przychody: 141.8, 'EBITDA znormalizowana': 35.2, 'Zysk netto j.d.': 21.0 }),
   ],
   // Digital Network: Q3 2025 z raportu kwartalnego (przychody, EBIT, zysk netto j.d.; EBITDA = 9M 34,9 − H1 21,5),
-  // Q4 2025 = cały 2025 − 9M 2025 (przychody 112,92 − 56,74; EBITDA 66,91 − 34,9; EBIT 50,52 − 25,8; zysk j.d. 37,61 − 20,4),
-  // Q3–Q4 2024 – przychody (raport Q3 2025 i tabela DM BOŚ), EBIT Q3 2024 z dynamiki r/r
+  // Q4 2025 = cały 2025 − 9M 2025 (przychody 112,92 − 56,74; EBITDA 66,91 − 34,9; EBIT 50,52 − 25,8; zysk j.d. 37,61 − 20,4).
+  // 2024: Q1 – komunikat spółki; Q2 EBITDA = 9M 2024 (27,0) − Q1 − Q3; Q3 – raport kwartalny + tabela DM BOŚ (zysk j.d. po udziałach
+  // mniejszości 6,5); Q4 przychody i EBITDA – tabela DM BOŚ, zysk j.d. = 2024 (25,15) − 9M. Kontrola: Σ przychodów 74,7, Σ EBITDA 43,7 = rok 2024
   DIG: [
-    P('Q3 2024', 18.6, null, null, { Przychody: 18.6, EBIT: 8.3 }),
-    P('Q4 2024', 27.3, null, null, { Przychody: 27.3 }),
+    P('Q1 2024', 12.4, 6.0, 2.9, { Przychody: 12.4, EBITDA: 6.0, EBIT: 3.2, 'Zysk netto j.d.': 2.9, 'Marża EBITDA': [48.4, '%'], 'Marża netto': [23.4, '%'] }),
+    P('Q2 2024', 16.4, 9.7, 5.4, { Przychody: 16.4, EBITDA: 9.7, 'Zysk netto j.d.': 5.4, 'Marża EBITDA': [59.1, '%'], 'Marża netto': [32.9, '%'] }),
+    P('Q3 2024', 18.6, 11.4, 6.5, { Przychody: 18.6, EBITDA: 11.4, EBIT: 8.3, 'Zysk netto j.d.': 6.5, 'Marża EBITDA': [61.0, '%'], 'Marża netto': [34.9, '%'] }),
+    P('Q4 2024', 27.3, 16.7, 10.4, { Przychody: 27.3, EBITDA: 16.7, 'Zysk netto j.d.': 10.4, 'Marża EBITDA': [61.2, '%'], 'Marża netto': [38.1, '%'] }),
     P('Q3 2025', 20.9, 13.4, 8.3, { Przychody: 20.9, EBITDA: 13.4, EBIT: 10.5, 'Zysk netto j.d.': 8.3, 'Marża EBITDA': [64.2, '%'], 'Marża netto': [39.6, '%'] }),
     P('Q4 2025', 56.2, 32.0, 17.2, { Przychody: 56.2, EBITDA: 32.0, EBIT: 24.7, 'Zysk netto j.d.': 17.2, 'Marża EBITDA': [57.0, '%'], 'Marża netto': [30.6, '%'] }),
   ],
@@ -353,7 +356,7 @@ const EXTRA_HISTORY = {
   ],
 };
 // Wersja starszych okresów per spółka – podbicie dopisuje nowe okresy także u użytkowników, którzy mieli już poprzednią wersję
-const EXTRA_VERSION = { CBF: 2 };
+const EXTRA_VERSION = { CBF: 2, DIG: 2 };
 const extraFlag = (key) => `wealth-app-earnings-extra-${key.toLowerCase()}-v${EXTRA_VERSION[key] || 1}`;
 function recordExtras(key) {
   const seed = COMPANY_SEEDS.find((c) => c.key === key);
