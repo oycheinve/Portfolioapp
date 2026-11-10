@@ -578,3 +578,18 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - Bez wyszukiwania Google (brak limitów grounding/search): AI (`/api/news-summary`, tryb `earnings`, czysty JSON wg schematu) analizuje wyłącznie przekazane materiały – wklejony tekst, zrzuty ekranu, raporty PDF (do ~2,6 MB wysyłane jako PDF; większe – tekst wyciągnięty w przeglądarce przez pdf.js, ładowany dopiero przy pierwszym użyciu) i pliki tekstowe (.txt, .csv, .md, .json, .html). Dokumenty Word / Excel – zapisz jako PDF.
 - AI rozpoznaje branżę i wybiera najistotniejsze dla niej wskaźniki (np. bank: wynik odsetkowy, C/I, koszt ryzyka; handel: LFL, marża; deweloper: sprzedaż lokali), porównuje je z konsensusem (jeśli go wpiszesz) albo z tym samym okresem rok wcześniej; uwzględnia wskaźniki, gdzie „mniej = lepiej”.
 - Własna historia spółek: `wealth-app-earnings-history-v1` (per użytkownik, urządzenie + chmura) – liczby każdego okresu (przychody, zysk netto, EBITDA, EPS, wskaźniki branżowe) dopisywane z każdym raportem, bez rotacji; nowa wartość zastępuje starą, brak danych nie kasuje zapisanej. Historia trafia do AI przy kolejnej analizie (komentarz trendu). Wykresy: wyniki kwartalne oraz wybrany wskaźnik branżowy w czasie. „Moje spółki” – przełączanie między spółkami; pełne analizy (opis, ocena) – nadal 12 miesięcy, klucz [Spółka + Kwartał].
+
+## Minimalizm i mniej przewijania (pakiet UI)
+
+- **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.
+- **Zakupy**: jedna stała lista (tworzona automatycznie, lokalnie i w Supabase); bez tworzenia nowych list. Listy z wcześniejszych wersji – wybór w nagłówku (i usuwanie w trybie „Edytuj”), dane nie są tracone.
+- **Budżet miesięczny**: miesiąc ze strzałkami w nagłówku (dotknięcie nazwy otwiera wybór miesiąca), krótsze nagłówki tabeli (Plan / Wydano / Zostało), ciaśniejsze wiersze.
+- **Newsy**: pasek spółek i fraz zwijany przyciskiem „Spółki i frazy: N z M” (domyślnie zwinięty, stan zapamiętany).
+- **Zadania**: kompaktowy pasek konsekwencji (mały pierścień, jeden wiersz, mini-paski Dziś / Ten tydzień / Ten miesiąc).
+- **Surowce i Krypto**: zwarty pasek podsumowania i lista aktywów w wierszach – szczegóły po dotknięciu wiersza.
+- **Cele roczne**: kompaktowy nagłówek i zakładki kategorii (Wszystkie / Finansowe / Rozwój / Inne) z postępem; akcje edycji przy procencie.
+- **Dywidendy**: zakładki Podsumowanie / Kalendarz / Rejestr wypłat zamiast akordeonu; mniejsze kafle.
+- **Symulacje**: wybór kalkulatora kafelkami z ikonami; karty parametrów i tabele „rok po roku” zwijane (stan zapamiętany).
+- **Wykresy**: wybór wykresu i odświeżanie w jednym wierszu, podsumowanie okresu w jednym zwartym panelu.
+- **Portfel**: wartość i zysk w jednym wierszu nad tabelą, krótszy pasek narzędzi, objaśnienia kolumn zwinięte.
+- **Poduszka finansowa**: najpierw podsumowanie z trzema równorzędnymi składnikami (Obligacje, Konta oszczędnościowe, PPK – od 0 zł), potem zakładki Obligacje / Oszczędności / PPK / Cel / Więcej (wybór zapamiętany).
