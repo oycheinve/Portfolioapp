@@ -6,9 +6,13 @@ import { PREFS_CHANGED_EVENT } from './budget.js';
 import { companyKey, earningsKey, readEarnings, readHistory, recordHistory, saveEarnings, writeHistory } from './earnings.js';
 
 export const SEED_KEY = 'wealth-app-earnings-seed-v1';
-// Wersja danych startowych: 2 – pełne przychody Q3 2026 (623,3 vs kons. 631,1)
-export const SEED_VERSION = 2;
+// Wersja danych startowych: 2 – pełne przychody Q3 2026 (623,3 vs kons. 631,1); 3 – dane operacyjne z raportów XTB
+// (nowi klienci, aktywni klienci, depozyty netto, aktywa klientów)
+export const SEED_VERSION = 3;
 const SEED_MODEL = 'dane startowe (PAP Biznes)';
+// Dane operacyjne XTB (raporty bieżące / komunikaty spółki): nowi klienci i aktywni klienci w tys., depozyty netto w mln zł.
+// Brak konsensusu – ocena r/r (metricRef). Q2 2025 depozyty = 2025 (14 672,3) − Q1 − Q3 − Q4; Q2 2026 = 9M 2026 (17 410) − Q1 − Q3.
+const op = (name, actual, previous, unit) => ({ name, actual, consensus: null, previous, unit, lowerIsBetter: false, verdict: previous ? ((actual - previous) / Math.abs(previous) > 0.02 ? 'beat' : (actual - previous) / Math.abs(previous) < -0.02 ? 'miss' : 'inline') : 'unknown' });
 const base = { company: 'XTB', ticker: 'XTB', industry: 'Dom maklerski / fintech (broker online)', currency: 'PLN', unit: 'mln PLN', basis: 'consensus', outlook: '', risks: [] };
 const m = (name, actual, consensus, previous, unit = 'mln PLN') => {
   const s = consensus ? (actual - consensus) / Math.abs(consensus) : null;
@@ -24,13 +28,13 @@ export const XTB_SEED = [
     periodEnd: '2026-03-31',
     verdict: 'beat',
     headline: 'Q1 2026 powyżej konsensusu: przychody 1094,0 mln zł (+8,3% vs kons.), zysk netto 535,0 mln zł (+7,4%).',
-    metrics: [m('Przychody', 1094.0, 1010.1, 580.4), m('EBIT', 629.7, 581.9, 264.5), m('Zysk netto j.d.', 535.0, 498.0, 194.0), m('Marża EBIT', 57.6, 55.7, 45.62, '%'), m('Marża netto', 48.9, 47.8, 33.42, '%')],
+    metrics: [m('Przychody', 1094.0, 1010.1, 580.4), m('EBIT', 629.7, 581.9, 264.5), m('Zysk netto j.d.', 535.0, 498.0, 194.0), m('Marża EBIT', 57.6, 55.7, 45.62, '%'), m('Marża netto', 48.9, 47.8, 33.42, '%'), op('Nowi klienci', 370.0, 194.3, 'tys.'), op('Aktywni klienci', 1267.5, 735.4, 'tys.'), op('Depozyty netto', 5880.1, 4126.7, 'mln PLN')],
     quarters: [
       { quarter: 'Q1 2025', revenue: 580.4, netIncome: 194.0, ebitda: null, eps: null },
       { quarter: 'Q4 2025', revenue: 606.4, netIncome: 180.9, ebitda: null, eps: null },
       { quarter: 'Q1 2026', revenue: 1094.0, netIncome: 535.0, ebitda: 636.6, eps: null },
     ],
-    highlights: ['Przychody +88,5% r/r i +80,4% q/q', 'Zysk netto +175,8% r/r i +195,7% q/q', 'Marża EBIT 57,6% (+1,9 p.p. vs konsensus)', 'EBITDA 636,6 mln zł (wyliczona z EBITDA narastającej)'],
+    highlights: ['Przychody +88,5% r/r i +80,4% q/q', 'Zysk netto +175,8% r/r i +195,7% q/q', 'Marża EBIT 57,6% (+1,9 p.p. vs konsensus)', 'EBITDA 636,6 mln zł (wyliczona z EBITDA narastającej)', 'Rekordowy napływ: 370 tys. nowych klientów (+90,4% r/r), 1,27 mln aktywnych (+72,4%), baza 2,51 mln; depozyty netto 5,88 mld zł (+42,5% r/r)'],
   },
   {
     ...base,
@@ -38,13 +42,13 @@ export const XTB_SEED = [
     periodEnd: '2026-06-30',
     verdict: 'beat',
     headline: 'Q2 2026 wyraźnie powyżej konsensusu: zysk netto 492,2 mln zł (+29,6% vs kons.), przychody 992,6 mln zł (+14,9%).',
-    metrics: [m('Przychody', 992.6, 863.7, 580.5), m('EBITDA', 579.4, 473.6, 293.7), m('EBIT', 572.6, 452.0, 287.7), m('Zysk netto j.d.', 492.2, 379.9, 216.2), m('Marża EBITDA', 58.4, 53.9, 50.63, '%'), m('Marża EBIT', 57.7, 52.3, 49.58, '%'), m('Marża netto', 49.6, 43.9, 37.25, '%')],
+    metrics: [m('Przychody', 992.6, 863.7, 580.5), m('EBITDA', 579.4, 473.6, 293.7), m('EBIT', 572.6, 452.0, 287.7), m('Zysk netto j.d.', 492.2, 379.9, 216.2), m('Marża EBITDA', 58.4, 53.9, 50.63, '%'), m('Marża EBIT', 57.7, 52.3, 49.58, '%'), m('Marża netto', 49.6, 43.9, 37.25, '%'), op('Nowi klienci', 333.3, 167.3, 'tys.'), op('Aktywni klienci', 1490.0, 853.9, 'tys.'), op('Depozyty netto', 5879.9, 3114.2, 'mln PLN')],
     quarters: [
       { quarter: 'Q2 2025', revenue: 580.5, netIncome: 216.2, ebitda: 293.7, eps: null },
       { quarter: 'Q1 2026', revenue: 1094.0, netIncome: 535.0, ebitda: 636.6, eps: null },
       { quarter: 'Q2 2026', revenue: 992.6, netIncome: 492.2, ebitda: 579.4, eps: null },
     ],
-    highlights: ['Przychody +71,0% r/r, −9,3% q/q', 'Zysk netto +127,7% r/r, −8,0% q/q', 'Marża netto 49,6% (+5,6 p.p. vs konsensus)', 'Narastająco H1 2026: przychody 2086,6 mln zł (+79,8% r/r), zysk netto 1027,2 mln zł (+150,5%)'],
+    highlights: ['Przychody +71,0% r/r, −9,3% q/q', 'Zysk netto +127,7% r/r, −8,0% q/q', 'Marża netto 49,6% (+5,6 p.p. vs konsensus)', 'Narastająco H1 2026: przychody 2086,6 mln zł (+79,8% r/r), zysk netto 1027,2 mln zł (+150,5%)', '333 tys. nowych klientów (703 tys. w H1), 1,49 mln aktywnych (+74,5% r/r), baza 2,83 mln (+66,4%); aktywa klientów 50,3 mld zł'],
   },
   {
     ...base,
@@ -52,13 +56,13 @@ export const XTB_SEED = [
     periodEnd: '2026-09-30',
     verdict: 'beat',
     headline: 'Q3 2026: zysk netto 213,7 mln zł (+15,3% vs kons.) i EBITDA 233,5 mln zł (+16,1%) powyżej konsensusu przy przychodach 623,3 mln zł nieco poniżej (−1,2%); spadek q/q po rekordowym H1.',
-    metrics: [m('Przychody', 623.3, 631.1, 375.7), m('EBITDA', 233.5, 201.2, 59.7), m('EBIT', 225.7, 198.5, 53.2), m('Zysk netto j.d.', 213.7, 185.4, 53.2), m('Marża EBITDA', 37.5, 31.8, 15.93, '%'), m('Marża EBIT', 36.2, 31.4, 14.14, '%'), m('Marża netto', 34.3, 29.3, 14.18, '%')],
+    metrics: [m('Przychody', 623.3, 631.1, 375.7), m('EBITDA', 233.5, 201.2, 59.7), m('EBIT', 225.7, 198.5, 53.2), m('Zysk netto j.d.', 213.7, 185.4, 53.2), m('Marża EBITDA', 37.5, 31.8, 15.93, '%'), m('Marża EBIT', 36.2, 31.4, 14.14, '%'), m('Marża netto', 34.3, 29.3, 14.18, '%'), op('Nowi klienci', 335.0, 221.8, 'tys.'), op('Aktywni klienci', 1570.0, 920.0, 'tys.'), op('Depozyty netto', 5650.0, 3233.1, 'mln PLN'), op('Aktywa klientów', 56.1, null, 'mld PLN')],
     quarters: [
       { quarter: 'Q3 2025', revenue: 375.7, netIncome: 53.2, ebitda: 59.7, eps: null },
       { quarter: 'Q2 2026', revenue: 992.6, netIncome: 492.2, ebitda: 579.4, eps: null },
       { quarter: 'Q3 2026', revenue: 623.3, netIncome: 213.7, ebitda: 233.5, eps: null },
     ],
-    highlights: ['Przychody 623,3 mln zł: +65,9% r/r, −37,2% q/q, −1,2% vs konsensus 631,1 mln zł', 'EBITDA +291,0% r/r, −59,7% q/q', 'Zysk netto +301,5% r/r, −56,6% q/q', 'Narastająco 2026: przychody 2709,9 mln zł (+76,4% r/r), EBITDA 1449,5 mln zł (+132,4%), zysk netto 1240,9 mln zł (+167,8%)'],
+    highlights: ['Przychody 623,3 mln zł: +65,9% r/r, −37,2% q/q, −1,2% vs konsensus 631,1 mln zł', 'EBITDA +291,0% r/r, −59,7% q/q', 'Zysk netto +301,5% r/r, −56,6% q/q', 'Narastająco 2026: przychody 2709,9 mln zł (+76,4% r/r), EBITDA 1449,5 mln zł (+132,4%), zysk netto 1240,9 mln zł (+167,8%)', 'Ponad 335 tys. nowych klientów (ponad 1 mln od początku 2026), ok. 1,57 mln aktywnych; depozyty netto 5,65 mld zł (+74,8% r/r), 17,4 mld zł po 9M; aktywa klientów 56,1 mld zł', 'CFD na towary – 70,8% wyniku z operacji na instrumentach finansowych (48,5% rok wcześniej)'],
   },
 ];
 
@@ -318,8 +322,10 @@ const EXTRA_HISTORY = {
   XTB: [
     P('Q1 2024', 556.0, 355.7, 302.8, { Przychody: 556.0, EBIT: 351.0, 'Zysk netto j.d.': 302.8, 'Marża EBIT': [63.1, '%'], 'Marża netto': [54.5, '%'] }),
     P('Q2 2024', 382.1, null, 160.3, { Przychody: 382.1, EBIT: 176.7, 'Zysk netto j.d.': 160.3, 'Marża EBIT': [46.2, '%'], 'Marża netto': [42.0, '%'] }),
-    P('Q3 2024', 470.2, null, 203.8, { Przychody: 470.2, EBIT: 261.7, 'Zysk netto j.d.': 203.8, 'Marża EBIT': [55.7, '%'], 'Marża netto': [43.3, '%'] }),
+    P('Q3 2024', 470.2, null, 203.8, { Przychody: 470.2, EBIT: 261.7, 'Zysk netto j.d.': 203.8, 'Marża EBIT': [55.7, '%'], 'Marża netto': [43.3, '%'], 'Nowi klienci': [108.1, 'tys.'], 'Depozyty netto': 2266.4 }),
     P('Q4 2024', 465.4, 205.8, 192.6, { Przychody: 465.4, EBITDA: 205.8, EBIT: 200.7, 'Zysk netto j.d.': 192.6, 'Marża EBIT': [43.1, '%'], 'Marża netto': [41.4, '%'] }),
+    // Q4 2025 – raport bieżący 2/2026 (dane operacyjne); przychody / zysk jak w danych startowych
+    P('Q4 2025', 606.4, null, 180.9, { 'Nowi klienci': [280.9, 'tys.'], 'Aktywni klienci': [1063.8, 'tys.'], 'Depozyty netto': 4198.3 }),
   ],
   LPP: [
     P('Q1 2024', 4306, 795, 276, { Przychody: 4306, EBITDA: 795, EBIT: 411, 'Zysk netto j.d.': 276, 'Marża EBITDA': [18.5, '%'], 'Marża EBIT': [9.5, '%'], 'Marża netto': [6.4, '%'] }),
@@ -356,7 +362,7 @@ const EXTRA_HISTORY = {
   ],
 };
 // Wersja starszych okresów per spółka – podbicie dopisuje nowe okresy także u użytkowników, którzy mieli już poprzednią wersję
-const EXTRA_VERSION = { CBF: 2, DIG: 2 };
+const EXTRA_VERSION = { CBF: 2, DIG: 2, XTB: 2 };
 const extraFlag = (key) => `wealth-app-earnings-extra-${key.toLowerCase()}-v${EXTRA_VERSION[key] || 1}`;
 function recordExtras(key) {
   const seed = COMPANY_SEEDS.find((c) => c.key === key);
@@ -489,16 +495,10 @@ export function upgradeSeed(now = Date.now()) {
   } catch {
     return false;
   }
-  const list = readEarnings();
-  const q3 = XTB_SEED.find((a) => a.quarter === 'Q3 2026');
-  const cur = list.find((e) => e.key === earningsKey(q3));
-  let changed = false;
-  if (!cur || cur.model === SEED_MODEL) {
-    saveEarnings({ analysis: q3, sources: [], grounded: false, model: SEED_MODEL }, now);
-    changed = true;
-  }
+  // v3: wszystkie kwartały XTB z danymi operacyjnymi; Twoje analizy zostają, a ich historia dostaje tylko brakujące liczby
+  preserveOwn('XTB', () => saveSeedAnalyses('XTB', XTB_SEED, now));
   setVersion();
-  return changed;
+  return true;
 }
 // Czy proponować / wczytać dane startowe: nie wczytane wcześniej i brak historii XTB w bazie użytkownika
 export const seedAvailable = () => !done();
