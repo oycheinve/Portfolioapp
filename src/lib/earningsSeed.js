@@ -1,11 +1,14 @@
 // Dane startowe Analityka wyników: XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
 // użytkownika). Wartości sprzed roku i z Q4 2025 wyliczone z podanych zmian r/r i q/q, EBITDA Q1 2026 z narastającej
-// EBITDA (YTD), przychody Q3 2026 i Q3 2025 – z podanych marż (tabela Q3 nie zawiera wiersza przychodów).
+// EBITDA (YTD). Przychody Q3 2026 – z pełnej tabeli (wersja 2 danych; wcześniej szacunek z marż ≈ 623 mln zł).
 // Dopisywane do bazy użytkownika jednorazowo (flaga), dalej historia buduje się z kolejnych analiz.
 import { PREFS_CHANGED_EVENT } from './budget.js';
-import { readHistory, saveEarnings } from './earnings.js';
+import { earningsKey, readEarnings, readHistory, saveEarnings } from './earnings.js';
 
 export const SEED_KEY = 'wealth-app-earnings-seed-v1';
+// Wersja danych startowych: 2 – pełne przychody Q3 2026 (623,3 vs kons. 631,1)
+export const SEED_VERSION = 2;
+const SEED_MODEL = 'dane startowe (PAP Biznes)';
 const base = { company: 'XTB', ticker: 'XTB', industry: 'Dom maklerski / fintech (broker online)', currency: 'PLN', unit: 'mln PLN', basis: 'consensus', outlook: '', risks: [] };
 const m = (name, actual, consensus, previous, unit = 'mln PLN') => {
   const s = consensus ? (actual - consensus) / Math.abs(consensus) : null;
@@ -48,14 +51,14 @@ export const XTB_SEED = [
     quarter: 'Q3 2026',
     periodEnd: '2026-09-30',
     verdict: 'beat',
-    headline: 'Q3 2026 powyżej konsensusu: zysk netto 213,7 mln zł (+15,3% vs kons.), EBITDA 233,5 mln zł (+16,1%); spadek q/q po rekordowym H1.',
-    metrics: [m('EBITDA', 233.5, 201.2, 59.7), m('EBIT', 225.7, 198.5, 53.2), m('Zysk netto j.d.', 213.7, 185.4, 53.2), m('Marża EBITDA', 37.5, 31.8, 15.93, '%'), m('Marża EBIT', 36.2, 31.4, 14.14, '%'), m('Marża netto', 34.3, 29.3, 14.18, '%')],
+    headline: 'Q3 2026: zysk netto 213,7 mln zł (+15,3% vs kons.) i EBITDA 233,5 mln zł (+16,1%) powyżej konsensusu przy przychodach 623,3 mln zł nieco poniżej (−1,2%); spadek q/q po rekordowym H1.',
+    metrics: [m('Przychody', 623.3, 631.1, 375.7), m('EBITDA', 233.5, 201.2, 59.7), m('EBIT', 225.7, 198.5, 53.2), m('Zysk netto j.d.', 213.7, 185.4, 53.2), m('Marża EBITDA', 37.5, 31.8, 15.93, '%'), m('Marża EBIT', 36.2, 31.4, 14.14, '%'), m('Marża netto', 34.3, 29.3, 14.18, '%')],
     quarters: [
-      { quarter: 'Q3 2025', revenue: 375.4, netIncome: 53.2, ebitda: 59.7, eps: null },
+      { quarter: 'Q3 2025', revenue: 375.7, netIncome: 53.2, ebitda: 59.7, eps: null },
       { quarter: 'Q2 2026', revenue: 992.6, netIncome: 492.2, ebitda: 579.4, eps: null },
-      { quarter: 'Q3 2026', revenue: 623.0, netIncome: 213.7, ebitda: 233.5, eps: null },
+      { quarter: 'Q3 2026', revenue: 623.3, netIncome: 213.7, ebitda: 233.5, eps: null },
     ],
-    highlights: ['EBITDA +291,0% r/r, −59,7% q/q', 'Zysk netto +301,5% r/r, −56,6% q/q', 'Narastająco 2026: EBITDA 1449,5 mln zł (+132,4% r/r), zysk netto 1240,9 mln zł (+167,8%)', 'Przychody ok. 623 mln zł – wyliczone z marż (brak wiersza w tabeli)'],
+    highlights: ['Przychody 623,3 mln zł: +65,9% r/r, −37,2% q/q, −1,2% vs konsensus 631,1 mln zł', 'EBITDA +291,0% r/r, −59,7% q/q', 'Zysk netto +301,5% r/r, −56,6% q/q', 'Narastająco 2026: przychody 2709,9 mln zł (+76,4% r/r), EBITDA 1449,5 mln zł (+132,4%), zysk netto 1240,9 mln zł (+167,8%)'],
   },
 ];
 
@@ -66,11 +69,40 @@ const done = () => {
     return true;
   }
 };
+const VERSION_KEY = 'wealth-app-earnings-seed-version';
+const setVersion = () => {
+  try {
+    localStorage.setItem(VERSION_KEY, String(SEED_VERSION));
+    window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: VERSION_KEY } }));
+  } catch {
+    // brak localStorage
+  }
+};
+// Aktualizacja wcześniej wczytanych danych startowych do nowej wersji – tylko wpisy, których użytkownik nie zastąpił
+// własną analizą (analiza z danych startowych ma model SEED_MODEL); nowa wartość zastępuje szacunek w historii
+export function upgradeSeed(now = Date.now()) {
+  try {
+    if (!localStorage.getItem(SEED_KEY) || Number(localStorage.getItem(VERSION_KEY) || 1) >= SEED_VERSION) return false;
+  } catch {
+    return false;
+  }
+  const list = readEarnings();
+  const q3 = XTB_SEED.find((a) => a.quarter === 'Q3 2026');
+  const cur = list.find((e) => e.key === earningsKey(q3));
+  let changed = false;
+  if (!cur || cur.model === SEED_MODEL) {
+    saveEarnings({ analysis: q3, sources: [], grounded: false, model: SEED_MODEL }, now);
+    changed = true;
+  }
+  setVersion();
+  return changed;
+}
 // Czy proponować / wczytać dane startowe: nie wczytane wcześniej i brak historii XTB w bazie użytkownika
 export const seedAvailable = () => !done() && !readHistory().XTB;
 export function applyXtbSeed(now = Date.now()) {
   if (!seedAvailable()) return false;
-  XTB_SEED.forEach((analysis, i) => saveEarnings({ analysis, sources: [], grounded: false, model: 'dane startowe (PAP Biznes)' }, now - (XTB_SEED.length - i) * 1000));
+  XTB_SEED.forEach((analysis, i) => saveEarnings({ analysis, sources: [], grounded: false, model: SEED_MODEL }, now - (XTB_SEED.length - i) * 1000));
+  setVersion();
   try {
     localStorage.setItem(SEED_KEY, new Date(now).toISOString());
     window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: SEED_KEY } }));

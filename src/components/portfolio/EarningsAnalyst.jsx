@@ -7,7 +7,7 @@ import { compressImage } from '../../lib/receipts.js';
 import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, readEarnings, readHistory, saveEarnings, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, readProfiles } from '../../lib/companyProfiles.js';
-import { applyXtbSeed, seedAvailable } from '../../lib/earningsSeed.js';
+import { applyXtbSeed, seedAvailable, upgradeSeed } from '../../lib/earningsSeed.js';
 import { formatDate } from '../../lib/format.js';
 import { BetaBadge, Card, ChartTooltip } from '../ui.jsx';
 import { Legend } from '../charts/chartUtils.jsx';
@@ -71,6 +71,11 @@ export default function EarningsAnalyst() {
     setSeedOffer(false);
   };
   useEffect(() => {
+    // Wcześniej wczytane dane startowe → aktualizacja do nowej wersji (np. pełne przychody Q3 2026)
+    if (upgradeSeed()) {
+      setList(readEarnings());
+      setHist(readHistory());
+    }
     if (seedOffer && (state.instruments || []).some((i) => String(i.ticker || '').toUpperCase() === 'XTB')) loadSeed();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const tickers = useMemo(() => [...new Set((state.instruments || []).map((i) => i.ticker || i.name).filter(Boolean))].sort(), [state.instruments]);
