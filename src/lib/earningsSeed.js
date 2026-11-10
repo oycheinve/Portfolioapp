@@ -1,4 +1,4 @@
-// Dane startowe Analityka wyników (XTB, LPP, Synektik, cyber_Folks, Grupa Kęty – niżej) + starsze okresy (EXTRA_HISTORY). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
+// Dane startowe Analityka wyników (XTB, LPP, Synektik, cyber_Folks, Grupa Kęty, Digital Network – niżej) + starsze okresy (EXTRA_HISTORY). XTB, Q1–Q3 2026 – wyniki vs konsensus PAP Biznes (tabele przekazane przez
 // użytkownika). Wartości sprzed roku i z Q4 2025 wyliczone z podanych zmian r/r i q/q, EBITDA Q1 2026 z narastającej
 // EBITDA (YTD). Przychody Q3 2026 – z pełnej tabeli (wersja 2 danych; wcześniej szacunek z marż ≈ 623 mln zł).
 // Dopisywane do bazy użytkownika jednorazowo (flaga), dalej historia buduje się z kolejnych analiz.
@@ -260,6 +260,58 @@ export const KTY_SEED = [
   },
 ];
 
+// Digital Network (DIG): Q1–Q2 2026 z raportów (komunikaty spółki), Q3 2026 – wstępne przychody (pełny raport 30.11.2026 –
+// dodaj go zwykłą analizą, nadpisze ten wpis). Brak konsensusu PAP dla spółki – ocena r/r. Q1 2025 EBITDA / EBIT z dynamik
+// r/r, Q2 2025 zysk netto z wyników H1 2025 (H1 2026 / 1,62), Q4 2025 przychody = 2025 (112,92) − 9M 2025 (56,7).
+const digBase = { company: 'Digital Network', ticker: 'DIG', industry: 'Reklama zewnętrzna DOOH (cyfrowe nośniki) i Premium Outdoor (Braughman Group)', currency: 'PLN', unit: 'mln PLN', basis: 'yoy', verdict: 'unknown' };
+export const DIG_SEED = [
+  {
+    ...digBase,
+    quarter: 'Q1 2026',
+    periodEnd: '2026-03-31',
+    headline: 'Q1 2026: przychody 42,9 mln zł (+179% r/r), EBITDA 22,6 mln zł (+165%), zysk netto j.d. 6,7 mln zł (+43%) – efekt przejęcia Braughman (2 miesiące konsolidacji).',
+    metrics: [yoy('Przychody', 42.9, 15.4), yoy('EBITDA', 22.6, 8.5), yoy('EBIT', 13.0, 5.5), yoy('Zysk netto j.d.', 6.7, 4.7), yoy('Marża EBITDA', 52.7, 55.2, '%'), yoy('Marża netto', 15.6, 30.5, '%')],
+    quarters: [
+      { quarter: 'Q1 2025', revenue: 15.4, netIncome: 4.7, ebitda: 8.5, eps: null },
+      { quarter: 'Q4 2025', revenue: 56.2, netIncome: null, ebitda: null, eps: null },
+      { quarter: 'Q1 2026', revenue: 42.9, netIncome: 6.7, ebitda: 22.6, eps: null },
+    ],
+    highlights: ['Konsolidacja Premium Outdoor (Braughman) – niższa marża segmentu i wyższe koszty finansowe obniżyły rentowność r/r', 'Cały 2025: przychody 112,9 mln zł (+51%), EBITDA 66,9 mln zł (+53%), EBIT 50,5 mln zł (+59%), zysk netto j.d. 37,6 mln zł (+50%)'],
+    risks: ['Marża netto 15,6% wobec 30,5% rok wcześniej (koszty finansowania przejęcia)'],
+    outlook: 'Zarząd zapowiadał ambitne plany na 2026 r. i istotny wzrost wyników w 2027 r.',
+  },
+  {
+    ...digBase,
+    quarter: 'Q2 2026',
+    periodEnd: '2026-06-30',
+    headline: 'Q2 2026: przychody 60,8 mln zł (+197% r/r), EBITDA 38,2 mln zł (+196%), zysk netto j.d. 13,0 mln zł (+73%).',
+    metrics: [yoy('Przychody', 60.8, 20.5), yoy('EBITDA', 38.2, 12.9), yoy('Zysk netto j.d.', 13.0, 7.5), yoy('Marża EBITDA', 62.9, 63.1, '%'), yoy('Marża netto', 21.4, 36.6, '%')],
+    quarters: [
+      { quarter: 'Q2 2025', revenue: 20.5, netIncome: 7.5, ebitda: 12.9, eps: null },
+      { quarter: 'Q1 2026', revenue: 42.9, netIncome: 6.7, ebitda: 22.6, eps: null },
+      { quarter: 'Q2 2026', revenue: 60.8, netIncome: 13.0, ebitda: 38.2, eps: null },
+    ],
+    highlights: ['H1 2026: przychody 103,7 mln zł (+189% r/r), EBITDA 60,9 mln zł (+183%), zysk netto j.d. 19,7 mln zł (+62%)', 'Marża EBITDA utrzymana ok. 63% mimo konsolidacji Braughman'],
+    risks: ['Zysk netto rośnie wolniej niż EBITDA – wyższe koszty finansowe i amortyzacja po przejęciu'],
+    outlook: '',
+  },
+  {
+    ...digBase,
+    quarter: 'Q3 2026',
+    periodEnd: '2026-09-30',
+    headline: 'Q3 2026 (wstępnie): przychody 53,0 mln zł (+154% r/r); pełne wyniki w raporcie 30.11.2026.',
+    metrics: [yoy('Przychody', 53.0, 20.9)],
+    quarters: [
+      { quarter: 'Q3 2025', revenue: 20.9, netIncome: null, ebitda: null, eps: null },
+      { quarter: 'Q2 2026', revenue: 60.8, netIncome: 13.0, ebitda: 38.2, eps: null },
+      { quarter: 'Q3 2026', revenue: 53.0, netIncome: null, ebitda: null, eps: null },
+    ],
+    highlights: ['Narastająco 9M 2026: przychody 156,7 mln zł (+176% r/r)', 'Zarząd podtrzymuje zapowiedzi na cały 2026 r. mimo niższej dynamiki q/q', 'Wstępny szacunek przychodów – EBITDA i zysk netto po publikacji raportu'],
+    risks: ['Przychody −12,8% q/q po rekordowym Q2'],
+    outlook: '',
+  },
+];
+
 // Starsze okresy (tylko liczby w historii, bez pełnych analiz) – źródła publiczne: komunikaty spółek i tabele PAP Biznes
 const P = (quarter, revenue, ebitda, netIncome, metrics) => ({ quarter, revenue, ebitda, netIncome, metrics });
 const EXTRA_HISTORY = {
@@ -333,6 +385,7 @@ export const COMPANY_SEEDS = [
   { key: 'SNT', label: 'Synektik (Q1–Q3 2025/26 vs konsensus)', flag: 'wealth-app-earnings-seed-snt-v1', data: SNT_SEED },
   { key: 'CBF', label: 'cyber_Folks (Q1–Q2 2026, raporty kwartalne)', flag: 'wealth-app-earnings-seed-cbf-v1', data: CBF_SEED },
   { key: 'KTY', label: 'Grupa Kęty (Q1–Q3 2026 vs konsensus)', flag: 'wealth-app-earnings-seed-kty-v1', data: KTY_SEED },
+  { key: 'DIG', label: 'Digital Network (Q1–Q3 2026, raporty spółki)', flag: 'wealth-app-earnings-seed-dig-v1', data: DIG_SEED },
 ];
 const flagSet = (flag) => {
   try {
