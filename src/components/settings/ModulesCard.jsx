@@ -1,4 +1,4 @@
-import { LayoutGrid, ScanLine } from 'lucide-react';
+import { Layers, LayoutGrid, ScanLine } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { TOGGLEABLE_MODULES, navLabel } from '../Layout.jsx';
 import { BetaBadge, Card, Toggle } from '../ui.jsx';
@@ -33,6 +33,14 @@ export default function ModulesCard() {
           })}
         </div>
         <p className="mt-3 text-[11px] text-stone-500 dark:text-stone-400">Pulpit i Ustawienia są zawsze widoczne. Ukrycie modułu nie usuwa jego danych – po ponownym włączeniu wszystko wraca.</p>
+      </Card>
+      <Card title="Porządkowanie list" subtitle="Zakupy i Zadania" icon={Layers}>
+        <Toggle
+          checked={state.settings.groupByCategory !== false}
+          onChange={(v) => actions.updateSettings({ groupByCategory: v })}
+          label="Grupuj elementy według kategorii (AI i pamięć)"
+          description={state.settings.groupByCategory !== false ? 'Produkty w Zakupach i zadania w Zadaniach są dzielone na sekcje kategorii; nowe pozycje rozpoznaje pamięć i AI.' : 'Wyłączone – zwykłe listy bez sekcji (kategorie i pamięć zostają zapisane).'}
+        />
       </Card>
       <Card title={<>Skanowanie paragonów<BetaBadge /></>} subtitle="Podgląd przed zapisem" icon={ScanLine}>
         <Toggle

@@ -71,7 +71,11 @@ export function ReceiptScanner({ rows, onSave, month }) {
         className="inline-flex h-8 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-200"
       >
         {busy ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />} {busy || 'Skanuj paragon'}
-        {!busy && <BetaBadge />}
+        {!busy && (
+          <span className="hidden sm:inline">
+            <BetaBadge />
+          </span>
+        )}
       </button>
       {draft && (
         <ReceiptReview

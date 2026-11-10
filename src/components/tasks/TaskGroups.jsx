@@ -1,35 +1,21 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Pencil, Sparkles } from 'lucide-react';
-import { TASK_CATEGORIES, TASK_GROUP_KEY, groupTasks, normTask, readTaskCats, rememberTask, resolveTaskLocal, taskCategoryOf, writeTaskCats } from '../../lib/taskCategories.js';
+import { TASK_CATEGORIES, groupTasks, normTask, readTaskCats, rememberTask, resolveTaskLocal, taskCategoryOf, writeTaskCats } from '../../lib/taskCategories.js';
 import { requestTaskCategories } from '../../lib/newsAi.js';
-import { BetaBadge } from '../ui.jsx';
+import { useApp } from '../../state/AppContext.jsx';
 
-const readGrouped = () => {
-  try {
-    return localStorage.getItem(TASK_GROUP_KEY) !== '0'; // domyślnie włączone
-  } catch {
-    return true;
-  }
-};
 
 // Stan kategorii zadań dla panelu: pamięć, włączenie grupowania (preferencja per użytkownik), tryb zmiany kategorii
 // i AI w tle dla zadań nieznanych lokalnie (po krótkiej przerwie, paczką; nieudana próba – ponownie przy kolejnym otwarciu)
 export function useTaskCategories(titles) {
+  const { state } = useApp();
+  // Grupowanie – globalny przełącznik w Ustawieniach (Zakupy i Zadania), domyślnie włączony
+  const grouped = state.settings.groupByCategory !== false;
   const [mem, setMem] = useState(readTaskCats);
-  const [grouped, setGroupedState] = useState(readGrouped);
-  const [editing, setEditing] = useState(false);
+  const [editingState, setEditing] = useState(false);
+  const editing = grouped && editingState;
   const [status, setStatus] = useState('idle'); // idle | working | error
   const attempted = useRef(new Set());
-  const setGrouped = (v) => {
-    setGroupedState(v);
-    if (!v) setEditing(false);
-    try {
-      localStorage.setItem(TASK_GROUP_KEY, v ? '1' : '0');
-      window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key: TASK_GROUP_KEY } }));
-    } catch {
-      // brak localStorage
-    }
-  };
   const key = titles.join('\n');
   const pending = useMemo(() => {
     const seen = new Set();
@@ -67,18 +53,14 @@ export function useTaskCategories(titles) {
       writeTaskCats(next);
       return next;
     });
-  return { mem, grouped, setGrouped, editing, setEditing, status, setCategory };
+  return { mem, grouped, editing, setEditing, status, setCategory };
 }
 
-// Pasek nad listami: grupowanie wg kategorii (domyślnie włączone) i tryb zmiany kategorii
+// Pasek nad listami (przy włączonym grupowaniu w Ustawieniach): status AI i tryb zmiany kategorii
 export function TaskGroupBar({ cats }) {
+  if (!cats.grouped) return null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-      <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-300">
-        <input type="checkbox" checked={cats.grouped} onChange={(e) => cats.setGrouped(e.target.checked)} className="h-4 w-4 accent-blue-600" aria-label="Grupuj zadania według kategorii" />
-        Grupuj wg kategorii
-        <BetaBadge />
-      </label>
+    <div className="flex flex-wrap items-center justify-end gap-2 px-1">
       {cats.grouped && (
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1 text-[11px] text-stone-400" aria-live="polite">

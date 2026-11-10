@@ -25,6 +25,7 @@ const searchName = (inst) =>
     .replace(/\s+(S\.?A\.?|SA|ASA|AG|NV|PLC|Inc\.?|Ltd\.?)$/i, '')
     .trim();
 
+const TOPICS_OPEN_KEY = 'fintrack-news-topics-open';
 // Newsy: pigułki wielokrotnego wyboru (spółki / ETF-y z portfela + własne frazy), wspólna lista artykułów
 // zaznaczonych tematów od najnowszych; wybór zapamiętany (lista odznaczonych – nowe tematy domyślnie włączone)
 export default function NewsView() {
@@ -51,6 +52,21 @@ export default function NewsView() {
     writeOff([...next]);
   };
   const selected = useMemo(() => topics.filter((t) => !off.has(t.id)), [topics, off]);
+  const [topicsOpen, setTopicsOpenState] = useState(() => {
+    try {
+      return localStorage.getItem(TOPICS_OPEN_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setTopicsOpen = (v) => {
+    setTopicsOpenState(v);
+    try {
+      localStorage.setItem(TOPICS_OPEN_KEY, v ? '1' : '0');
+    } catch {
+      // brak localStorage
+    }
+  };
   const toggle = (id) => {
     const next = new Set(off);
     if (next.has(id)) next.delete(id);
@@ -189,16 +205,18 @@ export default function NewsView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <section className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900">
-        <div className="mb-3 flex items-start gap-3">
+      <section className="min-w-0 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-white/5 dark:text-stone-300">
             <Newspaper size={18} />
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold">Newsy</h2>
-            <p className="truncate text-xs text-stone-500 dark:text-stone-400">
-              Zaznaczone: {selected.length} z {topics.length} · Google News i Yahoo Finance
-            </p>
+            {/* Pasek spółek zwijany – domyślnie ukryty, wybór zapamiętany */}
+            <button type="button" onClick={() => setTopicsOpen(!topicsOpen)} aria-expanded={topicsOpen} aria-controls="news-topics" className="inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100">
+              Spółki i frazy: {selected.length} z {topics.length}
+              <ChevronDown size={14} className={`shrink-0 transition-transform ${topicsOpen ? 'rotate-180' : ''}`} />
+            </button>
           </div>
           <button
             type="button"
@@ -212,6 +230,8 @@ export default function NewsView() {
             <span className="hidden sm:inline">Odśwież</span>
           </button>
         </div>
+        {topicsOpen && (
+        <div id="news-topics" className="mt-3">
         <div className="mb-2 flex flex-wrap items-center gap-1">
           <button type="button" className={smallBtn} onClick={selectAll} disabled={!off.size || !topics.length}>
             Zaznacz wszystkie
@@ -287,6 +307,9 @@ export default function NewsView() {
           </form>
         )}
         {selected.length > MAX_TOPICS && <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">Pobierane są wiadomości dla pierwszych {MAX_TOPICS} zaznaczonych tematów – odznacz część, aby zobaczyć pozostałe.</p>}
+        <p className="mt-2 text-[11px] text-stone-400">Źródła: Google News i Yahoo Finance</p>
+        </div>
+        )}
       </section>
 
       <section aria-label="Artykuły" aria-busy={loading} className="space-y-2.5">

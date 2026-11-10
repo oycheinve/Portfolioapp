@@ -143,58 +143,52 @@ function ScoreRing({ value, loading }) {
   const r = 34;
   const c = 2 * Math.PI * r;
   return (
-    <div className="relative h-24 w-24 shrink-0">
+    <div className="relative h-12 w-12 shrink-0">
       <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90" aria-hidden="true">
-        <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7" className="stroke-stone-100 dark:stroke-white/[0.07]" />
-        {value !== null && <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7" strokeLinecap="round" stroke={ringTone(value)} strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(1, value))} className="transition-[stroke-dashoffset] duration-700 ease-out" />}
+        <circle cx="40" cy="40" r={r} fill="none" strokeWidth="8" className="stroke-stone-100 dark:stroke-white/[0.07]" />
+        {value !== null && <circle cx="40" cy="40" r={r} fill="none" strokeWidth="8" strokeLinecap="round" stroke={ringTone(value)} strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(1, value))} className="transition-[stroke-dashoffset] duration-700 ease-out" />}
       </svg>
-      <span className={`absolute inset-0 flex items-center justify-center text-2xl font-bold tracking-tight tabular ${scoreTone(value)}`}>{loading ? '…' : fmtPct(value)}</span>
+      <span className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold tabular ${scoreTone(value)}`}>{loading ? '…' : fmtPct(value)}</span>
     </div>
   );
 }
 
-// Wskaźnik konsekwencji: wykonane / wymagane do tej pory w bieżących okresach (dziś, ten tydzień, ten miesiąc)
-// oraz skuteczność w okresach zakończonych w ostatnich 30 dniach
+// Wskaźnik konsekwencji (kompaktowy pasek): wykonane / wymagane do tej pory w bieżących okresach (dziś, ten tydzień,
+// ten miesiąc) oraz skuteczność w okresach zakończonych w ostatnich 30 dniach
 function ConsistencyCard({ data }) {
   const score = useMemo(() => (data ? consistencyScore(data) : null), [data]);
   const main = score?.current.pct ?? null;
   return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-gradient-to-br dark:from-neutral-900 dark:to-neutral-950" aria-label="Konsekwencja">
-      <div className="flex items-center gap-4 p-4 sm:gap-6 sm:p-5">
-        <ScoreRing value={main} loading={!score} />
-        <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-stone-500 uppercase dark:text-stone-400">
-            <Gauge size={13} /> Konsekwencja
-          </h2>
-          <p className="mt-0.5 text-sm font-medium text-stone-800 dark:text-stone-100">{score ? (score.current.total ? `Wykonane ${score.current.done} z ${score.current.total}` : 'Brak wymaganych zadań') : 'Liczenie…'}</p>
-          <p className="text-[11px] text-stone-500 dark:text-stone-400">{score?.current.total ? 'wymaganych do tej pory w bieżącym okresie' : 'Dodaj zadania, aby zobaczyć skuteczność'}</p>
+    <section className="flex min-w-0 items-center gap-3 rounded-2xl border border-stone-200 bg-white px-3 py-2 shadow-sm dark:border-white/10 dark:bg-neutral-900" aria-label="Konsekwencja">
+      <ScoreRing value={main} loading={!score} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2 text-xs">
+          <span className="inline-flex min-w-0 items-center gap-1 truncate font-semibold text-stone-700 dark:text-stone-200">
+            <Gauge size={12} className="shrink-0" /> Konsekwencja
+            <span className="truncate font-normal text-stone-500 tabular dark:text-stone-400">· {score ? (score.current.total ? `${score.current.done}/${score.current.total}` : 'brak zadań') : '…'}</span>
+          </span>
           {score && (
-            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] text-stone-600 dark:bg-white/[0.06] dark:text-stone-300" title="Zakończone dni, tygodnie i miesiące z ostatnich 30 dni">
-              Ostatnie 30 dni <span className={`font-semibold tabular ${scoreTone(score.rolling.pct)}`}>{fmtPct(score.rolling.pct)}</span>
-              {score.rolling.total ? <span className="tabular text-stone-400 dark:text-stone-500">· {score.rolling.done}/{score.rolling.total}</span> : null}
+            <span className="shrink-0 text-[11px] text-stone-500 dark:text-stone-400" title="Zakończone dni, tygodnie i miesiące z ostatnich 30 dni">
+              30 dni <span className={`font-semibold tabular ${scoreTone(score.rolling.pct)}`}>{fmtPct(score.rolling.pct)}</span>
             </span>
           )}
         </div>
-      </div>
-      <div className="grid grid-cols-3 divide-x divide-stone-100 border-t border-stone-100 dark:divide-white/5 dark:border-white/5">
-        {KINDS.map((k) => {
-          const v = score?.current.byKind[k.key];
-          return (
-            <div key={k.key} className="min-w-0 px-3 py-2.5 sm:px-4">
-              <div className="flex items-center gap-1.5 text-[11px] text-stone-500 dark:text-stone-400">
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${k.dot}`} />
-                <span className="truncate">{k.label}</span>
+        <div className="mt-1.5 grid grid-cols-3 gap-2">
+          {KINDS.map((k) => {
+            const v = score?.current.byKind[k.key];
+            return (
+              <div key={k.key} className="min-w-0" title={v?.total ? `${k.label}: ${v.done}/${v.total}` : k.label}>
+                <div className="flex items-baseline justify-between gap-1 text-[10px] leading-tight">
+                  <span className="truncate text-stone-500 dark:text-stone-400">{k.label}</span>
+                  <span className={`shrink-0 font-semibold tabular ${v?.total ? k.text : 'text-stone-400 dark:text-stone-500'}`}>{v?.total ? fmtPct(v.pct) : '—'}</span>
+                </div>
+                <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-stone-100 dark:bg-white/[0.06]">
+                  <div className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ${k.bar}`} style={{ width: `${(v?.pct || 0) * 100}%` }} />
+                </div>
               </div>
-              <div className="mt-0.5 flex items-baseline gap-1">
-                <span className={`text-base font-semibold tabular ${v?.total ? k.text : 'text-stone-400 dark:text-stone-500'}`}>{v?.total ? fmtPct(v.pct) : '—'}</span>
-                {v?.total ? <span className="text-[11px] tabular text-stone-400 dark:text-stone-500">{v.done}/{v.total}</span> : null}
-              </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-white/[0.06]">
-                <div className={`h-full rounded-full bg-gradient-to-r transition-all duration-500 ${k.bar}`} style={{ width: `${(v?.pct || 0) * 100}%` }} />
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </section>
   );

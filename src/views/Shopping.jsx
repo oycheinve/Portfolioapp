@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Eraser, ListPlus, Pencil, Plus, ShoppingCart, Sparkles, Trash2, X } from 'lucide-react';
+import { Check, Eraser, Pencil, Plus, ShoppingCart, Sparkles, Trash2 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortItems, sortLists } from '../lib/shopping.js';
-import { BetaBadge, EmptyState } from '../components/ui.jsx';
 import { SHOPPING_CATEGORIES, categoryOf, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
 import { requestShoppingCategories } from '../lib/newsAi.js';
 
@@ -22,23 +21,16 @@ const saveSelected = (id) => {
   }
 };
 
-const GROUP_KEY = 'fintrack-shopping-group';
-const readGroup = () => {
-  try {
-    return localStorage.getItem(GROUP_KEY) !== '0';
-  } catch {
-    return true;
-  }
-};
 
 const card = 'min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900';
 const inputCls = 'h-10 min-w-0 rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 dark:border-white/10 dark:bg-neutral-800';
 const iconBtn = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 dark:text-stone-500 dark:hover:bg-white/5 dark:hover:text-stone-200';
 
-// Listy zakupów: wybór listy (pigułki), pozycje do kupienia i kupione, dodawanie / odhaczanie / usuwanie.
+// Lista zakupów: jedna stała lista (tworzona automatycznie), pozycje do kupienia i kupione, dodawanie / odhaczanie;
+// tryb „Edytuj” – kategorie, usuwanie pozycji, nazwa listy.
 // Po zalogowaniu – tabele Supabase (synchronizacja między urządzeniami), w trybie lokalnym – pamięć przeglądarki.
 export default function ShoppingView() {
-  const { cloud, actions } = useApp();
+  const { cloud, actions, state } = useApp();
   const userId = cloud?.enabled ? cloud.user?.id : null;
   const [missingTables, setMissingTables] = useState(false);
   const store = useMemo(() => (userId && !missingTables ? cloudStore(userId) : localStore), [userId, missingTables]);
@@ -89,17 +81,16 @@ export default function ShoppingView() {
     return out;
   }, [data.items]);
 
-  // ── Listy ──
-  const [newList, setNewList] = useState(null); // null – ukryte pole, '' – wpisywanie
-  const addList = (e) => {
-    e.preventDefault();
-    const name = (newList || '').trim();
-    if (!name) return;
-    const list = makeList(name);
-    run((d) => ({ ...d, lists: [...d.lists, list] }), () => store.addList(list));
-    setSelected(list.id);
-    setNewList(null);
-  };
+  // ── Lista: jedna stała, domyślna – tworzona automatycznie, gdy użytkownik nie ma żadnej ──
+  const creating = useRef(false);
+  useEffect(() => {
+    if (loading || lists.length || creating.current) return;
+    creating.current = true;
+    const list = makeList('Lista zakupów');
+    run((d) => ({ ...d, lists: [...d.lists, list] }), () => store.addList(list)).finally(() => {
+      creating.current = false;
+    });
+  }, [loading, lists.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const [renaming, setRenaming] = useState(null);
   const saveRename = (e) => {
     e.preventDefault();
@@ -162,15 +153,8 @@ export default function ShoppingView() {
   // wynik zapamiętany per nazwa produktu i synchronizowany; do odpowiedzi – dopasowanie ze słownika
   const [aiCats, setAiCats] = useState(readCats);
   const [aiStatus, setAiStatus] = useState('idle'); // idle | working | error
-  const [grouped, setGroupedState] = useState(readGroup);
-  const setGrouped = (v) => {
-    setGroupedState(v);
-    try {
-      localStorage.setItem(GROUP_KEY, v ? '1' : '0');
-    } catch {
-      // brak localStorage
-    }
-  };
+  // Grupowanie wg kategorii – jeden globalny przełącznik w Ustawieniach (Zakupy i Zadania), domyślnie włączony
+  const grouped = state.settings.groupByCategory !== false;
   const attempted = useRef(new Set());
   const pendingTitles = useMemo(() => {
     const seen = new Set();
@@ -274,44 +258,8 @@ export default function ShoppingView() {
         </p>
       )}
 
-      {/* Wybór listy */}
-      <section className={`${card} p-3 sm:p-4`} aria-label="Listy zakupów">
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Wybór listy">
-          {lists.map((l) => {
-            const c = counts[l.id] || { open: 0, done: 0 };
-            const on = current?.id === l.id;
-            return (
-              <button key={l.id} type="button" onClick={() => setSelected(l.id)} aria-pressed={on} className={pill(on)}>
-                <span className="truncate">{l.name}</span>
-                {c.open > 0 && <span className={`rounded-full px-1.5 text-[11px] leading-5 tabular ${on ? 'bg-white/25' : 'bg-stone-100 dark:bg-white/10'}`}>{c.open}</span>}
-              </button>
-            );
-          })}
-          {newList === null ? (
-            <button type="button" onClick={() => setNewList('')} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-dashed border-stone-300 px-3 text-sm font-semibold text-stone-600 hover:bg-stone-50 dark:border-white/20 dark:text-stone-300 dark:hover:bg-white/5">
-              <ListPlus size={16} /> Nowa lista
-            </button>
-          ) : (
-            <form onSubmit={addList} className="flex w-full gap-2 sm:w-auto">
-              <input autoFocus value={newList} onChange={(e) => setNewList(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setNewList(null)} maxLength={60} placeholder="np. Spożywcze, Market budowlany" aria-label="Nazwa nowej listy" className={`${inputCls} flex-1 sm:w-64`} />
-              <button type="submit" disabled={!newList.trim()} className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:text-neutral-950">
-                <Plus size={16} /> Utwórz
-              </button>
-              <button type="button" onClick={() => setNewList(null)} aria-label="Anuluj" className={iconBtn}>
-                <X size={16} />
-              </button>
-            </form>
-          )}
-        </div>
-      </section>
-
-      {loading && !lists.length && <div className="h-40 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />}
-
-      {!loading && !lists.length && (
-        <section className={card}>
-          <EmptyState icon={ShoppingCart} title="Brak list zakupów" description="Utwórz pierwszą listę przyciskiem „Nowa lista” – np. „Spożywcze” albo „Market budowlany”." />
-        </section>
-      )}
+      {/* Jedna stała lista zakupów (tworzona automatycznie); dodatkowe listy z wcześniejszych wersji – wybór w nagłówku */}
+      {(loading || !current) && <div className="h-40 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />}
 
       {current && (
         <section className={card} aria-label={`Lista ${current.name}`}>
@@ -328,7 +276,19 @@ export default function ShoppingView() {
               </form>
             ) : (
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-sm font-semibold">{current.name}</h2>
+                {lists.length > 1 ? (
+                  // Listy z wcześniejszych wersji – dostęp do nich bez przycisków tworzenia nowych
+                  <select value={current.id} onChange={(e) => setSelected(e.target.value)} aria-label="Wybór listy" className="max-w-full truncate bg-transparent text-sm font-semibold outline-none">
+                    {lists.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                        {counts[l.id]?.open ? ` (${counts[l.id].open})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <h2 className="truncate text-sm font-semibold">{current.name}</h2>
+                )}
                 <p className="text-xs text-stone-500 tabular dark:text-stone-400">
                   {openCount ? `Do kupienia: ${openCount}` : items.length ? 'Wszystko kupione ✓' : 'Lista jest pusta'}
                   {doneCount ? ` · kupione: ${doneCount}` : ''}
@@ -340,9 +300,11 @@ export default function ShoppingView() {
                 <button type="button" onClick={() => setRenaming(current.name)} aria-label="Zmień nazwę listy" title="Zmień nazwę" className={iconBtn}>
                   <Pencil size={15} />
                 </button>
-                <button type="button" onClick={deleteList} aria-label="Usuń listę" title="Usuń listę" className={`${iconBtn} hover:!bg-red-50 hover:!text-red-600 dark:hover:!bg-red-500/10`}>
-                  <Trash2 size={15} />
-                </button>
+                {lists.length > 1 && (
+                  <button type="button" onClick={deleteList} aria-label="Usuń listę" title="Usuń listę" className={`${iconBtn} hover:!bg-red-50 hover:!text-red-600 dark:hover:!bg-red-500/10`}>
+                    <Trash2 size={15} />
+                  </button>
+                )}
               </>
             )}
             {renaming === null && (
@@ -383,13 +345,8 @@ export default function ShoppingView() {
               ))}
             </ul>
           )}
-          {items.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2 sm:px-4">
-              <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-stone-600 dark:text-stone-300">
-                <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="h-4 w-4 accent-blue-600" aria-label="Grupuj według kategorii" />
-                Grupuj wg kategorii
-                <BetaBadge />
-              </label>
+          {items.length > 0 && grouped && (
+            <div className="flex flex-wrap items-center justify-end gap-2 px-3 pt-2 sm:px-4">
               {grouped && (
                 <span className="inline-flex items-center gap-1 text-[11px] text-stone-400" aria-live="polite">
                   <Sparkles size={12} className={aiStatus === 'working' ? 'animate-pulse text-violet-500' : 'text-violet-400'} />

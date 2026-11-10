@@ -56,7 +56,7 @@ export default function BudgetView() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="relative inline-flex h-10 items-center rounded-full border border-blue-600 bg-blue-600 pr-2 pl-3.5 text-white shadow-sm focus-within:ring-2 focus-within:ring-blue-500/40 dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950">
+        <label title="Wybór zapamiętany – obowiązuje do ponownej zmiany" className="relative inline-flex h-9 items-center rounded-full border border-blue-600 bg-blue-600 pr-2 pl-3.5 text-white shadow-sm focus-within:ring-2 focus-within:ring-blue-500/40 dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950">
           <Icon size={16} className="pointer-events-none shrink-0" />
           <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Rodzaj budżetu" className="h-full cursor-pointer appearance-none bg-transparent pr-6 pl-2 text-sm font-semibold outline-none [&>option]:text-neutral-900">
             <option value="monthly">Budżet Miesięczny</option>
@@ -64,7 +64,6 @@ export default function BudgetView() {
           </select>
           <ChevronDown size={16} className="pointer-events-none absolute right-3 shrink-0" />
         </label>
-        <span className="text-[11px] text-stone-500 dark:text-stone-400">Wybór zapamiętany – zmienisz go tutaj</span>
       </div>
       {mode === 'trips' ? (
         <section className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900">
@@ -188,10 +187,30 @@ function MonthlyBudget() {
 
   return (
     <section className="min-w-0 rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-5 dark:border-white/10 dark:bg-neutral-900">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <h2 className="min-w-0 text-lg font-bold text-[#1f3864] sm:text-xl dark:text-blue-300">
-          Budżet na: {monthName(month)}
-        </h2>
+      {/* Nagłówek: miesiąc ze strzałkami w jednym wierszu (pole miesiąca pod nazwą – dotknięcie otwiera wybór) */}
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Budżet na:{editing && <span className="ml-1.5 text-amber-700 normal-case dark:text-amber-400">tryb edycji</span>}</div>
+          <div className="-ml-1.5 flex items-center">
+            <button type="button" className={navBtn} disabled={editing} onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Poprzedni miesiąc" title="Poprzedni miesiąc">
+              <ChevronLeft size={18} />
+            </button>
+            <label className="relative min-w-0 cursor-pointer">
+              <h2 className="text-base font-bold whitespace-nowrap text-[#1f3864] sm:text-xl dark:text-blue-300">{monthName(month)}</h2>
+              <input
+                type="month"
+                value={month}
+                disabled={editing}
+                onChange={(e) => e.target.value && setMonth(e.target.value)}
+                aria-label="Miesiąc budżetu"
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-default"
+              />
+            </label>
+            <button type="button" className={navBtn} disabled={editing} onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc" title="Następny miesiąc">
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <div className="flex items-center gap-1.5">
             {editing && (
@@ -225,23 +244,6 @@ function MonthlyBudget() {
           )}
         </div>
       </div>
-      <div className="mb-3 flex items-center gap-1">
-        <button type="button" className={navBtn} disabled={editing} onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Poprzedni miesiąc" title="Poprzedni miesiąc">
-          <ChevronLeft size={18} />
-        </button>
-        <input
-          type="month"
-          value={month}
-          disabled={editing}
-          onChange={(e) => e.target.value && setMonth(e.target.value)}
-          aria-label="Miesiąc budżetu"
-          className="h-8 rounded-md border border-stone-200 bg-white px-2 text-xs outline-none focus:border-[#1f3864] disabled:opacity-50 dark:border-white/10 dark:bg-neutral-800"
-        />
-        <button type="button" className={navBtn} disabled={editing} onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Następny miesiąc" title="Następny miesiąc">
-          <ChevronRight size={18} />
-        </button>
-        {editing && <span className="ml-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">Tryb edycji</span>}
-      </div>
       {/* Miniony miesiąc: podsumowanie od AI (archiwum; generowane automatycznie w nowym miesiącu) */}
       {month < monthKey() && !editing && saved?.length > 0 && (
         <div className="mb-3">
@@ -261,9 +263,9 @@ function MonthlyBudget() {
           <thead>
             <tr className="bg-[#1f3864] text-white dark:bg-[#22355e]">
               <th className="px-2 py-1.5 text-center font-semibold">Kategoria</th>
-              <th className="px-2 py-1.5 text-center font-semibold">Planowany Budżet</th>
-              <th className="px-2 py-1.5 text-center font-semibold">Kwota Wydana</th>
-              <th className="px-2 py-1.5 text-center font-semibold">Pozostało</th>
+              <th className="px-2 py-1.5 text-center font-semibold">Plan</th>
+              <th className="px-2 py-1.5 text-center font-semibold">Wydano</th>
+              <th className="px-2 py-1.5 text-center font-semibold">Zostało</th>
               {editing && <th aria-label="Usuń" />}
             </tr>
           </thead>
@@ -286,9 +288,9 @@ function MonthlyBudget() {
                     </>
                   ) : (
                     <>
-                      <td className="px-2 py-1.5 leading-snug break-words [hyphens:auto]">{r.name || <span className="text-stone-400">bez nazwy</span>}</td>
-                      <td className="border-l border-stone-200 px-2 py-1.5 text-right whitespace-nowrap dark:border-white/10">{zl(toNum(r.planned))}</td>
-                      <td className="border-l border-stone-200 px-2 py-1.5 text-right whitespace-nowrap dark:border-white/10">{zl(toNum(r.spent))}</td>
+                      <td className="px-2 py-1 leading-snug break-words [hyphens:auto] sm:py-1.5">{r.name || <span className="text-stone-400">bez nazwy</span>}</td>
+                      <td className="border-l border-stone-200 px-2 py-1 text-right whitespace-nowrap sm:py-1.5 dark:border-white/10">{zl(toNum(r.planned))}</td>
+                      <td className="border-l border-stone-200 px-2 py-1 text-right whitespace-nowrap sm:py-1.5 dark:border-white/10">{zl(toNum(r.spent))}</td>
                     </>
                   )}
                   <td className={`border-l border-stone-200 px-2 py-0.5 text-right whitespace-nowrap dark:border-white/10 ${leftTone(left)}`}>{zl(left)}</td>
