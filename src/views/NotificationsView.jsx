@@ -371,11 +371,17 @@ function PushDiagnostics({ diag, permission }) {
   const prefs = dev?.prefs || {};
   const rows = [
     [permission === 'granted', 'Zgoda telefonu na powiadomienia', 'Zezwól na powiadomienia dla przeglądarki / aplikacji w ustawieniach telefonu i strony.'],
-    [!diag.missing?.length, 'Klucze serwera (VAPID, Supabase)', `Brakuje na Vercelu: ${(diag.missing || []).join(', ')} – dodaj i zrób Redeploy.`],
+    [
+      !diag.missing?.length,
+      'Klucze serwera (VAPID, Supabase)',
+      `Działające wdrożenie${diag.env ? ` (${diag.env})` : ''} nie widzi: ${(diag.missing || []).join(', ')}. Widoczne zmienne z „VAPID”: ${diag.vapidNames?.length ? diag.vapidNames.join(', ') : 'żadna'}. Na Vercelu sprawdź nazwę (dokładnie VAPID_PRIVATE_KEY), zaznaczone środowisko Production i zrób Redeploy po dodaniu.`,
+    ],
     [diag.cron, 'Sekret harmonogramu (CRON_SECRET)', 'Dodaj CRON_SECRET na Vercelu i zrób Redeploy.'],
     [!diag.tableError, 'Tabela subskrypcji w Supabase', 'Uruchom supabase/push_subscriptions.sql w SQL Editor.'],
-    [diag.thisDevice, 'Ten telefon zapisany na serwerze', 'Wyłącz i włącz ponownie „Powiadomienia z serwera” powyżej.'],
-    [ageH !== null && ageH < 2, checked ? `Harmonogram – serwer ostatnio sprawdzał: ${new Date(checked).toLocaleString('pl-PL')}` : 'Harmonogram – serwer jeszcze nie sprawdzał', 'Harmonogram w Supabase nie wywołuje aplikacji: sprawdź pg_cron / pg_net, adres i sekret w cron.schedule (SQL: select status_code from net._http_response order by created desc limit 3).'],
+    diag.checkedDevices === false ? [null, 'Ten telefon zapisany na serwerze – nie sprawdzono (brak dostępu serwera do Supabase)', ''] : [diag.thisDevice, 'Ten telefon zapisany na serwerze', 'Wyłącz i włącz ponownie „Powiadomienia z serwera” powyżej.'],
+    diag.missing?.length && !checked
+      ? [null, 'Harmonogram – czeka na klucze serwera (bez nich nie wysyła i nie zapisuje sprawdzeń)', '']
+      : [ageH !== null && ageH < 2, checked ? `Harmonogram – serwer ostatnio sprawdzał: ${new Date(checked).toLocaleString('pl-PL')}` : 'Harmonogram – serwer jeszcze nie sprawdzał', 'Harmonogram w Supabase nie wywołuje aplikacji: sprawdź pg_cron / pg_net, adres i sekret w cron.schedule (SQL: select status_code from net._http_response order by created desc limit 3).'],
   ];
   const hour = Number.isInteger(prefs.tasks?.hour) ? prefs.tasks.hour : 20;
   return (
@@ -383,8 +389,8 @@ function PushDiagnostics({ diag, permission }) {
       <ul className="space-y-1.5">
         {rows.map(([ok, label, fix]) => (
           <li key={label}>
-            <span className="font-medium">{ok ? '✅' : '❌'} {label}</span>
-            {!ok && <span className="block pl-5 text-stone-500 dark:text-stone-400">{fix}</span>}
+            <span className="font-medium">{ok === null ? '⏳' : ok ? '✅' : '❌'} {label}</span>
+            {ok === false && <span className="block pl-5 text-stone-500 dark:text-stone-400">{fix}</span>}
           </li>
         ))}
       </ul>

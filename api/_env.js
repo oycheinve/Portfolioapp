@@ -59,3 +59,11 @@ export function missingSupabaseMessage(needService = true) {
   const seen = r.seen.length ? ` Widoczne zmienne Supabase: ${r.seen.join(', ')}.` : ' Funkcja nie widzi żadnej zmiennej Supabase.';
   return `Brak konfiguracji serwera (${missing.join(', ')}).${seen} Po dodaniu lub zmianie zmiennych w Vercel wykonaj Redeploy (zmienne trafiają do funkcji dopiero przy wdrożeniu)${r.vercelEnv ? ` – środowisko: ${r.vercelEnv}` : ''}.`;
 }
+
+// Pierwsza niepusta zmienna, której nazwa pasuje do wzorca (np. literówka „VAPID_PRIVAT_KEY”, „PRIVATE_VAPID_KEY”)
+export function envLike(re) {
+  for (const [k, v] of Object.entries(process.env)) if (re.test(String(k).trim().toUpperCase()) && clean(v)) return clean(v);
+  return '';
+}
+// Nazwy (bez wartości) zmiennych pasujących do wzorca – diagnostyka konfiguracji
+export const envNames = (re) => Object.keys(process.env).filter((k) => re.test(String(k).trim().toUpperCase())).map((k) => `${k.trim()}${clean(process.env[k]) ? '' : ' (pusta)'}`);

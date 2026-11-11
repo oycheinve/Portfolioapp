@@ -1,6 +1,7 @@
 // /api/push-test (POST) – powiadomienie testowe z serwera na wszystkie urządzenia zalogowanego użytkownika.
 // Autoryzacja: „Authorization: Bearer <token sesji Supabase>” (wysyła aplikacja z Ustawień powiadomień).
 import { bearer, json, pushConfig, sendPush, serviceClient } from './_push.js';
+import { envNames } from './_env.js';
 import { NOTIFY_TITLE } from '../src/lib/notifyPlan.js';
 
 // Body { status: true } – diagnostyka bez wysyłki: konfiguracja serwera, subskrypcje użytkownika (ustawienia,
@@ -14,8 +15,10 @@ const bodyOf = (req) => {
   }
 };
 async function status(req, res, cfg) {
-  const out = { missing: cfg.missing, cron: !!cfg.cronSecret, serverTime: new Date().toISOString(), devices: [], thisDevice: false };
-  if (cfg.missing.length) return json(res, 200, out);
+  // vapidNames – same nazwy zmiennych z „VAPID” widoczne dla działającego wdrożenia (bez wartości)
+  const out = { missing: cfg.missing, cron: !!cfg.cronSecret, serverTime: new Date().toISOString(), vapidNames: envNames(/VAPID/), env: process.env.VERCEL_ENV || '', devices: [], thisDevice: false, checkedDevices: false };
+  // Subskrypcje sprawdzalne bez kluczy VAPID – wystarczy dostęp do Supabase
+  if (!cfg.supabaseUrl || !cfg.serviceKey) return json(res, 200, out);
   const token = bearer(req);
   if (!token) return json(res, 401, { error: 'Brak tokenu sesji' });
   const sb = serviceClient(cfg);
@@ -26,6 +29,7 @@ async function status(req, res, cfg) {
   const endpoint = String(bodyOf(req).endpoint || '');
   out.devices = (subs || []).map((x) => ({ prefs: x.prefs, tz: x.tz, lastSent: x.last_sent || {}, updatedAt: x.updated_at, current: !!endpoint && x.endpoint === endpoint }));
   out.thisDevice = out.devices.some((d) => d.current);
+  out.checkedDevices = true;
   return json(res, 200, out);
 }
 
