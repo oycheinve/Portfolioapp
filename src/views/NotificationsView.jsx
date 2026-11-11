@@ -303,9 +303,25 @@ export default function NotificationsView() {
       <Card title="Powiadomienia z serwera (Web Push)" subtitle="Także przy całkowicie zamkniętej aplikacji" icon={Cloud}>
         <div className="space-y-3 text-sm">
           {!vapidPublicKey() ? (
-            <p className="text-stone-600 dark:text-stone-300">
-              Serwer powiadomień nie jest jeszcze skonfigurowany (brak klucza <code className="font-mono text-xs">VITE_VAPID_PUBLIC_KEY</code>). Do tego czasu działają powiadomienia z aplikacji – gdy jest uruchomiona, także w tle.
-            </p>
+            <div className="space-y-2 text-stone-600 dark:text-stone-300">
+              <p>
+                Serwer powiadomień nie jest jeszcze skonfigurowany (brak klucza <code className="font-mono text-xs">VITE_VAPID_PUBLIC_KEY</code> we wdrożeniu). Do tego czasu działają tylko powiadomienia z aplikacji – gdy jest uruchomiona, także w tle.
+              </p>
+              <p className="text-[12px] font-semibold">Jak włączyć (jednorazowo, administrator aplikacji):</p>
+              <ol className="list-decimal space-y-1 pl-5 text-[12px]">
+                <li>
+                  Supabase → SQL Editor: uruchom <code className="font-mono">supabase/push_subscriptions.sql</code> (tabela subskrypcji).
+                </li>
+                <li>
+                  Vercel → Settings → Environment Variables: <code className="font-mono">VITE_VAPID_PUBLIC_KEY</code> i <code className="font-mono">VAPID_PUBLIC_KEY</code> (ten sam klucz publiczny), <code className="font-mono">VAPID_PRIVATE_KEY</code>, <code className="font-mono">VAPID_SUBJECT</code> (mailto:…), <code className="font-mono">SUPABASE_SERVICE_ROLE_KEY</code>, <code className="font-mono">CRON_SECRET</code> – klucze VAPID: <code className="font-mono">npx web-push generate-vapid-keys</code>.
+                </li>
+                <li>Vercel → Deployments → Redeploy (klucz publiczny trafia do aplikacji dopiero przy wdrożeniu).</li>
+                <li>
+                  Supabase: włącz rozszerzenia pg_cron i pg_net i uruchom <code className="font-mono">cron.schedule(…)</code> z końca pliku SQL (wywołanie /api/push-cron co godzinę).
+                </li>
+                <li>Tutaj: włącz powiadomienia z serwera i „Wyślij testowe z serwera”.</li>
+              </ol>
+            </div>
           ) : !pushSupported() ? (
             <p className="text-stone-600 dark:text-stone-300">Ta przeglądarka nie obsługuje Web Push. Na iPhonie dodaj aplikację do ekranu początkowego (iOS 16.4+).</p>
           ) : !userId ? (
