@@ -20,6 +20,17 @@ export function heldNewsTopics(state) {
     .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
 }
 
+// Tematy powiadomień (subskrypcja Web Push): spółki z portfela (raport, notowania, nowe artykuły) + Twoje frazy
+// z zakładki Newsy, bez odznaczonych (tylko nowe artykuły)
+export function notifyTopics(state, max = 15) {
+  const off = new Set(readOff());
+  const held = heldNewsTopics(state).slice(0, max);
+  const custom = readTopics()
+    .map((t) => ({ id: `custom:${t}`, label: t, title: t, query: t, symbol: null }))
+    .filter((t) => !off.has(t.id));
+  return [...held, ...custom].slice(0, max * 2);
+}
+
 const TTL_MS = 5 * 60 * 1000;
 const cache = new Map();
 

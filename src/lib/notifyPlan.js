@@ -18,6 +18,7 @@ export const DEFAULT_PREFS = {
   tasks: { on: true, hour: 20 },
   news: { on: false, min: 3, slot: 'MORNING' },
   prices: { on: false, threshold: 4 },
+  articles: { on: false }, // nowy artykuł w Newsach (spółki z portfela + Twoje frazy) – co godzinę, poza nocą
 };
 
 // Ustawienia z zapisu (także starszego formatu { enabled, taskHour }) z poprawnymi wartościami domyślnymi
@@ -36,6 +37,7 @@ export function normalizePrefs(raw = {}) {
       on: !!r.prices?.on,
       threshold: Math.max(1, Math.min(20, Number(r.prices?.threshold) || DEFAULT_PREFS.prices.threshold)),
     },
+    articles: { on: !!r.articles?.on },
   };
 }
 
@@ -164,4 +166,50 @@ export function priceAlertMessage(alerts) {
   }
   const list = alerts.slice(0, 5).map((a) => `${a.reversal ? '🔄' : arrow(a.pct)} ${a.label} ${fmtPct(a.pct)}`).join(' · ');
   return msg(`📊 Zmiany notowań (${alerts.length}): ${list}${alerts.length > 5 ? '…' : ''}`);
+}
+
+// ── Nowe artykuły w Newsach ──
+// Cisza nocna (lokalnie 22:00–7:00): artykuły z nocy przychodzą rano (o ile nie starsze niż doba)
+export const quietHour = (hour) => hour >= 22 || hour < 7;
+const SEEN_MAX = 400;
+// items: artykuły z tematów (pole _topic = id tematu, z którego zapytania pochodzą); topics: spółki z portfela
+// („inst:…”) i Twoje frazy („custom:…”). Spółka liczy się, gdy jest głównym tematem artykułu (bez „Analiz ogólnych”),
+// fraza – każdy artykuł z jej wyników. state: { init, seen: [link…] } – pierwszy przebieg tylko zapamiętuje
+// bieżące artykuły (bez zalewu powiadomień po włączeniu). Zwraca { fresh: [{ title, link, label }], state }.
+export function freshArticles(items, topics, state = {}, now = new Date(), maxAgeH = 24) {
+  const byId = Object.fromEntries(topics.map((t) => [t.id, t]));
+  const seen = new Set(Array.isArray(state?.seen) ? state.seen : []);
+  const held = topics.filter((t) => !String(t.id).startsWith('custom:'));
+  const fresh = [];
+  const current = [];
+  for (const it of items) {
+    if (!it?.link || current.includes(it.link)) continue;
+    const topic = byId[it._topic];
+    if (!topic) continue;
+    if (!String(topic.id).startsWith('custom:')) {
+      const { mainId } = classifyArticle(it, held);
+      if (mainId !== topic.id) continue;
+    }
+    const t = Date.parse(it.pubDate);
+    if (Number.isFinite(t) && now.getTime() - t > maxAgeH * 3600000) continue;
+    current.push(it.link);
+    if (!seen.has(it.link)) fresh.push({ title: String(it.title || '').trim(), link: it.link, label: topic.label, at: Number.isFinite(t) ? t : 0 });
+  }
+  const nextSeen = [...new Set([...current, ...seen])].slice(0, SEEN_MAX);
+  if (!state?.init) return { fresh: [], state: { init: true, seen: nextSeen } };
+  fresh.sort((a, b) => b.at - a.at);
+  return { fresh, state: { init: true, seen: nextSeen } };
+}
+
+export function articlesMessage(list) {
+  if (!list?.length) return null;
+  const n = list.length;
+  if (n === 1) return { title: `📰 ${list[0].label}: nowy artykuł`, body: list[0].title, url: '/#/news', tag: 'news-new' };
+  const lines = list.slice(0, 2).map((a) => `${a.label}: ${a.title}`);
+  return {
+    title: `📰 ${plural(n, 'Nowy artykuł', `${n} nowe artykuły`, `${n} nowych artykułów`)} w Newsach`,
+    body: `${lines.join('\n')}${n > 2 ? `\n…i ${plural(n - 2, '1 kolejny', `${n - 2} kolejne`, `${n - 2} kolejnych`)}` : ''}`,
+    url: '/#/news',
+    tag: 'news-new',
+  };
 }

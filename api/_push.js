@@ -10,9 +10,9 @@ import { fetchNews } from './news.js';
 import { proxyYahoo } from './yahoo.js';
 import { parseYahooChart } from '../src/lib/prices.js';
 import { quoteDayChangePct } from '../src/lib/engine.js';
-import { dueKinds, localClock, newsDigest, newsDigestMessage, normalizePrefs, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../src/lib/notifyPlan.js';
+import { articlesMessage, dueKinds, freshArticles, localClock, quietHour, newsDigest, newsDigestMessage, normalizePrefs, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../src/lib/notifyPlan.js';
 
-const MAX_TOPICS = 15;
+const MAX_TOPICS = 30; // spółki z portfela (do 15) + Twoje frazy z Newsów
 
 export function pushConfig() {
   const cfg = {
@@ -67,7 +67,8 @@ async function loadNews(watch) {
   const topics = (Array.isArray(watch) ? watch : []).filter((t) => t?.id && t?.query).slice(0, MAX_TOPICS);
   const items = [];
   for (let i = 0; i < topics.length; i += 3) {
-    const batch = await Promise.all(topics.slice(i, i + 3).map((t) => fetchNews(t.query, t.symbol).then((r) => r.body?.items || []).catch(() => [])));
+    // _topic – z którego tematu pochodzi artykuł (nowe artykuły: fraza liczy się bez klasyfikacji podmiotu)
+    const batch = await Promise.all(topics.slice(i, i + 3).map((t) => fetchNews(t.query, t.symbol).then((r) => (r.body?.items || []).map((x) => ({ ...x, _topic: t.id }))).catch(() => [])));
     items.push(...batch.flat());
   }
   return { topics, items };
@@ -115,7 +116,13 @@ function marketWindow(now, timeZone) {
 // dry – bez wysyłki i bez zapisu last_sent (podgląd planu). Zwraca raport.
 export async function runPushCron({ cfg, sb, now = new Date(), dry = false, loaders = {} }) {
   const loadTasks = loaders.loadTasks || ((userId) => loadDailyTasks(sb, userId));
-  const loadNewsFn = loaders.loadNews || loadNews;
+  // Wiadomości pobierane raz na przebieg dla tej samej listy tematów (raport + nowe artykuły, kilka urządzeń)
+  const newsCache = new Map();
+  const loadNewsFn = (w) => {
+    const k = JSON.stringify(w || []);
+    if (!newsCache.has(k)) newsCache.set(k, (loaders.loadNews || loadNews)(w));
+    return newsCache.get(k);
+  };
   const send = loaders.send || ((sub, msg) => sendPush(cfg, sub, msg));
   const quoteCache = new Map();
   const loadChangesFn = loaders.loadChanges || ((watch) => loadChanges(watch, now, quoteCache));
@@ -129,6 +136,7 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
     const clock = localClock(now, sub.tz || 'Europe/Warsaw');
     const kinds = dueKinds(prefs, clock, sub.last_sent || {});
     if (prefs.prices.on && (loaders.anyTime || marketWindow(now, sub.tz || 'Europe/Warsaw'))) kinds.push('prices'); // zmiany notowań – co godzinę w czasie sesji
+    if (prefs.articles.on && (loaders.anyTime || !quietHour(clock.hour))) kinds.push('articles'); // nowe artykuły – co godzinę, poza nocą
     // Ślad przebiegu harmonogramu (diagnostyka w aplikacji: „serwer ostatnio sprawdzał …”)
     const lastSent = { ...(sub.last_sent || {}), checked: now.toISOString() };
     if (!kinds.length) {
@@ -141,8 +149,15 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
         if (!taskCache.has(sub.user_id)) taskCache.set(sub.user_id, await loadTasks(sub.user_id));
         msg = tasksReminderMessage(unfinishedDailyTasks(taskCache.get(sub.user_id), clock.day));
       } else if (kind === 'news') {
-        const { topics, items } = await loadNewsFn(sub.watch);
+        const { topics: all, items } = await loadNewsFn(sub.watch);
+        const topics = all.filter((t) => !String(t.id).startsWith('custom:')); // raport – tylko spółki z portfela (jak dotąd)
         msg = topics.length ? newsDigestMessage(newsDigest(items, topics, previousDay(clock.day), sub.tz), prefs.news.min) : null;
+      } else if (kind === 'articles') {
+        const { topics, items } = await loadNewsFn(sub.watch);
+        const { fresh, state } = freshArticles(items, topics, lastSent.articles, now);
+        lastSent.articles = state;
+        msg = articlesMessage(fresh);
+        if (!msg) continue; // brak nowych – bez wpisu w raporcie
       } else if (kind === 'prices') {
         const { alerts, state } = priceAlerts(await loadChangesFn(sub.watch), prefs.prices.threshold, lastSent.prices, clock.day);
         msg = priceAlertMessage(alerts);
@@ -161,7 +176,7 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
         }
       }
       // Odnotowanie także bez treści (np. wszystkie zadania wykonane) – kolejne sprawdzenie dopiero następnego dnia
-      if (kind !== 'prices') lastSent[kind] = clock.day;
+      if (kind !== 'prices' && kind !== 'articles') lastSent[kind] = clock.day;
       report.push(entry);
     }
     if (!dry && !report.some((e) => e.sub === sub.id && e.removed)) {

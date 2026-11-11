@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { loadAllTasks } from '../lib/taskStats.js';
-import { fetchNewsMany, heldNewsTopics } from '../lib/news.js';
+import { fetchNewsMany, heldNewsTopics, notifyTopics } from '../lib/news.js';
 import { dueKinds, localClock, newsDigest, newsDigestMessage, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../lib/notifyPlan.js';
 import { heldDayChanges } from '../lib/priceAlerts.js';
 import { markSent, notificationPermission, readNotifySettings, readSent, showNotification, syncPushSubscription, writeSentState } from '../lib/notifications.js';
@@ -27,7 +27,7 @@ export function useNotificationScheduler(state, userId) {
       if (!kinds.length) return;
       busy.current = true;
       try {
-        if (userId) await syncPushSubscription(userId, prefs, heldNewsTopics(stateRef.current).slice(0, MAX_TOPICS)).catch(() => false);
+        if (userId) await syncPushSubscription(userId, prefs, notifyTopics(stateRef.current, MAX_TOPICS)).catch(() => false);
         for (const kind of kinds) {
           markSent(kind, clock.day);
           if (kind === 'tasks') {

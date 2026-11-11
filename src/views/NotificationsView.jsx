@@ -19,7 +19,7 @@ import {
   vapidPublicKey,
   writeNotifySettings,
 } from '../lib/notifications.js';
-import { fetchNewsMany, heldNewsTopics } from '../lib/news.js';
+import { fetchNewsMany, notifyTopics } from '../lib/news.js';
 import { Card } from '../components/ui.jsx';
 
 const EVENING_HOURS = Array.from({ length: 12 }, (_, i) => i + 12); // 12:00 – 23:00 (zapisana inna godzina też na liście)
@@ -57,7 +57,10 @@ export default function NotificationsView() {
   const [pushSub, setPushSub] = useState(null);
   const [busy, setBusy] = useState('');
   const [preview, setPreview] = useState(null);
-  const watch = useMemo(() => heldNewsTopics(state).slice(0, MAX_TOPICS), [state]);
+  // Spółki z portfela do raportu (bez fraz) i tematy z zakładki Newsy (spółki + Twoje frazy, bez odznaczonych) –
+  // obie listy trafiają do subskrypcji: raport liczy tylko spółki, nowe artykuły – wszystkie tematy
+  const watch = useMemo(() => notifyTopics(state, MAX_TOPICS), [state]);
+  const heldWatch = useMemo(() => watch.filter((t) => !String(t.id).startsWith('custom:')), [watch]); // raport – tylko spółki
   const supported = notificationsSupported();
   const ready = prefs.enabled && permission === 'granted';
 
@@ -66,7 +69,7 @@ export default function NotificationsView() {
   }, []);
 
   const save = (patch) => {
-    const next = { ...prefs, ...patch, tasks: { ...prefs.tasks, ...(patch.tasks || {}) }, news: { ...prefs.news, ...(patch.news || {}) }, prices: { ...prefs.prices, ...(patch.prices || {}) } };
+    const next = { ...prefs, ...patch, tasks: { ...prefs.tasks, ...(patch.tasks || {}) }, news: { ...prefs.news, ...(patch.news || {}) }, prices: { ...prefs.prices, ...(patch.prices || {}) }, articles: { ...(prefs.articles || {}), ...(patch.articles || {}) } };
     setPrefs(next);
     writeNotifySettings(next);
     if (pushSub && userId) syncPushSubscription(userId, next, watch).catch((e) => actions.notify(`Powiadomienia z serwera: ${e.message}`, 'warn'));
@@ -92,8 +95,8 @@ export default function NotificationsView() {
     setBusy('preview');
     try {
       const day = previousDay(localClock(new Date()).day);
-      const { items } = await fetchNewsMany(watch, { force: false });
-      const digest = newsDigest(items, watch, day);
+      const { items } = await fetchNewsMany(heldWatch, { force: false });
+      const digest = newsDigest(items, heldWatch, day);
       const msg = newsDigestMessage(digest, prefs.news.min);
       setPreview({ day, digest, msg });
       if (sendNow && msg) await showNotification(msg.title, msg);
@@ -253,6 +256,18 @@ export default function NotificationsView() {
         </div>
       </Card>
 
+      <Card title="Nowe artykuły w Newsach" subtitle="Powiadomienie, gdy pojawi się nowy artykuł o Twoich spółkach lub frazach" icon={Newspaper}>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-stone-700 dark:text-stone-200">Powiadamiaj o nowych artykułach</span>
+            <Switch on={!!prefs.articles?.on} onChange={(v) => save({ articles: { on: v } })} label="Nowe artykuły w Newsach" disabled={!ready} />
+          </div>
+          <p className="text-[11px] text-stone-500 dark:text-stone-400">
+            Tematy z zakładki Newsy: {watch.length ? watch.map((t) => t.label).join(', ') : 'brak – dodaj spółki do portfela albo frazy w Newsach'}. Serwer sprawdza co godzinę i łączy kilka nowych artykułów w jedno powiadomienie; w nocy (22:00–7:00) cisza – nocne artykuły przyjdą rano. Wymaga włączonych powiadomień z serwera poniżej.
+          </p>
+        </div>
+      </Card>
+
       <Card title="Raport o spółkach z portfela" subtitle="Podsumowanie wiadomości z poprzedniego dnia" icon={Newspaper}>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">
@@ -286,13 +301,13 @@ export default function NotificationsView() {
             </label>
           </div>
           <p className="text-[11px] text-stone-500 dark:text-stone-400">
-            Liczą się artykuły, których głównym tematem jest spółka z portfela ({watch.length ? watch.map((t) => t.label).join(', ') : 'brak otwartych pozycji'}), bez „Analiz ogólnych”.
+            Liczą się artykuły, których głównym tematem jest spółka z portfela ({heldWatch.length ? heldWatch.map((t) => t.label).join(', ') : 'brak otwartych pozycji'}), bez „Analiz ogólnych”.
           </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => runPreview(false)} disabled={busy === 'preview' || !watch.length} className={btnCls}>
+            <button type="button" onClick={() => runPreview(false)} disabled={busy === 'preview' || !heldWatch.length} className={btnCls}>
               <Eye size={15} /> {busy === 'preview' ? 'Liczenie…' : 'Podgląd raportu za wczoraj'}
             </button>
-            <button type="button" onClick={() => runPreview(true)} disabled={!ready || busy === 'preview' || !watch.length} className={btnCls}>
+            <button type="button" onClick={() => runPreview(true)} disabled={!ready || busy === 'preview' || !heldWatch.length} className={btnCls}>
               <Send size={15} /> Wyślij teraz
             </button>
           </div>
