@@ -3,9 +3,9 @@ import { Check, Eraser, Pencil, Plus, ShoppingCart, Sparkles, Trash2 } from 'luc
 import { useApp } from '../state/AppContext.jsx';
 import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortItems, sortLists } from '../lib/shopping.js';
 import { SHOPPING_CATEGORIES, categoryOf, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
-import { requestShoppingCategories } from '../lib/newsAi.js';
+import { requestShoppingCategories, requestShoppingPrices } from '../lib/newsAi.js';
 import { aiOn } from '../lib/aiFeatures.js';
-import { PRICES_KEY, buildPriceIndex, estimatePrice, formatZl, readPriceOverrides, writePriceOverride } from '../lib/shoppingPrices.js';
+import { AI_PRICES_KEY, PRICES_KEY, buildPriceIndex, estimatePrice, formatZl, knownProducts, needsAiPrice, readAiPrices, readPriceOverrides, writeAiPrices, writePriceOverride } from '../lib/shoppingPrices.js';
 import { RECEIPTS_KEY } from '../lib/receipts.js';
 import { PREFS_CHANGED_EVENT } from '../lib/budget.js';
 
@@ -220,14 +220,42 @@ export default function ShoppingView() {
   // ── Szacowane ceny z historii paragonów (pamięć cen) + korekta użytkownika ──
   const [priceVer, setPriceVer] = useState(0);
   useEffect(() => {
-    const on = (e) => (!e.detail?.key || e.detail.key === RECEIPTS_KEY || e.detail.key === PRICES_KEY) && setPriceVer((v) => v + 1);
+    const on = (e) => (!e.detail?.key || e.detail.key === RECEIPTS_KEY || e.detail.key === PRICES_KEY || e.detail.key === AI_PRICES_KEY) && setPriceVer((v) => v + 1);
     window.addEventListener(PREFS_CHANGED_EVENT, on);
     return () => window.removeEventListener(PREFS_CHANGED_EVENT, on);
   }, []);
   const priceIndex = useMemo(() => buildPriceIndex(), [priceVer]); // eslint-disable-line react-hooks/exhaustive-deps
   const overrides = useMemo(() => readPriceOverrides(), [priceVer]); // eslint-disable-line react-hooks/exhaustive-deps
-  const estimates = useMemo(() => Object.fromEntries(items.map((it) => [it.id, estimatePrice(it.title, it.quantity, priceIndex, overrides)])), [items, priceIndex, overrides]);
+  const pricesAiOn = aiOn(state.settings, 'shoppingPrices');
+  // Wyłączone w Ustawieniach → bez szacunków i dopasowań AI (zapamiętane wyniki zostają na później)
+  const aiPrices = useMemo(() => (pricesAiOn ? readAiPrices() : {}), [priceVer, pricesAiOn]); // eslint-disable-line react-hooks/exhaustive-deps
+  const estimates = useMemo(() => Object.fromEntries(items.map((it) => [it.id, estimatePrice(it.title, it.quantity, priceIndex, overrides, aiPrices)])), [items, priceIndex, overrides, aiPrices]);
   const priced = openItems.filter((it) => estimates[it.id]);
+  const aiPriced = priced.filter((it) => estimates[it.id].source === 'ai').length;
+  // AI fallback: produkty bez dopasowania w paragonach – dopasowanie semantyczne do nazw z paragonów albo szacunek
+  // ceny rynkowej; w tle, po przerwie w pisaniu, raz na produkt (wynik zapamiętany). Ustawienia → Funkcje AI.
+  const priceAsked = useRef(new Set());
+  const [priceAi, setPriceAi] = useState('idle'); // idle | working | error
+  const pendingPrices = useMemo(
+    () => (pricesAiOn ? [...new Set(openItems.map((it) => it.title.trim()))].filter((t) => !priceAsked.current.has(t.toLowerCase()) && needsAiPrice(t, priceIndex, overrides, aiPrices)) : []),
+    [pricesAiOn, openItems, priceIndex, overrides, aiPrices], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  useEffect(() => {
+    if (!pendingPrices.length) return undefined;
+    const t = setTimeout(async () => {
+      const batch = pendingPrices.slice(0, 40);
+      for (const x of batch) priceAsked.current.add(x.toLowerCase());
+      setPriceAi('working');
+      try {
+        const res = await requestShoppingPrices(batch, knownProducts(priceIndex));
+        writeAiPrices(batch, res.prices || {});
+        setPriceAi('idle');
+      } catch {
+        setPriceAi('error'); // bez AI – ceny z paragonów i Twoje korekty działają dalej
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [pendingPrices]); // eslint-disable-line react-hooks/exhaustive-deps
   const estTotal = priced.reduce((sum, it) => sum + estimates[it.id].total, 0);
   const [priceFor, setPriceFor] = useState(null); // id pozycji z otwartym podglądem / korektą ceny
   const [priceDraft, setPriceDraft] = useState('');
@@ -258,9 +286,10 @@ export default function ShoppingView() {
         onClick={() => openPrice(it)}
         aria-expanded={priceFor === it.id}
         aria-label={est ? `Cena ${it.title}: ok. ${formatZl(est.total)} – podgląd i korekta` : `Dodaj cenę ${it.title}`}
-        title={est ? 'Szacowana cena z historii paragonów – dotknij, aby podejrzeć lub poprawić' : 'Dodaj cenę'}
-        className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] tabular hover:bg-stone-100 dark:hover:bg-white/5 ${it.done ? 'text-stone-300 dark:text-stone-600' : est?.source === 'user' ? 'text-blue-600 dark:text-blue-400' : 'text-stone-400 dark:text-stone-500'}`}
+        title={!est ? 'Dodaj cenę' : est.source === 'ai' ? 'Szacunek AI (cena rynkowa) – dotknij, aby poprawić' : 'Szacowana cena z historii paragonów – dotknij, aby podejrzeć lub poprawić'}
+        className={`inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] tabular hover:bg-stone-100 dark:hover:bg-white/5 ${it.done ? 'text-stone-300 dark:text-stone-600' : est?.source === 'user' ? 'text-blue-600 dark:text-blue-400' : 'text-stone-400 dark:text-stone-500'}`}
       >
+        {est?.source === 'ai' && <Sparkles size={10} className="text-violet-400" aria-hidden="true" />}
         {est ? `ok. ${formatZl(est.total)}` : '+ cena'}
       </button>
     );
@@ -271,8 +300,10 @@ export default function ShoppingView() {
     return (
       <form onSubmit={(e) => savePrice(e, it)} className="mx-2 mb-1.5 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs dark:border-white/10 dark:bg-white/[0.03]" aria-label={`Cena ${it.title}`}>
         <p className="text-stone-600 dark:text-stone-300">
-          {est?.last !== null && est?.last !== undefined
-            ? `Z paragonów: ostatnio ${formatZl(est.last)}${est.lastDate ? ` (${est.lastDate.split('-').reverse().join('.')})` : ''}${est.count > 1 ? `, średnio ${formatZl(est.avg)} (ostatnie ${Math.min(est.count, 3)} z ${est.count})` : ''}${est.lastName && est.lastName.toLowerCase() !== it.title.toLowerCase() ? ` · „${est.lastName}”` : ''}`
+          {est?.source === 'ai'
+            ? `Szacunek AI – cena rynkowa${est.aiUnit ? ` za ${est.aiUnit}` : ''} (tego produktu nie ma jeszcze na Twoich paragonach). Popraw, jeśli płacisz inaczej.`
+            : est?.last !== null && est?.last !== undefined
+            ? `${est.semantic ? 'AI dopasowało do paragonów. ' : ''}Z paragonów: ostatnio ${formatZl(est.last)}${est.lastDate ? ` (${est.lastDate.split('-').reverse().join('.')})` : ''}${est.count > 1 ? `, średnio ${formatZl(est.avg)} (ostatnie ${Math.min(est.count, 3)} z ${est.count})` : ''}${est.lastName && est.lastName.toLowerCase() !== it.title.toLowerCase() ? ` · „${est.lastName}”` : ''}`
             : 'Brak tego produktu na zeskanowanych paragonach – wpisz cenę, zapamiętam ją.'}
           {est?.source === 'user' ? ' · używasz swojej ceny' : ''}
           {est && est.factor > 1 ? ` · × ${est.factor} szt.` : ''}
@@ -474,6 +505,8 @@ export default function ShoppingView() {
             <div className="flex items-baseline justify-between gap-2 border-t border-stone-100 px-4 py-2.5 dark:border-white/5" aria-live="polite" aria-label="Szacowany koszt zakupów">
               <span className="text-xs text-stone-500 dark:text-stone-400">
                 Szacowany koszt zakupów
+                {aiPriced > 0 && <span className="text-stone-400 dark:text-stone-500"> · w tym szacunki AI: {aiPriced}</span>}
+                {priceAi === 'working' && <span className="text-violet-500"> · AI szacuje ceny…</span>}
                 {priced.length < openItems.length && (
                   <span className="text-stone-400 dark:text-stone-500">
                     {' '}

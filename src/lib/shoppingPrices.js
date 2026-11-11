@@ -6,11 +6,16 @@
 //   tak jak zwykle się ją kupuje. Szacunek: średnia z 3 ostatnich zakupów; podgląd pokazuje też ostatnią cenę.
 // • Korekta użytkownika (`wealth-app-shopping-prices-v1`, per użytkownik – urządzenie + chmura) ma pierwszeństwo,
 //   dopóki nie pojawi się nowszy paragon z tym produktem (wtedy wraca cena z paragonu).
+// • AI (fallback, `wealth-app-shopping-ai-prices-v1`): gdy słowa nie pasują – dopasowanie semantyczne do nazwy z paragonów
+//   (match → cena z historii tej pozycji), a gdy produktu nigdy nie kupowano – szacunek ceny rynkowej (source 'ai').
+//   Wynik zapamiętany per produkt; szacunki rynkowe odświeżane po AI_TTL_DAYS.
 import { PREFS_CHANGED_EVENT } from './budget.js';
 import { readReceipts } from './receipts.js';
 
 export const PRICES_KEY = 'wealth-app-shopping-prices-v1';
 const RECENT = 3;
+export const AI_PRICES_KEY = 'wealth-app-shopping-ai-prices-v1';
+const AI_TTL_DAYS = 60;
 
 const fold = (s) =>
   String(s || '')
@@ -80,18 +85,62 @@ export function quantityFactor(q) {
   return n >= 1 && n <= 99 ? n : 1;
 }
 
+export function readAiPrices() {
+  try {
+    const v = JSON.parse(localStorage.getItem(AI_PRICES_KEY) || '{}');
+    return v && typeof v === 'object' ? v : {};
+  } catch {
+    return {};
+  }
+}
+// Zapis odpowiedzi AI: { 'tytuł z listy': { match, price, unit } } (także produkty bez wyniku – by nie pytać w kółko)
+export function writeAiPrices(titles, prices) {
+  const all = readAiPrices();
+  const at = new Date().toISOString().slice(0, 10);
+  for (const t of titles) {
+    const x = prices[t];
+    all[priceKey(t)] = x ? { match: x.match || '', price: Number(x.price) > 0 ? round2(Number(x.price)) : null, unit: x.unit || '', at } : { match: '', price: null, unit: '', at };
+  }
+  try {
+    localStorage.setItem(AI_PRICES_KEY, JSON.stringify(all));
+    window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: AI_PRICES_KEY } }));
+  } catch {
+    // brak localStorage
+  }
+  return all;
+}
+const fresh = (at, days) => !!at && (Date.now() - new Date(at).getTime()) / 86400000 < days;
+// Produkty do zapytania AI: bez dopasowania słownego, bez Twojej ceny i bez świeżej odpowiedzi AI
+export function needsAiPrice(title, index, overrides = readPriceOverrides(), ai = readAiPrices()) {
+  const k = priceKey(title);
+  if (!k || overrides[k] || matches(index, title).length) return false;
+  const a = ai[k];
+  if (!a) return true;
+  if (a.match) return !index.some((x) => x.full === priceKey(a.match)); // dopasowany paragon zniknął z historii
+  return !fresh(a.at, AI_TTL_DAYS);
+}
+// Nazwy produktów z paragonów (najnowsze najpierw, bez powtórzeń) – kontekst dopasowania semantycznego
+export const knownProducts = (index, limit = 400) => [...new Set(index.map((x) => x.name))].slice(0, limit);
+
 // Szacunek ceny produktu: { price, source: 'user' | 'receipts', last, lastDate, avg, count, factor, total }
-export function estimatePrice(title, quantity, index, overrides = readPriceOverrides()) {
-  const hits = matches(index, title);
+export function estimatePrice(title, quantity, index, overrides = readPriceOverrides(), ai = {}) {
+  const a = ai[priceKey(title)];
+  let hits = matches(index, title);
+  let semantic = false;
+  if (!hits.length && a?.match) {
+    hits = index.filter((x) => x.full === priceKey(a.match));
+    semantic = hits.length > 0;
+  }
   const recent = hits.slice(0, RECENT);
   const avg = recent.length ? round2(recent.reduce((s, x) => s + x.unit, 0) / recent.length) : null;
   const last = hits[0] || null;
   const ov = overrides[priceKey(title)];
   const useOverride = ov && (!last || String(ov.at) >= String(last.date));
-  const price = useOverride ? ov.price : avg;
+  const aiPrice = !useOverride && avg === null && a?.price > 0 ? a.price : null;
+  const price = useOverride ? ov.price : avg ?? aiPrice;
   if (price === null || price === undefined) return null;
   const factor = quantityFactor(quantity);
-  return { price, source: useOverride ? 'user' : 'receipts', last: last?.unit ?? null, lastDate: last?.date || '', lastName: last?.name || '', avg, count: hits.length, factor, total: round2(price * factor) };
+  return { price, source: useOverride ? 'user' : aiPrice !== null ? 'ai' : 'receipts', semantic, aiUnit: aiPrice !== null ? a.unit || '' : '', last: last?.unit ?? null, lastDate: last?.date || '', lastName: last?.name || '', avg, count: hits.length, factor, total: round2(price * factor) };
 }
 
 export const formatZl = (v) => `${Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;

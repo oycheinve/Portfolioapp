@@ -118,6 +118,9 @@ export async function requestShoppingCategories(titles) {
   return body.categories;
 }
 
+// Ceny listy zakupów: dopasowanie semantyczne do nazw z paragonów (known) + szacunek ceny rynkowej (AI)
+export const requestShoppingPrices = (items, known = []) => callAi({ mode: 'shopping-prices', items, known });
+
 // Wspólne wywołanie trybów pomocniczych (paragon, podsumowanie budżetu): kolejka, cicha ponowna próba przy przeciążeniu
 async function callAi(payload) {
   const token = await sessionToken();

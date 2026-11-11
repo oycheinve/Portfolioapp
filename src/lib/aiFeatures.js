@@ -6,6 +6,7 @@ export const AI_FEATURES = [
   { id: 'budgetSummary', label: 'Miesięczne podsumowania budżetu', desc: 'Podsumowanie AI miesiąca w Budżecie i automatyczne generowanie na początku miesiąca' },
   { id: 'earnings', label: 'Analityk wyników spółek', desc: 'Karta Analityka w Portfelu (historia i analizy zostają zapisane)' },
   { id: 'shoppingAi', label: 'Kategorie zakupów od AI', desc: 'Rozpoznawanie kategorii nowych produktów – grupowanie z pamięci działa dalej' },
+  { id: 'shoppingPrices', label: 'Ceny zakupów od AI', desc: 'Dopasowanie produktów do paragonów i szacunek ceny, gdy produktu nie ma w historii – ceny z paragonów działają dalej' },
   { id: 'tasksAi', label: 'Kategorie zadań od AI', desc: 'Rozpoznawanie kategorii nowych zadań – grupowanie z pamięci działa dalej' },
 ];
 export const aiAllOn = (settings) => settings?.ai?.all !== false;
