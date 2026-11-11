@@ -167,3 +167,16 @@ export async function sendServerTestPush() {
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
   return body;
 }
+
+// Diagnostyka powiadomień z serwera (bez wysyłki): konfiguracja, subskrypcje, ostatni przebieg harmonogramu
+export async function serverPushStatus() {
+  const sb = await getClient();
+  const { data } = await sb.auth.getSession();
+  const token = data?.session?.access_token;
+  if (!token) throw new Error('Brak sesji – zaloguj się ponownie');
+  const sub = await currentPushSubscription().catch(() => null);
+  const res = await fetch('/api/push-test', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: true, endpoint: sub?.endpoint || '' }) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || (res.status === 404 ? 'Brak funkcji serwera – zrób Redeploy na Vercelu' : `HTTP ${res.status}`));
+  return body;
+}

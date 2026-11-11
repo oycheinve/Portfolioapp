@@ -11,6 +11,7 @@ import {
   readNotifySettings,
   requestNotificationPermission,
   sendServerTestPush,
+  serverPushStatus,
   showNotification,
   subscribePush,
   syncPushSubscription,
@@ -143,6 +144,19 @@ export default function NotificationsView() {
       actions.notify(`Wysłano powiadomienie testowe z serwera (${r.sent}/${r.devices} urządzeń)`, 'success');
     } catch (e) {
       actions.notify(`Test z serwera: ${e.message}`, 'warn');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // Diagnostyka powiadomień z serwera: lista kontrolna od kluczy po ostatni przebieg harmonogramu
+  const [diag, setDiag] = useState(null);
+  const runDiag = async () => {
+    setBusy('diag');
+    try {
+      setDiag(await serverPushStatus());
+    } catch (e) {
+      setDiag({ error: e.message });
     } finally {
       setBusy('');
     }
@@ -336,10 +350,55 @@ export default function NotificationsView() {
                 <Send size={15} /> {busy === 'server' ? 'Wysyłanie…' : 'Wyślij testowe z serwera'}
               </button>
               <p className="text-[11px] text-stone-500 dark:text-stone-400">Ustawienia powyżej (godzina, próg, pora) i lista spółek z portfela zapisują się w subskrypcji; serwer sprawdza je co godzinę.</p>
+              <button type="button" onClick={runDiag} disabled={busy === 'diag'} className={btnCls}>
+                <Activity size={15} /> {busy === 'diag' ? 'Sprawdzanie…' : 'Sprawdź powiadomienia z serwera'}
+              </button>
+              {diag && <PushDiagnostics diag={diag} permission={permission} />}
             </>
           )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+// Lista kontrolna: co działa (✅), co nie (❌) i co z tym zrobić; plan wysyłki z ustawień subskrypcji
+function PushDiagnostics({ diag, permission }) {
+  if (diag.error) return <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800 dark:bg-red-500/10 dark:text-red-200">Nie udało się sprawdzić: {diag.error}</p>;
+  const dev = diag.devices?.find((d) => d.current) || null;
+  const checked = dev?.lastSent?.checked || null;
+  const ageH = checked ? (Date.now() - new Date(checked).getTime()) / 3600000 : null;
+  const prefs = dev?.prefs || {};
+  const rows = [
+    [permission === 'granted', 'Zgoda telefonu na powiadomienia', 'Zezwól na powiadomienia dla przeglądarki / aplikacji w ustawieniach telefonu i strony.'],
+    [!diag.missing?.length, 'Klucze serwera (VAPID, Supabase)', `Brakuje na Vercelu: ${(diag.missing || []).join(', ')} – dodaj i zrób Redeploy.`],
+    [diag.cron, 'Sekret harmonogramu (CRON_SECRET)', 'Dodaj CRON_SECRET na Vercelu i zrób Redeploy.'],
+    [!diag.tableError, 'Tabela subskrypcji w Supabase', 'Uruchom supabase/push_subscriptions.sql w SQL Editor.'],
+    [diag.thisDevice, 'Ten telefon zapisany na serwerze', 'Wyłącz i włącz ponownie „Powiadomienia z serwera” powyżej.'],
+    [ageH !== null && ageH < 2, checked ? `Harmonogram – serwer ostatnio sprawdzał: ${new Date(checked).toLocaleString('pl-PL')}` : 'Harmonogram – serwer jeszcze nie sprawdzał', 'Harmonogram w Supabase nie wywołuje aplikacji: sprawdź pg_cron / pg_net, adres i sekret w cron.schedule (SQL: select status_code from net._http_response order by created desc limit 3).'],
+  ];
+  const hour = Number.isInteger(prefs.tasks?.hour) ? prefs.tasks.hour : 20;
+  return (
+    <div className="space-y-2 rounded-xl border border-stone-200 p-3 text-xs dark:border-white/10" aria-label="Diagnostyka powiadomień z serwera">
+      <ul className="space-y-1.5">
+        {rows.map(([ok, label, fix]) => (
+          <li key={label}>
+            <span className="font-medium">{ok ? '✅' : '❌'} {label}</span>
+            {!ok && <span className="block pl-5 text-stone-500 dark:text-stone-400">{fix}</span>}
+          </li>
+        ))}
+      </ul>
+      {dev && (
+        <div className="border-t border-stone-100 pt-2 text-stone-600 dark:border-white/5 dark:text-stone-300">
+          <div className="font-semibold">Co i kiedy wysyła serwer (strefa {dev.tz}):</div>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            <li>{prefs.tasks?.on === false ? 'Przypomnienie o zadaniach – wyłączone' : `Przypomnienie o zadaniach – raz dziennie od ${hour}:00, tylko gdy masz niewykonane zadania dzienne${dev.lastSent?.tasks ? ` (ostatnio sprawdzone: ${dev.lastSent.tasks})` : ''}`}</li>
+            <li>{prefs.news?.on ? `Podsumowanie wiadomości – ${prefs.news.slot === 'NOON' ? 'w południe' : 'rano'}, gdy jest co najmniej ${prefs.news.min || 3} newsów o Twoich spółkach` : 'Podsumowanie wiadomości – wyłączone'}</li>
+            <li>{prefs.prices?.on ? `Zmiany notowań – w czasie sesji, przy ruchu ≥ ${prefs.prices.threshold || 4}%` : 'Zmiany notowań – wyłączone'}</li>
+          </ul>
+          <p className="mt-1 text-stone-500 dark:text-stone-400">Serwer wysyła tylko w tych porach i tylko gdy jest o czym przypomnieć – poza tym telefon milczy.</p>
+        </div>
+      )}
     </div>
   );
 }

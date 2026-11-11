@@ -129,8 +129,12 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
     const clock = localClock(now, sub.tz || 'Europe/Warsaw');
     const kinds = dueKinds(prefs, clock, sub.last_sent || {});
     if (prefs.prices.on && (loaders.anyTime || marketWindow(now, sub.tz || 'Europe/Warsaw'))) kinds.push('prices'); // zmiany notowań – co godzinę w czasie sesji
-    if (!kinds.length) continue;
-    const lastSent = { ...(sub.last_sent || {}) };
+    // Ślad przebiegu harmonogramu (diagnostyka w aplikacji: „serwer ostatnio sprawdzał …”)
+    const lastSent = { ...(sub.last_sent || {}), checked: now.toISOString() };
+    if (!kinds.length) {
+      if (!dry) await sb.from('push_subscriptions').update({ last_sent: lastSent }).eq('id', sub.id);
+      continue;
+    }
     for (const kind of kinds) {
       let msg = null;
       if (kind === 'tasks') {
