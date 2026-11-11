@@ -5,6 +5,9 @@ import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortIte
 import { SHOPPING_CATEGORIES, categoryOf, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
 import { requestShoppingCategories } from '../lib/newsAi.js';
 import { aiOn } from '../lib/aiFeatures.js';
+import { PRICES_KEY, buildPriceIndex, estimatePrice, formatZl, readPriceOverrides, writePriceOverride } from '../lib/shoppingPrices.js';
+import { RECEIPTS_KEY } from '../lib/receipts.js';
+import { PREFS_CHANGED_EVENT } from '../lib/budget.js';
 
 const SELECTED_KEY = 'fintrack-shopping-selected';
 const readSelected = () => {
@@ -214,6 +217,82 @@ export default function ShoppingView() {
       return next;
     });
 
+  // ── Szacowane ceny z historii paragonów (pamięć cen) + korekta użytkownika ──
+  const [priceVer, setPriceVer] = useState(0);
+  useEffect(() => {
+    const on = (e) => (!e.detail?.key || e.detail.key === RECEIPTS_KEY || e.detail.key === PRICES_KEY) && setPriceVer((v) => v + 1);
+    window.addEventListener(PREFS_CHANGED_EVENT, on);
+    return () => window.removeEventListener(PREFS_CHANGED_EVENT, on);
+  }, []);
+  const priceIndex = useMemo(() => buildPriceIndex(), [priceVer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const overrides = useMemo(() => readPriceOverrides(), [priceVer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const estimates = useMemo(() => Object.fromEntries(items.map((it) => [it.id, estimatePrice(it.title, it.quantity, priceIndex, overrides)])), [items, priceIndex, overrides]);
+  const priced = openItems.filter((it) => estimates[it.id]);
+  const estTotal = priced.reduce((sum, it) => sum + estimates[it.id].total, 0);
+  const [priceFor, setPriceFor] = useState(null); // id pozycji z otwartym podglądem / korektą ceny
+  const [priceDraft, setPriceDraft] = useState('');
+  const openPrice = (it) => {
+    if (priceFor === it.id) return setPriceFor(null);
+    const est = estimates[it.id];
+    setPriceDraft(est ? String(est.price).replace('.', ',') : '');
+    setPriceFor(it.id);
+    return undefined;
+  };
+  const savePrice = (e, it) => {
+    e.preventDefault();
+    const v = Number(String(priceDraft).replace(/\s/g, '').replace(',', '.'));
+    if (!(v > 0)) return;
+    writePriceOverride(it.title, v);
+    setPriceFor(null);
+  };
+  const resetPrice = (it) => {
+    writePriceOverride(it.title, null);
+    setPriceFor(null);
+  };
+  const priceTag = (it) => {
+    const est = estimates[it.id];
+    if (!est && !editing) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => openPrice(it)}
+        aria-expanded={priceFor === it.id}
+        aria-label={est ? `Cena ${it.title}: ok. ${formatZl(est.total)} – podgląd i korekta` : `Dodaj cenę ${it.title}`}
+        title={est ? 'Szacowana cena z historii paragonów – dotknij, aby podejrzeć lub poprawić' : 'Dodaj cenę'}
+        className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] tabular hover:bg-stone-100 dark:hover:bg-white/5 ${it.done ? 'text-stone-300 dark:text-stone-600' : est?.source === 'user' ? 'text-blue-600 dark:text-blue-400' : 'text-stone-400 dark:text-stone-500'}`}
+      >
+        {est ? `ok. ${formatZl(est.total)}` : '+ cena'}
+      </button>
+    );
+  };
+  const priceEditor = (it) => {
+    if (priceFor !== it.id) return null;
+    const est = estimates[it.id];
+    return (
+      <form onSubmit={(e) => savePrice(e, it)} className="mx-2 mb-1.5 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs dark:border-white/10 dark:bg-white/[0.03]" aria-label={`Cena ${it.title}`}>
+        <p className="text-stone-600 dark:text-stone-300">
+          {est?.last !== null && est?.last !== undefined
+            ? `Z paragonów: ostatnio ${formatZl(est.last)}${est.lastDate ? ` (${est.lastDate.split('-').reverse().join('.')})` : ''}${est.count > 1 ? `, średnio ${formatZl(est.avg)} (ostatnie ${Math.min(est.count, 3)} z ${est.count})` : ''}${est.lastName && est.lastName.toLowerCase() !== it.title.toLowerCase() ? ` · „${est.lastName}”` : ''}`
+            : 'Brak tego produktu na zeskanowanych paragonach – wpisz cenę, zapamiętam ją.'}
+          {est?.source === 'user' ? ' · używasz swojej ceny' : ''}
+          {est && est.factor > 1 ? ` · × ${est.factor} szt.` : ''}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input autoFocus inputMode="decimal" value={priceDraft} onChange={(e) => setPriceDraft(e.target.value)} placeholder="Cena za szt." aria-label={`Twoja cena ${it.title}`} className={`${inputCls} h-8 w-28`} />
+          <span className="text-stone-400">zł / szt.</span>
+          <button type="submit" className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-600 px-2.5 font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-neutral-950">
+            <Check size={13} /> Zapisz
+          </button>
+          {est?.source === 'user' && (
+            <button type="button" onClick={() => resetPrice(it)} className="h-8 rounded-lg px-2 font-medium text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-white/5">
+              {est.count ? 'Wróć do ceny z paragonów' : 'Usuń cenę'}
+            </button>
+          )}
+        </div>
+      </form>
+    );
+  };
+
   const renderRow = (it) => {
     const qtyBadge = it.quantity && <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular ${it.done ? 'text-stone-400 dark:text-stone-500' : 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300'}`}>{it.quantity}</span>;
     if (editing) {
@@ -222,6 +301,7 @@ export default function ShoppingView() {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl px-2 py-1.5">
           <span className={`min-w-0 flex-1 text-sm break-words ${it.done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{it.title}</span>
           {qtyBadge}
+          {priceTag(it)}
           <select
             className="h-8 max-w-[11.5rem] min-w-0 rounded-lg border border-stone-200 bg-white px-1.5 text-xs text-stone-700 outline-none focus:border-blue-500 dark:border-white/10 dark:bg-neutral-800 dark:text-stone-200"
             value={cat}
@@ -237,17 +317,22 @@ export default function ShoppingView() {
           <button type="button" onClick={() => removeItem(it)} aria-label={`Usuń ${it.title}`} title="Usuń pozycję" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10">
             <Trash2 size={15} />
           </button>
+          {priceFor === it.id && <div className="w-full">{priceEditor(it)}</div>}
         </div>
       );
     }
     return (
+      <>
       <div className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
         <button type="button" role="checkbox" aria-checked={it.done} onClick={() => toggle(it)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left">
           <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${it.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-stone-300 dark:border-white/25'}`}>{it.done && <Check size={15} strokeWidth={3} />}</span>
           <span className={`min-w-0 flex-1 text-sm break-words ${it.done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{it.title}</span>
           {qtyBadge}
         </button>
+        {priceTag(it)}
       </div>
+      {priceEditor(it)}
+      </>
     );
   };
 
@@ -384,6 +469,21 @@ export default function ShoppingView() {
               </li>
             )}
           </ul>
+          {/* Szacowany koszt pozycji do kupienia – ceny z historii paragonów (i Twoich korekt) */}
+          {priced.length > 0 && (
+            <div className="flex items-baseline justify-between gap-2 border-t border-stone-100 px-4 py-2.5 dark:border-white/5" aria-live="polite" aria-label="Szacowany koszt zakupów">
+              <span className="text-xs text-stone-500 dark:text-stone-400">
+                Szacowany koszt zakupów
+                {priced.length < openItems.length && (
+                  <span className="text-stone-400 dark:text-stone-500">
+                    {' '}
+                    · ceny dla {priced.length} z {openItems.length}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 text-sm font-semibold whitespace-nowrap tabular">ok. {formatZl(estTotal)}</span>
+            </div>
+          )}
           {doneCount > 0 && (
             <div className="flex justify-end border-t border-stone-100 px-3 py-2 dark:border-white/5">
               <button type="button" onClick={clearDone} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-white/5">

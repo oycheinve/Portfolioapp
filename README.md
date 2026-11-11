@@ -592,6 +592,12 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 
 - Główny przełącznik „Funkcje AI w aplikacji” i osobny dla każdej funkcji (`src/lib/aiFeatures.js`, `settings.ai`, zapis w ustawieniach użytkownika): podsumowania newsów, skanowanie paragonów, miesięczne podsumowania budżetu (także automatyczne), Analityk wyników spółek, kategorie zakupów i zadań od AI. Wyłączenie ukrywa funkcję i zatrzymuje zapytania do AI; dane (analizy, paragony, podsumowania, kategorie) zostają, a grupowanie zakupów i zadań działa dalej z pamięci.
 
+### Zakupy – szacowane ceny z historii paragonów
+
+- Pamięć cen (`src/lib/shoppingPrices.js`): pozycje z zeskanowanych paragonów (`wealth-app-receipts-v1`) dopasowane do produktu z listy po słowach (bez wielkości liter i polskich znaków, z tolerancją końcówek: szynka → „SZYNKA KRAKOWSKA”); cena za sztukę = wartość pozycji / ilość (dla wagi – cała pozycja); szacunek = średnia z 3 ostatnich zakupów.
+- Przy produkcie subtelny podpis „ok. 12,50 zł” (× ilość z listy, np. „2” albo „3 szt”); dotknięcie otwiera podgląd (ostatnia cena i data, średnia, nazwa z paragonu) i korektę ceny. Korekta (`wealth-app-shopping-prices-v1`, konto i urządzenie) ma pierwszeństwo, dopóki nie pojawi się nowszy paragon z tym produktem; „Wróć do ceny z paragonów” ją usuwa. W trybie „Edytuj” – „+ cena” dla produktów bez historii.
+- Pod listą: „Szacowany koszt zakupów: ok. X zł” – suma pozycji do kupienia (z informacją, dla ilu produktów jest cena).
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.
