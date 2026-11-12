@@ -1,4 +1,4 @@
-import { Layers, LayoutGrid, ScanLine } from 'lucide-react';
+import { Layers, LayoutGrid, PiggyBank, ScanLine } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { TOGGLEABLE_MODULES, navLabel } from '../Layout.jsx';
 import { BetaBadge, Card, Toggle } from '../ui.jsx';
@@ -40,6 +40,18 @@ export default function ModulesCard() {
           onChange={(v) => actions.updateSettings({ groupByCategory: v })}
           label="Grupuj elementy według kategorii (AI i pamięć)"
           description={state.settings.groupByCategory !== false ? 'Produkty w Zakupach i zadania w Zadaniach są dzielone na sekcje kategorii; nowe pozycje rozpoznaje pamięć i AI.' : 'Wyłączone – zwykłe listy bez sekcji (kategorie i pamięć zostają zapisane).'}
+        />
+      </Card>
+      <Card title="Budżet miesięczny" subtitle="Dodatkowe kategorie" icon={PiggyBank}>
+        <Toggle
+          checked={state.settings.budgetSavingsCategory === true}
+          onChange={(v) => actions.updateSettings({ budgetSavingsCategory: v })}
+          label="Kategoria „Z oszczędności”"
+          description={
+            state.settings.budgetSavingsCategory === true
+              ? `Pierwszy wiersz tabeli budżetu i kategoria w „Dodaj zakup”: wydatki odejmowane od salda konta oszczędnościowego, poza RAZEM.${state.accounts.some((a) => a.type === 'SAVINGS') ? '' : ' Wymaga konta oszczędnościowego (Ustawienia → Konta).'}`
+              : 'Wyłączone – budżet bez kategorii wydatków z konta oszczędnościowego (wcześniejsze wpisy i operacje na koncie zostają).'
+          }
         />
       </Card>
       <Card title={<>Skanowanie paragonów<BetaBadge /></>} subtitle="Podgląd przed zapisem" icon={ScanLine}>

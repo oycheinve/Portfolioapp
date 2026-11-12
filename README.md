@@ -603,6 +603,7 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 
 ### Budżet – kategoria „Z oszczędności”
 
+- Włączana w **Ustawienia → Moduły i widok → Budżet miesięczny → Kategoria „Z oszczędności”** (`settings.budgetSavingsCategory`, domyślnie wyłączona; wyłączenie ukrywa wiersz i kategorię, wcześniejsze wpisy i operacje na koncie zostają).
 - Osobna kategoria wydatków **„Z oszczędności”** w „Dodaj zakup” (także w podziale zakupu), widoczna, gdy masz konto oszczędnościowe. Wydatek nie zmienia budżetu miesięcznego – zapisuje wypłatę z konta oszczędnościowego (`cashflows`, `source: 'budget'`, opis „Wydatek z oszczędności: notatka”), więc pomniejsza saldo konta w Poduszce i majątku.
 - W tabeli zwykły wiersz „Z oszczędności” na pierwszym miejscu (oddzielny byt: Wydano = suma wydatków z oszczędności w miesiącu, bez planu i reszty), niewliczany do RAZEM ani statystyk (podsumowania, koszty życia); przy kilku kontach – wybór konta w tym wierszu, zapamiętany w `wealth-app-budget-savings-account`. „Ostatnie wpisy → ×” cofa wpis razem z wypłatą z konta.
 - Zgodność: kategorie budżetu powiązane wcześniej z kontem (`row.savings`) działają dalej (poza RAZEM, z operacją na koncie) i można je odłączyć w trybie „Edytuj”.
