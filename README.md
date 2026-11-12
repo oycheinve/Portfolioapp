@@ -614,6 +614,11 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - **Zysk / strata miesięczna** (na dole „Na co dzień”): suma kwot wydanych w kategoriach inwestycyjnych (typ „Inwestycje” albo nazwa: inwestycje, S&P 500, ETF, IKE / IKZE, akcje, obligacje) minus wydatki „Z oszczędności” w miesiącu; na plusie – „Zysk miesięczny” (zielony), na minusie – „Strata miesięczna” (czerwony), z rozbiciem składników.
 - Zgodność: kategorie budżetu powiązane wcześniej z kontem (`row.savings`) działają dalej (poza RAZEM, z operacją na koncie) i można je odłączyć w trybie „Edytuj”.
 
+### Cele → Kamienie milowe (automatyczne)
+
+- Karta na górze zakładki Cele (`src/components/goals/MilestonesCard.jsx`, `src/lib/milestones.js`): cztery ścieżki liczone z portfela inwestycyjnego tymi samymi funkcjami co Pulpit – wartość wpłacona (wkład własny), zysk wygenerowany (zysk całkowity od początku), procent zysku (stopa zwrotu od początku) i dywidendy roczne (netto, ostatnie 12 mies.).
+- Progi (np. 10k / 25k / 50k / 100k zł, +5% / +10% / +25% / +50%, 500 / 1k / 2,5k / 5k zł/rok) odhaczają się same; powyżej ostatniego progu kolejne są podwajane (bez limitu). Pasek postępu do następnego progu i „brakuje X”; data pierwszego osiągnięcia zapisana per użytkownik (`wealth-app-milestones-v1`) – próg zostaje odhaczony także po chwilowym spadku. Nowy próg – krótkie powiadomienie w aplikacji (przy pierwszym uruchomieniu zapis po cichu).
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.

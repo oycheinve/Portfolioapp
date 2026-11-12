@@ -6,6 +6,7 @@ import { seriesColor } from '../lib/colors.js';
 import { formatNumber, formatPercent } from '../lib/format.js';
 import { Badge, Button, Card, EmptyState, Field, IconButton, Input, Modal, Select } from '../components/ui.jsx';
 import Ring from '../components/goals/Ring.jsx';
+import MilestonesCard from '../components/goals/MilestonesCard.jsx';
 import YearReviewModal from '../components/goals/YearReviewModal.jsx';
 import { reopenYear } from '../lib/goalsRollover.js';
 
@@ -98,6 +99,8 @@ export default function GoalsView() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Kamienie milowe – automatyczne, z danych portfela */}
+      <MilestonesCard />
       {/* Wskaźnik zbiorczy – kompaktowy pasek: pierścień, wynik, rok i akcje */}
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4 dark:border-white/10 dark:bg-neutral-900">
         <div className="flex items-center gap-3">
