@@ -112,7 +112,7 @@ function MonthlyBudget() {
   const [month, setMonth] = useState(() => monthKey());
   const saved = data[month];
   // Miesiąc bez zapisanego budżetu: przykładowe kategorie (zapisywane przy pierwszej zmianie)
-  const template = useMemo(() => demoRows(), [month]); // eslint-disable-line react-hooks/exhaustive-deps
+  const template = useMemo(() => demoRows(month), [month]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = saved || template;
   const isTemplate = !saved;
   const prevKey = useMemo(() => {

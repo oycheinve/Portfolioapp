@@ -6,20 +6,19 @@ export const BUDGET_KEY = 'wealth-app-budget-v1';
 
 export const BUDGET_TYPES = ['Transport', 'Inwestycje', 'Stałe koszty', 'Zdrowie', 'Życie', 'Oszczędności', 'Inne'];
 
-// Przykładowe kategorie miesiąca bez zapisanych danych (wzór z arkusza „Budżet na: Grudzień”)
+// Przykładowe kategorie miesiąca bez zapisanych danych (dla nowego użytkownika): ogólne kategorie z losowymi,
+// zaokrąglonymi kwotami w podanych zakresach; losowanie zależne od miesiąca (stałe przy odświeżaniu), wydane = 0
 export const DEMO_ROWS = [
-  { name: 'Karta miejska', planned: 55, spent: 0, type: 'Transport' },
-  { name: 'Pociągi', planned: 220, spent: 0, type: 'Transport' },
-  { name: 'Inwestycje', planned: 300, spent: 0, type: 'Inwestycje' },
-  { name: 'Canal+', planned: 35, spent: 0, type: 'Stałe koszty' },
-  { name: 'Soczewki', planned: 48, spent: 0, type: 'Zdrowie' },
-  { name: 'Ubery', planned: 40, spent: 0, type: 'Życie' },
-  { name: 'Kosmetyki i chemia', planned: 50, spent: 0, type: 'Życie' },
-  { name: 'Nieprzewidziane wydatki', planned: 200, spent: 53.35, type: 'Inne' },
-  { name: 'Wakacje (odkładanie)', planned: 150, spent: 0, type: 'Oszczędności' },
-  { name: 'S&P 500', planned: 300, spent: 0, type: 'Inwestycje' },
-  { name: 'Suplementy', planned: 22, spent: 0, type: 'Oszczędności' },
-  { name: 'Jedzenie (Reszta)', planned: 880, spent: 0, type: 'Życie' },
+  { name: 'Jedzenie', range: [800, 1400], step: 50, type: 'Życie' },
+  { name: 'Mieszkanie i rachunki', range: [900, 2000], step: 50, type: 'Stałe koszty' },
+  { name: 'Transport', range: [150, 400], step: 10, type: 'Transport' },
+  { name: 'Zdrowie', range: [50, 200], step: 10, type: 'Zdrowie' },
+  { name: 'Chemia i kosmetyki', range: [50, 150], step: 10, type: 'Życie' },
+  { name: 'Rozrywka i subskrypcje', range: [60, 250], step: 10, type: 'Stałe koszty' },
+  { name: 'Ubrania', range: [50, 250], step: 10, type: 'Życie' },
+  { name: 'Inwestycje', range: [200, 800], step: 50, type: 'Inwestycje' },
+  { name: 'Oszczędności', range: [100, 500], step: 50, type: 'Oszczędności' },
+  { name: 'Nieprzewidziane wydatki', range: [100, 300], step: 10, type: 'Inne' },
 ];
 
 let seq = 0;
@@ -82,7 +81,19 @@ export function writeBudgetLog(log) {
   }
 }
 
-export const demoRows = () => DEMO_ROWS.map((r) => ({ id: newRowId(), ...r }));
+// Prosty generator pseudolosowy z ziarnem (miesiąc „RRRR-MM”) – te same kwoty przy każdym otwarciu tego miesiąca
+const seeded = (seed) => {
+  let h = 2166136261;
+  for (const c of String(seed)) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+};
+export const demoRows = (seed = monthKey()) => {
+  const rnd = seeded(seed);
+  return DEMO_ROWS.map(({ range: [min, max], step, ...r }) => ({ id: newRowId(), ...r, planned: Math.round((min + rnd() * (max - min)) / step) * step, spent: 0 }));
+};
 
 // Kwota z tabeli budżetu: liczba albo tekst z przecinkiem dziesiętnym i spacjami („974,39”, „1 234,50”)
 export const parseAmount = (v) => num(v);
