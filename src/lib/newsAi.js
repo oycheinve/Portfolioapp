@@ -121,6 +121,9 @@ export async function requestShoppingCategories(titles) {
 // Ceny listy zakupów: dopasowanie semantyczne do nazw z paragonów (known) + szacunek ceny rynkowej (AI)
 export const requestShoppingPrices = (items, known = []) => callAi({ mode: 'shopping-prices', items, known });
 
+// Newsy: ocena, które artykuły są istotne dla inwestora (items: [{ id, title, source, company }]) → { id: bool }
+export const requestNewsRelevance = (items) => callAi({ mode: 'news-relevance', items }).then((b) => b.relevance || {});
+
 // Wspólne wywołanie trybów pomocniczych (paragon, podsumowanie budżetu): kolejka, cicha ponowna próba przy przeciążeniu
 async function callAi(payload) {
   const token = await sessionToken();

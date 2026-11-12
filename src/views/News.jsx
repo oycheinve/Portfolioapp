@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, ExternalLink, Newspaper, Plus, RefreshCw, Sparkles, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { computeHoldings, isoDay } from '../lib/engine.js';
@@ -9,6 +9,8 @@ import AiSummary from '../components/news/AiSummary.jsx';
 import { articleKey, digestKey } from '../lib/newsAi.js';
 import { portfolioContext, portfolioKey } from '../lib/aiContext.js';
 import { aiOn } from '../lib/aiFeatures.js';
+import { readRelevance, writeRelevance } from '../lib/newsRelevance.js';
+import { requestNewsRelevance } from '../lib/newsAi.js';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
 const LIST_LIMIT = 60;
@@ -167,7 +169,41 @@ export default function NewsView() {
   }, [result.items, held, topics]);
   const selectedIds = useMemo(() => new Set(selected.map((t) => t.id)), [selected]);
   const generalCount = classified.filter((it) => it.mainId === GENERAL_ID).length;
-  const visible = classified.filter((it) => (it.mainId === GENERAL_ID ? generalOn : selectedIds.has(it.mainId)));
+  // Filtr AI (Ustawienia → Funkcje AI): artykuły o spółkach z portfela oceniane raz (pamięć per link) – szum
+  // konsumencki (promocje, oferty sklepów, kolekcje) ukryty z podglądem; frazy własne i „Analizy ogólne” bez oceny
+  const filterOn = aiOn(state.settings, 'newsFilter');
+  const [relevance, setRelevance] = useState(readRelevance);
+  const [relStatus, setRelStatus] = useState('idle');
+  const [showHidden, setShowHidden] = useState(false);
+  const relAsked = useRef(new Set());
+  const relPending = useMemo(
+    () => (filterOn ? classified.filter((it) => it.mainId !== GENERAL_ID && !it.custom && it.link && !relevance[it.link] && !relAsked.current.has(it.link)) : []),
+    [filterOn, classified, relevance],
+  );
+  useEffect(() => {
+    if (!relPending.length) return undefined;
+    const t = setTimeout(async () => {
+      const batch = relPending.slice(0, 60);
+      for (const it of batch) relAsked.current.add(it.link);
+      setRelStatus('working');
+      try {
+        const res = await requestNewsRelevance(batch.map((it, i) => ({ id: `a${i}`, title: it.title, source: it.source, company: it.tag })));
+        const byLink = {};
+        batch.forEach((it, i) => {
+          if (typeof res[`a${i}`] === 'boolean') byLink[it.link] = res[`a${i}`];
+        });
+        setRelevance(writeRelevance(byLink));
+        setRelStatus('idle');
+      } catch {
+        setRelStatus('error'); // bez AI – wszystkie artykuły widoczne
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [relPending]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isNoise = (it) => filterOn && it.mainId !== GENERAL_ID && relevance[it.link]?.r === false;
+  const shownTopics = classified.filter((it) => (it.mainId === GENERAL_ID ? generalOn : selectedIds.has(it.mainId)));
+  const hiddenCount = shownTopics.filter(isNoise).length;
+  const visible = showHidden ? shownTopics : shownTopics.filter((it) => !isNoise(it));
   const items = visible.slice(0, LIST_LIMIT);
   const allErrors = result.errors.length > 0 && result.items.length === 0;
   // Podsumowanie dnia (AI): artykuły z wczoraj i dziś (od północy wczoraj do teraz) z zaznaczonych tematów
@@ -333,6 +369,23 @@ export default function NewsView() {
             />
           </Card>
         )}
+        {!loading && filterOn && (hiddenCount > 0 || relStatus === 'working') && (
+          <p className="flex flex-wrap items-center gap-x-2 px-1 text-[11px] text-stone-500 dark:text-stone-400" aria-live="polite">
+            <Sparkles size={12} className={relStatus === 'working' ? 'animate-pulse text-violet-500' : 'text-violet-400'} aria-hidden="true" />
+            {relStatus === 'working' && 'AI sprawdza, które artykuły dotyczą inwestycji…'}
+            {hiddenCount > 0 && (
+              <>
+                <span>
+                  {showHidden ? 'Pokazano' : 'Ukryto'} {hiddenCount}{' '}
+                  {hiddenCount === 1 ? 'artykuł niezwiązany' : hiddenCount % 10 >= 2 && hiddenCount % 10 <= 4 && (hiddenCount % 100 < 12 || hiddenCount % 100 > 14) ? 'artykuły niezwiązane' : 'artykułów niezwiązanych'} z inwestowaniem (np. promocje)
+                </span>
+                <button type="button" onClick={() => setShowHidden((v) => !v)} className="font-semibold text-blue-700 hover:underline dark:text-blue-300">
+                  {showHidden ? 'Ukryj' : 'Pokaż'}
+                </button>
+              </>
+            )}
+          </p>
+        )}
         {!loading && dayItems.length > 0 && aiOn(state.settings, 'newsSummary') && (
           <section aria-label="Podsumowanie dnia" className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900">
             <button
@@ -377,6 +430,7 @@ export default function NewsView() {
             <div className="mb-1.5 flex items-start gap-2">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                 <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${it.mainId === GENERAL_ID ? 'bg-stone-100 text-stone-600 dark:bg-white/[0.06] dark:text-stone-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'}`}>{it.tag}</span>
+                {isNoise(it) && <span className="inline-block rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">poza inwestycjami</span>}
                 {it.also.map((l) => (
                   <span key={l} className="inline-block rounded-md border border-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 dark:border-blue-500/20 dark:text-blue-300">
                     {l}

@@ -624,6 +624,7 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - Zapytanie Google News o spółkę: dokładna nazwa + słowa rynkowe połączone OR (`companyQuery`: akcje, giełda, GPW, spółka, wyniki, notowania, dywidenda, kurs) zamiast „nazwa giełda” – nie odpadają artykuły bez słowa „giełda”.
 - `api/news.js`: najpierw wyniki z ostatnich 7 dni (`when:7d`, Google sortuje wg trafności), a gdy jest ich mniej niż 10 – dodatkowo bez ograniczenia czasu.
 - Rozpoznawanie spółki w tytule uwzględnia polską odmianę nazw (≥ 5 znaków + krótka końcówka: „Synektiku”, „Digital Networku”), więc takie artykuły nie trafiają do „Analiz ogólnych”.
+- **Filtr AI** (Ustawienia → Funkcje AI → „Filtr newsów (AI)”, tryb `news-relevance`): artykuły o spółkach z portfela oceniane raz (tytuł, źródło, spółka) – istotne dla inwestora (wyniki, kurs, dywidendy, decyzje zarządu, rekomendacje…) zostają, szum konsumencki (promocje, rabaty, kolekcje, oferty sklepów) jest ukrywany; linijka „Ukryto N artykułów… · Pokaż” odsłania je ze znacznikiem „poza inwestycjami”. Ocena per link w pamięci urządzenia (`fintrack-news-relevance-v1`, 30 dni); frazy własne i „Analizy ogólne” bez oceny; bez AI – wszystkie artykuły widoczne.
 
 ## Minimalizm i mniej przewijania (pakiet UI)
 
