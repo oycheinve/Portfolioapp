@@ -75,6 +75,8 @@ function authorPatterns(a) {
     `${A} (research|komentuje|radzi|przewiduje|tv|trading|academy|akademia)`,
     `(przez|w|na) (platformie|platformy|aplikacji|aplikacja|rachunku|koncie|konto) ${A}`,
     `(przez|na) ${A}`,
+    // „Kamil Cisowski z XTB”, „ekspert z XTB”, „rozmowa z XTB”
+    `z ${A}`,
   ];
 }
 
@@ -109,15 +111,34 @@ function firstMention(text, aliases) {
   return best;
 }
 
+// Autor w zapisie z interpunkcją (przed normalizacją): „XTB: …” na początku tytułu, „Imię Nazwisko, XTB: …”,
+// „Imię Nazwisko (XTB): …”, „… – XTB” na końcu
+const soft = (text) =>
+  ` ${String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ł/g, 'l')
+    .replace(/[„”"']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()} `;
+// Spółki-wydawcy analiz (broker / banki z domami maklerskimi): ich nazwa w roli autora nie czyni ich tematem
+const PUBLISHERS = new Set(['XTB', 'MBK', 'PKO', 'SPL', 'PEO', 'MIL', 'ALR', 'BHW', 'ING']);
+function punctAuthor(raw, a) {
+  const A = escape(a).replace(/ /g, '\\s+');
+  return new RegExp(`^\\s*${A}\\s*[:|]|[,(]\\s*${A}\\s*[):]|[–—-]\\s*${A}\\s*$`).test(raw);
+}
+
 // item: { title, source }; topics: tematy-spółki z portfela [{ id, label, title }] (frazy własne pomijane)
 // → { mainId, mentions: [id…], authorIds: [id…] } – mainId === GENERAL_ID, gdy tytuł nie dotyczy żadnej spółki
 export function classifyArticle(item, topics) {
   // Nazwa platformy XTB (xStation) nie jest podmiotem
   const title = norm(item.title).replace(/ xstation( 5)?(?= )/g, ' ');
   const source = norm(item.source);
-  const list = topics.map((t) => ({ id: t.id, aliases: topicAliases(t) }));
+  const list = topics.map((t) => ({ id: t.id, aliases: topicAliases(t), publisher: PUBLISHERS.has(String(t.label || '').toUpperCase()) }));
   // Tematy-autorzy: źródło to sama spółka (np. portal XTB) albo w tytule jest fragment autorski z jej nazwą
-  const authorIds = list.filter((t) => t.aliases.some((a) => source.includes(` ${a} `) || removeSpans(title, a) !== title)).map((t) => t.id);
+  const raw = soft(item.title);
+  const authorIds = list.filter((t) => t.aliases.some((a) => source.includes(` ${a} `) || removeSpans(title, a) !== title || (t.publisher && punctAuthor(raw, a)))).map((t) => t.id);
   // Tytuł bez fragmentów autorskich wszystkich tematów
   let clean = title;
   for (const t of list) for (const a of t.aliases) clean = removeSpans(clean, a);
@@ -128,9 +149,11 @@ export function classifyArticle(item, topics) {
     // dywidenda…); gdy w tytule jest inna spółka albo źródłem jest sama spółka – to tylko autor analizy
     if (pos >= 0 && authorIds.includes(t.id)) {
       const event = t.aliases.some((a) => new RegExp(`( ${escape(a)} (\\S+ )?${EVENT}| ${EVENT}\\S* (\\S+ )?${escape(a)} )`).test(clean));
+      // Wydawca analiz (np. XTB) bez zdarzenia spółki – analityk XTB o bitcoinie, ropie, innej spółce – nie jest
+      // tematem; pozostałe spółki-autorzy jak dotąd: tylko gdy w tytule jest inna spółka albo źródłem jest sama spółka
       const otherAfter = list.some((o) => o.id !== t.id && firstMention(clean, o.aliases) >= 0);
       const sourceIsTopic = t.aliases.some((a) => source.includes(` ${a} `));
-      if (!event && (otherAfter || sourceIsTopic)) pos = -1;
+      if (!event && (t.publisher || otherAfter || sourceIsTopic)) pos = -1;
     }
     if (pos >= 0) hits.push({ id: t.id, pos });
   }
