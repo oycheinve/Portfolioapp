@@ -577,7 +577,7 @@ function RowActions({ row, onBuy, onSell, onHistory, onDividends, onChart, onEdi
         </button>
       </Slot>
       <Slot show={!!onDividends}>
-        <button type="button" className={btn} onClick={onDividends} title={hasIncome ? 'Dywidendy – wypłacone i nadchodzące' : 'Dywidendy (brak wypłat)'} aria-label={`Dywidendy ${row.name}`}>
+        <button type="button" className={btn} onClick={onDividends} title={hasIncome ? 'Dywidendy – otrzymane i stopa od kosztu' : 'Dywidendy (brak wypłat)'} aria-label={`Dywidendy ${row.name}`}>
           <Coins size={15} className={hasIncome ? '' : 'opacity-40'} />
           {hasIncome && <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-red-600" />}
         </button>

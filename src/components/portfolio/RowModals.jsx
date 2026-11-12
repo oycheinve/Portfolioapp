@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 import { CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '../../state/AppContext.jsx';
 import { incomeEventsWithTax, isoDay, isSyntheticDeposit } from '../../lib/engine.js';
-import { STATUS_META, evaluateScheduleItem } from '../../lib/dividends.js';
 import { createPriceResolver } from '../../lib/history.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { formatDate, formatPLN, formatPercent } from '../../lib/format.js';
-import { Badge, Button, Field, Input, Modal, Segmented, Select } from '../ui.jsx';
+import { Button, Field, Input, Modal, Segmented, Select } from '../ui.jsx';
 
-// Dywidendy waloru na danym koncie: wypłacone (brutto, podatek, netto) + nadchodzące z harmonogramu
+// Dywidendy waloru na danym koncie: suma wszystkich otrzymanych (all-time), stopa od kosztu zakupu (koszt pozycji
+// w portfelu – nie bieżący kurs) i lista wypłat (brutto, podatek, netto). Bez prognoz.
 export function DividendsModal({ row, onClose }) {
   const { state } = useApp();
   const today = isoDay(new Date());
@@ -21,41 +21,27 @@ export function DividendsModal({ row, onClose }) {
         : [],
     [state, row],
   );
-  const upcoming = useMemo(
-    () =>
-      row
-        ? state.dividendSchedule
-            .filter((d) => d.instrumentId === row.instrumentId && (d.payDate || d.exDate) >= today)
-            .map((d) => ({ item: d, ev: evaluateScheduleItem(state, d, today) }))
-            .sort((a, b) => ((a.item.payDate || a.item.exDate) < (b.item.payDate || b.item.exDate) ? -1 : 1))
-        : [],
-    [state, row, today],
-  );
   const totalNet = paid.reduce((s, i) => s + i.net, 0);
-  const yieldOnCost = row?.cost > 0 ? paid.filter((i) => i.date > isoDay(new Date(Date.now() - 365 * 86400000))).reduce((s, i) => s + i.net, 0) / row.cost : null;
+  // Stopa od kosztu zakupu: dywidendy netto / koszt zakupu pozycji (cena zakupu z prowizjami, w PLN)
+  const cost = Number(row?.cost) > 0 ? Number(row.cost) : null;
+  const last12 = paid.filter((i) => i.date > isoDay(new Date(Date.now() - 365 * 86400000))).reduce((s, i) => s + i.net, 0);
+  const yieldOnCost = cost ? last12 / cost : null;
+  const totalOnCost = cost ? totalNet / cost : null;
   return (
     <Modal open={!!row} onClose={onClose} title={`Dywidendy: ${row?.name || ''}`}>
       {row && (
         <div className="space-y-3 text-sm">
           <div className="grid grid-cols-3 gap-2">
-            <Mini label="Otrzymane netto" value={formatPLN(totalNet)} />
+            <Mini label="Łącznie" value={formatPLN(totalNet)} />
             <Mini label="Wypłat" value={String(paid.length)} />
-            <Mini label="Stopa od kosztu (12 mies.)" value={yieldOnCost === null ? '—' : formatPercent(yieldOnCost, { digits: 2 })} />
+            <Mini label="Stopa od kosztu" value={yieldOnCost === null ? '—' : formatPercent(yieldOnCost, { digits: 2 })} />
           </div>
-          {upcoming.length > 0 && (
-            <div>
-              <div className="mb-1 text-xs font-semibold text-stone-500">Nadchodzące</div>
-              <ul className="divide-y divide-stone-100 rounded-xl border border-stone-200 dark:divide-white/5 dark:border-white/10">
-                {upcoming.map(({ item, ev }) => (
-                  <li key={item.id} className="flex items-center gap-2 px-3 py-2">
-                    <span className="w-24 shrink-0 text-xs text-stone-500 tabular">{formatDate(item.payDate || item.exDate)}</span>
-                    <Badge tone={STATUS_META[ev.status]?.tone}>{STATUS_META[ev.status]?.label}</Badge>
-                    <span className="ml-auto font-semibold tabular">{formatPLN(ev.perAccount.find((a) => a.accountId === row.accountId)?.net ?? ev.net)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <p className="text-[11px] leading-snug text-stone-500 dark:text-stone-400">
+            „Łącznie” – suma netto wszystkich otrzymanych dywidend (od początku).{' '}
+            {cost
+              ? `Stopa liczona od kosztu zakupu ${formatPLN(cost)} (nie od bieżącego kursu): ostatnie 12 mies. ${formatPercent(yieldOnCost, { digits: 2 })}, łącznie ${formatPercent(totalOnCost, { digits: 2 })}.`
+              : 'Brak kosztu zakupu pozycji – stopy nie da się policzyć.'}
+          </p>
           <div>
             <div className="mb-1 text-xs font-semibold text-stone-500">Wypłacone</div>
             {paid.length === 0 ? (
