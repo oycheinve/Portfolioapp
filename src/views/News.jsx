@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, ChevronDown, ExternalLink, Newspaper, Plus, RefreshCw, Sparkles, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { computeHoldings, isoDay } from '../lib/engine.js';
@@ -9,8 +9,7 @@ import AiSummary from '../components/news/AiSummary.jsx';
 import { articleKey, digestKey } from '../lib/newsAi.js';
 import { portfolioContext, portfolioKey } from '../lib/aiContext.js';
 import { aiOn } from '../lib/aiFeatures.js';
-import { readRelevance, writeRelevance } from '../lib/newsRelevance.js';
-import { requestNewsRelevance } from '../lib/newsAi.js';
+import { isNoiseTitle, readBlocked, readFilterOn, writeBlocked, writeFilterOn } from '../lib/newsFilter.js';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
 const LIST_LIMIT = 60;
@@ -169,38 +168,27 @@ export default function NewsView() {
   }, [result.items, held, topics]);
   const selectedIds = useMemo(() => new Set(selected.map((t) => t.id)), [selected]);
   const generalCount = classified.filter((it) => it.mainId === GENERAL_ID).length;
-  // Filtr AI (Ustawienia → Funkcje AI): artykuły o spółkach z portfela oceniane raz (pamięć per link) – szum
-  // konsumencki (promocje, oferty sklepów, kolekcje) ukryty z podglądem; frazy własne i „Analizy ogólne” bez oceny
-  const filterOn = aiOn(state.settings, 'newsFilter');
-  const [relevance, setRelevance] = useState(readRelevance);
-  const [relStatus, setRelStatus] = useState('idle');
+  // Filtr słów kluczowych (bez AI): szum konsumencki o spółkach z portfela (promocje, rabaty, kolekcje, godziny
+  // otwarcia, oferty pracy…) ukryty z podglądem; tytuły ze słowami inwestycyjnymi zostają; własne słowa do ukrywania
+  const [filterOn, setFilterOnState] = useState(readFilterOn);
+  const [blocked, setBlockedState] = useState(readBlocked);
   const [showHidden, setShowHidden] = useState(false);
-  const relAsked = useRef(new Set());
-  const relPending = useMemo(
-    () => (filterOn ? classified.filter((it) => it.mainId !== GENERAL_ID && !it.custom && it.link && !relevance[it.link] && !relAsked.current.has(it.link)) : []),
-    [filterOn, classified, relevance],
-  );
-  useEffect(() => {
-    if (!relPending.length) return undefined;
-    const t = setTimeout(async () => {
-      const batch = relPending.slice(0, 60);
-      for (const it of batch) relAsked.current.add(it.link);
-      setRelStatus('working');
-      try {
-        const res = await requestNewsRelevance(batch.map((it, i) => ({ id: `a${i}`, title: it.title, source: it.source, company: it.tag })));
-        const byLink = {};
-        batch.forEach((it, i) => {
-          if (typeof res[`a${i}`] === 'boolean') byLink[it.link] = res[`a${i}`];
-        });
-        setRelevance(writeRelevance(byLink));
-        setRelStatus('idle');
-      } catch {
-        setRelStatus('error'); // bez AI – wszystkie artykuły widoczne
-      }
-    }, 800);
-    return () => clearTimeout(t);
-  }, [relPending]); // eslint-disable-line react-hooks/exhaustive-deps
-  const isNoise = (it) => filterOn && it.mainId !== GENERAL_ID && relevance[it.link]?.r === false;
+  const [blockDraft, setBlockDraft] = useState('');
+  const setFilterOn = (v) => {
+    setFilterOnState(v);
+    writeFilterOn(v);
+  };
+  const setBlocked = (list) => {
+    setBlockedState(list);
+    writeBlocked(list);
+  };
+  const addBlocked = (e) => {
+    e.preventDefault();
+    const w = blockDraft.trim().slice(0, 40);
+    if (w && !blocked.some((x) => x.toLowerCase() === w.toLowerCase())) setBlocked([...blocked, w]);
+    setBlockDraft('');
+  };
+  const isNoise = (it) => filterOn && !it.custom && isNoiseTitle(it.title, blocked);
   const shownTopics = classified.filter((it) => (it.mainId === GENERAL_ID ? generalOn : selectedIds.has(it.mainId)));
   const hiddenCount = shownTopics.filter(isNoise).length;
   const visible = showHidden ? shownTopics : shownTopics.filter((it) => !isNoise(it));
@@ -344,6 +332,27 @@ export default function NewsView() {
           </form>
         )}
         {selected.length > MAX_TOPICS && <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">Pobierane są wiadomości dla pierwszych {MAX_TOPICS} zaznaczonych tematów – odznacz część, aby zobaczyć pozostałe.</p>}
+        <div className="mt-3 border-t border-stone-100 pt-2.5 dark:border-white/5" aria-label="Filtr newsów">
+          <label className="flex items-center gap-2 text-xs font-medium text-stone-700 dark:text-stone-200">
+            <input type="checkbox" checked={filterOn} onChange={(e) => setFilterOn(e.target.checked)} className="h-4 w-4 accent-blue-600" />
+            Ukrywaj promocje, oferty sklepów, kolekcje i oferty pracy
+          </label>
+          {filterOn && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {blocked.map((w) => (
+                <span key={w} className="inline-flex h-7 items-center gap-1 rounded-full border border-stone-200 pr-1 pl-2.5 text-xs text-stone-600 dark:border-white/10 dark:text-stone-300">
+                  {w}
+                  <button type="button" onClick={() => setBlocked(blocked.filter((x) => x !== w))} aria-label={`Usuń słowo ${w}`} className="inline-flex h-5 w-5 items-center justify-center rounded-full text-stone-400 hover:text-red-600">
+                    ×
+                  </button>
+                </span>
+              ))}
+              <form onSubmit={addBlocked} className="flex items-center gap-1">
+                <input value={blockDraft} onChange={(e) => setBlockDraft(e.target.value)} maxLength={40} placeholder="+ słowo do ukrycia" aria-label="Własne słowo do ukrycia" className="h-7 w-44 rounded-full border border-dashed border-stone-300 bg-transparent px-2.5 text-xs outline-none focus:border-blue-500 dark:border-white/15" />
+              </form>
+            </div>
+          )}
+        </div>
         <p className="mt-2 text-[11px] text-stone-400">Źródła: Google News i Yahoo Finance</p>
         </div>
         )}
@@ -369,21 +378,15 @@ export default function NewsView() {
             />
           </Card>
         )}
-        {!loading && filterOn && (hiddenCount > 0 || relStatus === 'working') && (
+        {!loading && filterOn && hiddenCount > 0 && (
           <p className="flex flex-wrap items-center gap-x-2 px-1 text-[11px] text-stone-500 dark:text-stone-400" aria-live="polite">
-            <Sparkles size={12} className={relStatus === 'working' ? 'animate-pulse text-violet-500' : 'text-violet-400'} aria-hidden="true" />
-            {relStatus === 'working' && 'AI sprawdza, które artykuły dotyczą inwestycji…'}
-            {hiddenCount > 0 && (
-              <>
-                <span>
-                  {showHidden ? 'Pokazano' : 'Ukryto'} {hiddenCount}{' '}
-                  {hiddenCount === 1 ? 'artykuł niezwiązany' : hiddenCount % 10 >= 2 && hiddenCount % 10 <= 4 && (hiddenCount % 100 < 12 || hiddenCount % 100 > 14) ? 'artykuły niezwiązane' : 'artykułów niezwiązanych'} z inwestowaniem (np. promocje)
-                </span>
-                <button type="button" onClick={() => setShowHidden((v) => !v)} className="font-semibold text-blue-700 hover:underline dark:text-blue-300">
-                  {showHidden ? 'Ukryj' : 'Pokaż'}
-                </button>
-              </>
-            )}
+            <span>
+              {showHidden ? 'Pokazano' : 'Ukryto'} {hiddenCount}{' '}
+              {hiddenCount === 1 ? 'artykuł' : hiddenCount % 10 >= 2 && hiddenCount % 10 <= 4 && (hiddenCount % 100 < 12 || hiddenCount % 100 > 14) ? 'artykuły' : 'artykułów'} z filtra (promocje, sklepy, kolekcje…)
+            </span>
+            <button type="button" onClick={() => setShowHidden((v) => !v)} className="font-semibold text-blue-700 hover:underline dark:text-blue-300">
+              {showHidden ? 'Ukryj' : 'Pokaż'}
+            </button>
           </p>
         )}
         {!loading && dayItems.length > 0 && aiOn(state.settings, 'newsSummary') && (

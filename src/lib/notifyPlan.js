@@ -4,6 +4,7 @@
 //  • zmiany notowań – dzisiejsza zmiana spółki z portfela przekracza próg (domyślnie ±4%).
 // Bez zależności od przeglądarki i Reacta.
 import { GENERAL_ID, classifyArticle } from './newsSubject.js';
+import { isNoiseTitle } from './newsFilter.js';
 
 // Stały tytuł wszystkich powiadomień (zamiast adresu domeny); treść niesie cała wiadomość
 export const NOTIFY_TITLE = 'FinTrack 📊';
@@ -192,6 +193,7 @@ export function freshArticles(items, topics, state = {}, now = new Date(), maxAg
     }
     const t = Date.parse(it.pubDate);
     if (Number.isFinite(t) && now.getTime() - t > maxAgeH * 3600000) continue;
+    if (!String(topic.id).startsWith('custom:') && isNoiseTitle(it.title)) continue; // promocje, sklepy, kolekcje… (jak w Newsach)
     current.push(it.link);
     if (!seen.has(it.link)) fresh.push({ title: String(it.title || '').trim(), link: it.link, label: topic.label, at: Number.isFinite(t) ? t : 0 });
   }
