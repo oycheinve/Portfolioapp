@@ -934,6 +934,7 @@ const BUDGET_SPEC = {
   system: `Jesteś asystentem finansów osobistych. Na podstawie zagregowanych danych budżetu domowego z minionego miesiąca (plan i wydatki w kategoriach, największe zakupy, paragony) przygotuj zwięzłe podsumowanie po polsku.
 - headline: jedno zdanie z najważniejszym wnioskiem (np. czy zmieszczono się w budżecie i o ile).
 - highlights: 3–5 konkretnych obserwacji z liczbami z danych (kategorie z największym wydatkiem, przekroczenia, oszczędności, zmiany).
+- transfery_oszczednosci_poza_budzetem (jeśli są): przesunięcia między budżetem a kontem oszczędnościowym – NIE są wydatkami ani przekroczeniami; możesz je krótko odnotować w highlights.
 - Każda kategoria ma pola: plan (kolumna „Planowany Budżet”), wydano (kolumna „Kwota Wydana”), pozostalo = plan − wydano oraz status. Porównuj plan z wydano dla KAŻDEJ kategorii osobno; nie zakładaj planu 0 zł, jeśli pole plan ma wartość.
 - overspent: WYŁĄCZNIE kategorie ze statusem „PRZEKROCZONA” (wydano > plan) – „Kategoria: wydano X zł przy planie Y zł (+Z zł)”, gdzie Z = pole przekroczenie. Kategorie „ZGODNIE_Z_PLANEM” (wydano = plan) i „PONIZEJ_PLANU” to NIE są przekroczenia. Pusta lista, gdy żadna kategoria nie ma statusu „PRZEKROCZONA”.
 - tips: 2–3 praktyczne wskazówki na kolejny miesiąc wynikające wprost z danych (bez ogólników).
@@ -971,7 +972,7 @@ async function budgetSummary(body, res) {
   });
   if (!cats.length) return send(res, 400, { error: 'Brak danych budżetu do podsumowania' });
   const top = (Array.isArray(body.top) ? body.top : []).slice(0, 15).map((e) => ({ name: String(e?.name || '').replace(/[<>]/g, ' ').slice(0, 60), amount: amt(e?.amount), note: String(e?.note || '').replace(/[<>]/g, ' ').slice(0, 60) }));
-  const payload = { miesiac: String(body.label || body.month || '').slice(0, 30), plan: amt(body.planned), wydano: amt(body.spent), kategorie: cats, najwieksze_zakupy: top, paragony: Number(body.receipts) || 0, poprzedni_miesiac: body.previous && typeof body.previous === 'object' ? { plan: Number(body.previous.planned) || 0, wydano: Number(body.previous.spent) || 0 } : null };
+  const payload = { miesiac: String(body.label || body.month || '').slice(0, 30), plan: amt(body.planned), wydano: amt(body.spent), kategorie: cats, najwieksze_zakupy: top, paragony: Number(body.receipts) || 0, ...(Array.isArray(body.transfers) && body.transfers.length ? { transfery_oszczednosci_poza_budzetem: body.transfers.slice(0, 20).map((t) => ({ name: String(t?.name || '').replace(/[<>]/g, ' ').slice(0, 60), kwota: amt(t?.amount), kierunek: String(t?.direction || '').slice(0, 60) })) } : {}), poprzedni_miesiac: body.previous && typeof body.previous === 'object' ? { plan: Number(body.previous.planned) || 0, wydano: Number(body.previous.spent) || 0 } : null };
   const json = JSON.stringify(payload);
   const bkey = `b|${createHash('sha256').update(json).digest('hex')}`;
   if (cache.has(bkey)) return send(res, 200, { ...cache.get(bkey), cached: true });

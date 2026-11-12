@@ -95,14 +95,23 @@ export function rowLeft(r) {
   return num(r.planned) - num(r.spent);
 }
 
+// Kategoria powiązana z kontem oszczędnościowym (row.savings = { accountId, dir: 'out' | 'in' }): wpis w budżecie
+// zapisuje wypłatę ('out', domyślnie – odejmuje ze stanu konta) albo wpłatę ('in') na tym koncie. Taka kategoria to
+// transfer – widoczna w tabeli, ale poza sumą wydatków bieżących (RAZEM, statystyki, podsumowania, koszty życia).
+export const isTransferRow = (r) => !!r?.savings?.accountId;
+
 export function budgetTotals(rows) {
-  const planned = rows.reduce((s, r) => s + num(r.planned), 0);
-  const spent = rows.reduce((s, r) => s + num(r.spent), 0);
+  const all = rows || [];
+  const cons = all.filter((r) => !isTransferRow(r));
+  const tr = all.filter(isTransferRow);
+  const planned = cons.reduce((s, r) => s + num(r.planned), 0);
+  const spent = cons.reduce((s, r) => s + num(r.spent), 0);
   const byType = BUDGET_TYPES.map((t) => {
-    const list = rows.filter((r) => (r.type || 'Inne') === t);
+    const list = cons.filter((r) => (r.type || 'Inne') === t);
     return { type: t, planned: list.reduce((s, r) => s + num(r.planned), 0), spent: list.reduce((s, r) => s + num(r.spent), 0) };
   }).filter((x) => x.planned > 0 || x.spent > 0);
-  return { planned, spent, left: planned - spent, used: planned > 0 ? spent / planned : 0, over: rows.filter((r) => rowLeft(r) < -0.004).length, byType };
+  const transfer = { planned: tr.reduce((s, r) => s + num(r.planned), 0), spent: tr.reduce((s, r) => s + num(r.spent), 0), count: tr.length };
+  return { planned, spent, left: planned - spent, used: planned > 0 ? spent / planned : 0, over: cons.filter((r) => rowLeft(r) < -0.004).length, byType, transfer };
 }
 
 // Dzienna statystyka kategorii jedzeniowej: dni do końca miesiąca (z dzisiejszym) i średnia dzienna kwota do wydania

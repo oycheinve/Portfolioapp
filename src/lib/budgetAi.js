@@ -2,7 +2,7 @@
 // zakupy z dziennika, paragony, porównanie z poprzednim miesiącem) → /api/news-summary (tryb „budget”, czysty JSON).
 // Archiwum per użytkownik: `wealth-app-budget-ai-v1` { 'RRRR-MM': { summary, stats, at, seen } } (urządzenie + chmura).
 // Generowane automatycznie przy pierwszym otwarciu aplikacji w nowym miesiącu (za miesiąc poprzedni).
-import { PREFS_CHANGED_EVENT, budgetTotals, monthKey, parseAmount, readBudget, readBudgetLog, shiftMonth } from './budget.js';
+import { PREFS_CHANGED_EVENT, budgetTotals, isTransferRow, monthKey, parseAmount, readBudget, readBudgetLog, shiftMonth } from './budget.js';
 import { readReceipts } from './receipts.js';
 import { requestBudgetSummary } from './newsAi.js';
 
@@ -39,7 +39,9 @@ export function monthStats(month, data = readBudget(), log = readBudgetLog(), re
   const t = budgetTotals(rows);
   const prevRows = data[shiftMonth(month, -1)] || [];
   const prev = prevRows.length ? budgetTotals(prevRows) : null;
-  const categories = rows.map((r) => ({ name: r.name || '(bez nazwy)', type: r.type || '', planned: money(r.planned), spent: money(r.spent) }));
+  // Kategorie powiązane z kontem oszczędnościowym – transfery, nie wydatki (osobno, bez oceny przekroczeń)
+  const categories = rows.filter((r) => !isTransferRow(r)).map((r) => ({ name: r.name || '(bez nazwy)', type: r.type || '', planned: money(r.planned), spent: money(r.spent) }));
+  const transfers = rows.filter(isTransferRow).map((r) => ({ name: r.name || '(bez nazwy)', planned: money(r.planned), amount: money(r.spent), direction: r.savings.dir === 'in' ? 'wpłata na konto oszczędnościowe' : 'wypłata z konta oszczędnościowego' }));
   const top = [...(log[month] || [])].sort((a, b) => b.amount - a.amount).slice(0, 10).map((e) => ({ name: e.name, amount: money(e.amount), note: e.note || '' }));
   // Przekroczenie tylko, gdy wydano więcej niż plan (równe lub mniejsze – w planie)
   const overspent = categories.filter((c) => c.spent > c.planned + 0.005).map((c) => ({ ...c, over: money(c.spent - c.planned) }));
@@ -50,6 +52,7 @@ export function monthStats(month, data = readBudget(), log = readBudgetLog(), re
     spent: money(t.spent),
     left: money(t.planned - t.spent),
     categories,
+    ...(transfers.length ? { transfers } : {}),
     top,
     overspent,
     receipts: receipts.filter((r) => (r.month || String(r.date || '').slice(0, 7)) === month).length,
@@ -61,7 +64,7 @@ export function monthStats(month, data = readBudget(), log = readBudgetLog(), re
 export async function generateMonthSummary(month) {
   const stats = monthStats(month);
   if (!stats) throw new Error('Brak budżetu w tym miesiącu');
-  const res = await requestBudgetSummary({ month, label: stats.label, planned: stats.planned, spent: stats.spent, categories: stats.categories, top: stats.top, receipts: stats.receipts, previous: stats.previous });
+  const res = await requestBudgetSummary({ month, label: stats.label, planned: stats.planned, spent: stats.spent, categories: stats.categories, ...(stats.transfers ? { transfers: stats.transfers } : {}), top: stats.top, receipts: stats.receipts, previous: stats.previous });
   const all = readBudgetAi();
   all[month] = { summary: res.summary, stats, at: new Date().toISOString(), seen: false };
   writeBudgetAi(all);
