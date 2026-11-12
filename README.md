@@ -601,11 +601,11 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - Pod listą: „Szacowany koszt zakupów: ok. X zł” – suma pozycji do kupienia (z informacją, dla ilu produktów jest cena).
 - **AI fallback** (tryb `shopping-prices` w `/api/news-summary`, Ustawienia → Funkcje AI → „Ceny zakupów od AI”): produkty bez dopasowania słownego trafiają w tle do AI razem z nazwami z Twoich paragonów – AI dopasowuje je semantycznie (np. „papier toaletowy” → „PAP.TOAL. VELVET 8 R”; serwer przyjmuje tylko nazwy faktycznie z paragonów) i wtedy liczy się cena z historii, a gdy produktu nigdy nie kupowano – podaje szacunek ceny rynkowej (znaczek ✦ przy cenie, „w tym szacunki AI: N” w sumie). Wynik zapamiętany per produkt (`wealth-app-shopping-ai-prices-v1`, konto i urządzenie), szacunki rynkowe odświeżane po 60 dniach; Twoja korekta i ceny z paragonów mają pierwszeństwo. Wyłączenie funkcji ukrywa szacunki AI i zatrzymuje zapytania.
 
-### Budżet – kategorie powiązane z kontem oszczędnościowym
+### Budżet – Wydatki z oszczędności
 
-- W trybie „Edytuj” pod nazwą kategorii wybór: „Wydatek (bez konta)” (domyślnie), „🏦 − z konta: …” albo „🏦 + na konto: …” (każde konto typu oszczędnościowe; `row.savings = { accountId, dir }`).
-- Wpis w „Dodaj zakup” (także część paragonu) w takiej kategorii zapisuje operację na koncie: wypłatę (odejmuje ze stanu konta) albo wpłatę – `cashflows` z `source: 'budget'`, data w obrębie miesiąca budżetu; „Ostatnie wpisy → ×” cofa wpis razem z operacją na koncie.
-- Izolacja: `budgetTotals` liczy RAZEM, typy, przekroczenia i koszty życia (Poduszka) bez takich kategorii; w tabeli są widoczne z dopiskiem „🏦 … · poza wydatkami”, a pod RAZEM osobny wiersz „Oszczędności (poza RAZEM)”. Podsumowanie miesiąca AI dostaje je jako transfery, nie wydatki.
+- Osobna kategoria wydatków **„🏦 Wydatki z oszczędności”** w „Dodaj zakup” (także w podziale zakupu), widoczna, gdy masz konto oszczędnościowe. Wydatek nie zmienia budżetu miesięcznego – zapisuje wypłatę z konta oszczędnościowego (`cashflows`, `source: 'budget'`, opis „Wydatek z oszczędności: notatka”), więc pomniejsza saldo konta w Poduszce i majątku.
+- Poza RAZEM i statystykami (podsumowania, koszty życia); pod RAZEM wiersz „🏦 Wydatki z oszczędności (poza RAZEM)” z sumą w miesiącu (przy kilku kontach – wybór konta, zapamiętany w `wealth-app-budget-savings-account`). „Ostatnie wpisy → ×” cofa wpis razem z wypłatą z konta.
+- Zgodność: kategorie budżetu powiązane wcześniej z kontem (`row.savings`) działają dalej (poza RAZEM, z operacją na koncie) i można je odłączyć w trybie „Edytuj”.
 
 ## Minimalizm i mniej przewijania (pakiet UI)
 

@@ -78,10 +78,33 @@ export default function BudgetView() {
   );
 }
 
+// Osobna kategoria „Wydatki z oszczędności”: wydatek wpisany w „Dodaj zakup” pomniejsza saldo konta
+// oszczędnościowego (wypłata), a nie budżet miesięczny – poza RAZEM i statystykami; wpisy w dzienniku miesiąca
+const SAVINGS_ID = '__savings';
+const SAVINGS_NAME = '🏦 Wydatki z oszczędności';
+const SAVINGS_ACC_KEY = 'wealth-app-budget-savings-account';
+const readSavingsAcc = () => {
+  try {
+    return localStorage.getItem(SAVINGS_ACC_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
 function MonthlyBudget() {
   const { state: app, actions: appActions } = useApp(); // Ustawienia → Funkcje AI; konta oszczędnościowe (transfery)
   const savingsAccounts = useMemo(() => app.accounts.filter((a) => a.type === 'SAVINGS'), [app.accounts]);
   const accountName = (id) => app.accounts.find((a) => a.id === id)?.name || 'konto oszczędnościowe';
+  const [savingsAccPref, setSavingsAccPref] = useState(readSavingsAcc);
+  const savingsAcc = savingsAccounts.find((a) => a.id === savingsAccPref) || savingsAccounts[0] || null;
+  const chooseSavingsAcc = (id) => {
+    setSavingsAccPref(id);
+    try {
+      localStorage.setItem(SAVINGS_ACC_KEY, id);
+    } catch {
+      // brak localStorage
+    }
+  };
   const [data, setData] = useState(readBudget);
   const [month, setMonth] = useState(() => monthKey());
   const saved = data[month];
@@ -161,7 +184,7 @@ function MonthlyBudget() {
   const addPurchase = (idOrParts, amountArg, note = '') => {
     const parts = (Array.isArray(idOrParts) ? idOrParts : [{ id: idOrParts, amount: amountArg }])
       .map((p) => ({ ...p, amount: Math.round(Number(p.amount) * 100) / 100 }))
-      .filter((p) => p.amount > 0 && rows.some((r) => r.id === p.id));
+      .filter((p) => p.amount > 0 && (rows.some((r) => r.id === p.id) || (p.id === SAVINGS_ID && savingsAcc)));
     if (!parts.length) return null;
     const add = {};
     for (const p of parts) add[p.id] = (add[p.id] || 0) + p.amount;
@@ -176,6 +199,7 @@ function MonthlyBudget() {
     const monthEnd = `${month}-${String(new Date(yy, mm, 0).getDate()).padStart(2, '0')}`;
     const flowDate = today.slice(0, 7) === month ? today : today < `${month}-01` ? today : monthEnd;
     const cashflowFor = (p) => {
+      if (p.id === SAVINGS_ID) return appActions.upsert('cashflows', { date: flowDate, accountId: savingsAcc.id, type: 'WITHDRAWAL', amount: p.amount, note: `Wydatek z oszczędności${text ? `: ${text}` : ''}`.slice(0, 120), source: 'budget' }).id;
       const row = rows.find((r) => r.id === p.id);
       if (!isTransferRow(row) || !app.accounts.some((a) => a.id === row.savings.accountId)) return null;
       const flow = appActions.upsert('cashflows', { date: flowDate, accountId: row.savings.accountId, type: row.savings.dir === 'in' ? 'DEPOSIT' : 'WITHDRAWAL', amount: p.amount, note: `Budżet: ${row.name}${text ? ` – ${text}` : ''}`.slice(0, 120), source: 'budget' });
@@ -183,12 +207,14 @@ function MonthlyBudget() {
     };
     const fresh = parts.map((p) => {
       const cashflowId = cashflowFor(p);
-      return { id: newRowId(), rowId: p.id, name: rows.find((r) => r.id === p.id).name, amount: p.amount, note: text, at, ...(cashflowId ? { cashflowId } : {}) };
+      const name = p.id === SAVINGS_ID ? 'Wydatki z oszczędności' : rows.find((r) => r.id === p.id).name;
+      return { id: newRowId(), rowId: p.id, name, amount: p.amount, note: text, at, ...(cashflowId ? { cashflowId } : {}) };
     });
     setEntries((list) => [...fresh.reverse(), ...list].slice(0, LOG_LIMIT));
     const main = next.find((r) => r.id === parts[0].id);
     const moved = fresh.filter((e) => e.cashflowId).length;
-    return { name: main.name, left: toNum(main.planned) - toNum(main.spent), ...(moved ? { transfer: true } : {}), parts: parts.map((p) => ({ name: next.find((r) => r.id === p.id).name, amount: p.amount })) };
+    const partName = (id) => (id === SAVINGS_ID ? 'Wydatki z oszczędności' : next.find((r) => r.id === id).name);
+    return { name: partName(parts[0].id), left: main ? toNum(main.planned) - toNum(main.spent) : null, ...(moved ? { transfer: true, account: savingsAcc?.name || '' } : {}), parts: parts.map((p) => ({ name: partName(p.id), amount: p.amount })) };
   };
   // Korekta kwoty wydanej kategorii (edycja zapisanego paragonu z tego miesiąca)
   const [receiptsVer, setReceiptsVer] = useState(0);
@@ -203,6 +229,9 @@ function MonthlyBudget() {
     if (entry.cashflowId) appActions.remove('cashflows', entry.cashflowId); // operacja na koncie oszczędnościowym
     setEntries((list) => list.filter((e) => e.id !== entryId));
   };
+
+  const savingsSpent = Math.round(entries.filter((e) => e.rowId === SAVINGS_ID).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) * 100) / 100;
+  const purchaseRows = savingsAcc ? [...rows, { id: SAVINGS_ID, name: SAVINGS_NAME }] : rows;
 
   const navBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent dark:text-stone-400 dark:hover:bg-white/5';
   const linkBtn = 'inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5';
@@ -300,7 +329,7 @@ function MonthlyBudget() {
                     <>
                       <td className="px-0.5 py-0.5">
                         <input autoFocus={r.id === fresh} className={editInput} value={r.name} placeholder="Nazwa kategorii" onChange={(e) => update(r.id, { name: e.target.value })} aria-label={`Kategoria: ${r.name || 'nowa'}`} />
-                        {(savingsAccounts.length > 0 || isTransferRow(r)) && (
+                        {isTransferRow(r) && (
                           <select
                             value={isTransferRow(r) ? `${r.savings.dir === 'in' ? 'in' : 'out'}|${r.savings.accountId}` : ''}
                             onChange={(e) => {
@@ -379,6 +408,27 @@ function MonthlyBudget() {
               <td className={`px-2 py-1.5 text-right whitespace-nowrap ${totals.left < -0.004 ? 'text-red-600 dark:text-red-400' : ''}`}>{zl(totals.left)}</td>
               {editing && <td />}
             </tr>
+            {savingsAcc && (savingsSpent > 0 || savingsAccounts.length > 1) && (
+              <tr className="text-[11px] text-emerald-800 sm:text-xs dark:text-emerald-300" aria-label="Wydatki z oszczędności">
+                <td className="px-2 py-1" colSpan={2}>
+                  🏦 Wydatki z oszczędności (poza RAZEM) –{' '}
+                  {savingsAccounts.length > 1 ? (
+                    <select value={savingsAcc.id} onChange={(e) => chooseSavingsAcc(e.target.value)} aria-label="Konto dla wydatków z oszczędności" className="max-w-[9rem] rounded border border-emerald-300 bg-transparent px-0.5 text-[11px] dark:border-emerald-500/40">
+                      {savingsAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    savingsAcc.name
+                  )}
+                </td>
+                <td className="px-2 py-1 text-right whitespace-nowrap">{zl(savingsSpent)}</td>
+                <td className="px-2 py-1 text-right whitespace-nowrap">−{zl(savingsSpent)}</td>
+                {editing && <td />}
+              </tr>
+            )}
             {totals.transfer.count > 0 && (
               <tr className="text-[11px] text-emerald-800 sm:text-xs dark:text-emerald-300" aria-label="Transfery z kontem oszczędnościowym">
                 <td className="px-2 py-1">🏦 Oszczędności (poza RAZEM)</td>
@@ -424,7 +474,7 @@ function MonthlyBudget() {
               </button>
             </div>
           )}
-          <PurchasePanel rows={rows} onAdd={addPurchase} />
+          <PurchasePanel rows={purchaseRows} onAdd={addPurchase} />
           {/* Paragony (BETA): skan → weryfikacja / zapis automatyczny → wydatek; historia z edycją (samouczenie kategorii) */}
           <div className="mt-3">
             <ReceiptsHistory key={receiptsVer} rows={rows} month={month} onAdjust={adjustSpent} />
@@ -521,7 +571,7 @@ function PurchasePanel({ rows, onAdd }) {
     setSplit(null);
     setMsg({
       error: false,
-      text: `${res.parts.length > 1 ? `Dodano ${zl(total)}: ${res.parts.map((p) => `${p.name} ${zl(p.amount)}`).join(' · ')}` : `Dodano ${zl(total)} do „${res.name}” · pozostało ${zl(res.left)}`}${res.transfer ? ' · zaksięgowano na koncie oszczędnościowym (poza wydatkami)' : ''}`,
+      text: `${res.parts.length > 1 ? `Dodano ${zl(total)}: ${res.parts.map((p) => `${p.name} ${zl(p.amount)}`).join(' · ')}` : `Dodano ${zl(total)} do „${res.name}”${res.left !== null ? ` · pozostało ${zl(res.left)}` : ''}`}${res.transfer ? ` · odjęto z konta ${res.account ? `„${res.account}”` : 'oszczędnościowego'} (poza budżetem miesięcznym)` : ''}`,
     });
     return undefined;
   };
