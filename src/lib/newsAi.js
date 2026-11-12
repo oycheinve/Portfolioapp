@@ -24,14 +24,14 @@ function writeCache(key, value) {
   }
 }
 
-export const articleKey = (link) => `a|${link}`;
+export const articleKey = (link) => `a2|${link}`; // a2 – bez wtrącania stopy dywidendy (nowe instrukcje)
 // Podsumowanie dnia – klucz z dnia i zestawu artykułów (nowy artykuł = nowe podsumowanie)
 const hash = (text) => {
   let h = 5381;
   for (let i = 0; i < text.length; i += 1) h = (h * 33 + text.charCodeAt(i)) >>> 0;
   return h.toString(36);
 };
-export const digestKey = (day, items) => `d3|${day}|${hash(items.map((it) => it.link).sort().join(' '))}`;
+export const digestKey = (day, items) => `d4|${day}|${hash(items.map((it) => it.link).sort().join(' '))}`;
 // Skrót z samego tytułu (portal blokował treść) – ważny 30 min, potem ponowna próba pobrania pełnej treści
 const TITLE_ONLY_TTL = 30 * 60 * 1000;
 export const cachedSummary = (key) => {

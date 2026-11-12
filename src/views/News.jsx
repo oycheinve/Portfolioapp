@@ -9,7 +9,7 @@ import AiSummary from '../components/news/AiSummary.jsx';
 import { articleKey, digestKey } from '../lib/newsAi.js';
 import { portfolioContext, portfolioKey } from '../lib/aiContext.js';
 import { aiOn } from '../lib/aiFeatures.js';
-import { isNoiseTitle, readBlocked, readFilterOn, writeBlocked, writeFilterOn } from '../lib/newsFilter.js';
+import { isNoiseTitle, readBlocked, readFilterOn } from '../lib/newsFilter.js';
 
 const MAX_TOPICS = 15; // najwyżej tyle zaznaczonych tematów pobieranych naraz
 const LIST_LIMIT = 60;
@@ -170,24 +170,10 @@ export default function NewsView() {
   const generalCount = classified.filter((it) => it.mainId === GENERAL_ID).length;
   // Filtr słów kluczowych (bez AI): szum konsumencki o spółkach z portfela (promocje, rabaty, kolekcje, godziny
   // otwarcia, oferty pracy…) ukryty z podglądem; tytuły ze słowami inwestycyjnymi zostają; własne słowa do ukrywania
-  const [filterOn, setFilterOnState] = useState(readFilterOn);
-  const [blocked, setBlockedState] = useState(readBlocked);
+  // Ustawienia → Filtr newsów (włącznik i własne słowa); tu tylko ukrywanie z podglądem
+  const [filterOn] = useState(readFilterOn);
+  const [blocked] = useState(readBlocked);
   const [showHidden, setShowHidden] = useState(false);
-  const [blockDraft, setBlockDraft] = useState('');
-  const setFilterOn = (v) => {
-    setFilterOnState(v);
-    writeFilterOn(v);
-  };
-  const setBlocked = (list) => {
-    setBlockedState(list);
-    writeBlocked(list);
-  };
-  const addBlocked = (e) => {
-    e.preventDefault();
-    const w = blockDraft.trim().slice(0, 40);
-    if (w && !blocked.some((x) => x.toLowerCase() === w.toLowerCase())) setBlocked([...blocked, w]);
-    setBlockDraft('');
-  };
   const isNoise = (it) => filterOn && !it.custom && isNoiseTitle(it.title, blocked);
   const shownTopics = classified.filter((it) => (it.mainId === GENERAL_ID ? generalOn : selectedIds.has(it.mainId)));
   const hiddenCount = shownTopics.filter(isNoise).length;
@@ -332,27 +318,6 @@ export default function NewsView() {
           </form>
         )}
         {selected.length > MAX_TOPICS && <p className="mt-2 text-[11px] text-stone-500 dark:text-stone-400">Pobierane są wiadomości dla pierwszych {MAX_TOPICS} zaznaczonych tematów – odznacz część, aby zobaczyć pozostałe.</p>}
-        <div className="mt-3 border-t border-stone-100 pt-2.5 dark:border-white/5" aria-label="Filtr newsów">
-          <label className="flex items-center gap-2 text-xs font-medium text-stone-700 dark:text-stone-200">
-            <input type="checkbox" checked={filterOn} onChange={(e) => setFilterOn(e.target.checked)} className="h-4 w-4 accent-blue-600" />
-            Ukrywaj promocje, oferty sklepów, kolekcje i oferty pracy
-          </label>
-          {filterOn && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {blocked.map((w) => (
-                <span key={w} className="inline-flex h-7 items-center gap-1 rounded-full border border-stone-200 pr-1 pl-2.5 text-xs text-stone-600 dark:border-white/10 dark:text-stone-300">
-                  {w}
-                  <button type="button" onClick={() => setBlocked(blocked.filter((x) => x !== w))} aria-label={`Usuń słowo ${w}`} className="inline-flex h-5 w-5 items-center justify-center rounded-full text-stone-400 hover:text-red-600">
-                    ×
-                  </button>
-                </span>
-              ))}
-              <form onSubmit={addBlocked} className="flex items-center gap-1">
-                <input value={blockDraft} onChange={(e) => setBlockDraft(e.target.value)} maxLength={40} placeholder="+ słowo do ukrycia" aria-label="Własne słowo do ukrycia" className="h-7 w-44 rounded-full border border-dashed border-stone-300 bg-transparent px-2.5 text-xs outline-none focus:border-blue-500 dark:border-white/15" />
-              </form>
-            </div>
-          )}
-        </div>
         <p className="mt-2 text-[11px] text-stone-400">Źródła: Google News i Yahoo Finance</p>
         </div>
         )}
@@ -382,7 +347,7 @@ export default function NewsView() {
           <p className="flex flex-wrap items-center gap-x-2 px-1 text-[11px] text-stone-500 dark:text-stone-400" aria-live="polite">
             <span>
               {showHidden ? 'Pokazano' : 'Ukryto'} {hiddenCount}{' '}
-              {hiddenCount === 1 ? 'artykuł' : hiddenCount % 10 >= 2 && hiddenCount % 10 <= 4 && (hiddenCount % 100 < 12 || hiddenCount % 100 > 14) ? 'artykuły' : 'artykułów'} z filtra (promocje, sklepy, kolekcje…)
+              {hiddenCount === 1 ? 'artykuł' : hiddenCount % 10 >= 2 && hiddenCount % 10 <= 4 && (hiddenCount % 100 < 12 || hiddenCount % 100 > 14) ? 'artykuły' : 'artykułów'} z filtra (promocje, sklepy, kolekcje… – Ustawienia → Filtr newsów)
             </span>
             <button type="button" onClick={() => setShowHidden((v) => !v)} className="font-semibold text-blue-700 hover:underline dark:text-blue-300">
               {showHidden ? 'Ukryj' : 'Pokaż'}
