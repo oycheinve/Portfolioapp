@@ -500,10 +500,10 @@ export default function PortfolioView({ onNavigate }) {
       </details>
 
       {/* Analityk wyników spółek (BETA): konsensus, Beat/Miss, kwartały – archiwum 12 mies. */}
-      {aiOn(state.settings, 'earnings') && <EarningsAnalyst />}
-
-      {/* Przegląd tygodnia (AI) – na dole strony Portfela */}
+      {/* Przegląd tygodnia (AI) – nad Analitykiem wyników */}
       {aiOn(state.settings, 'weeklyReview') && <WeeklyReviewCard />}
+
+      {aiOn(state.settings, 'earnings') && <EarningsAnalyst />}
 
       <Modal open={!!opsFor} onClose={() => setOpsFor(null)} title={`Operacje: ${opsFor?.name || ''}`}>
         {opsFor && (
