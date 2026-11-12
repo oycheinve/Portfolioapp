@@ -67,13 +67,20 @@ export async function fetchNews(query, symbol) {
   if (!q) return { status: 400, body: { items: [], errors: ['Brak zapytania'] } };
   const sym = /^[A-Za-z0-9.^=-]{1,20}$/.test(symbol || '') ? symbol : null;
   const errors = [];
+  // Google News sortuje wyniki wg trafności – najpierw artykuły z ostatnich 7 dni (when:7d), a gdy jest ich mało,
+  // dodatkowo bez ograniczenia czasu (starsze teksty do listy); duplikaty usuwane niżej
+  const google = (query) => get(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=pl&gl=PL&ceid=PL:pl`).then(parseGoogleRss);
   const tasks = [
-    get(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=pl&gl=PL&ceid=PL:pl`)
-      .then(parseGoogleRss)
-      .catch((e) => {
+    (async () => {
+      try {
+        if (/\bwhen:\d+[hdmy]\b/i.test(q)) return await google(q);
+        const recent = await google(`${q} when:7d`);
+        return recent.length >= 10 ? recent : [...recent, ...(await google(q))];
+      } catch (e) {
         errors.push(`Google News: ${e.message}`);
         return [];
-      }),
+      }
+    })(),
   ];
   if (sym) {
     tasks.push(

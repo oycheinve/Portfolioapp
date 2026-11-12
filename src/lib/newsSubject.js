@@ -87,11 +87,23 @@ function removeSpans(text, alias) {
   return t;
 }
 
-// Pozycja (indeks) pierwszej wzmianki aliasu jako osobnego słowa; -1 – brak
+// Pozycja (indeks) pierwszej wzmianki aliasu jako osobnego słowa; -1 – brak. Polska odmiana: alias z co najmniej
+// 5 znaków pasuje też z krótką końcówką („Synektiku”, „Digital Networku”, „Allegro” → „Allegrze” nie), a krótszy –
+// tylko z końcówką po łączniku (po normalizacji „LPP-u” → „lpp u”, „XTB-ka” → „xtb ka” – osobne słowo, jak dotąd)
+const mentionRe = new Map();
 function firstMention(text, aliases) {
   let best = -1;
   for (const a of aliases) {
-    const i = text.indexOf(` ${a} `);
+    let i = text.indexOf(` ${a} `);
+    if (i < 0 && a.length >= 5 && !a.includes(' ')) {
+      if (!mentionRe.has(a)) mentionRe.set(a, new RegExp(` ${escape(a)}(?:[a-z]{1,4}) `));
+      const m = mentionRe.get(a).exec(text);
+      if (m) i = m.index;
+    } else if (i < 0 && a.length >= 5) {
+      if (!mentionRe.has(a)) mentionRe.set(a, new RegExp(` ${escape(a)}(?:[a-z]{1,4})? `));
+      const m = mentionRe.get(a).exec(text);
+      if (m) i = m.index;
+    }
     if (i >= 0 && (best < 0 || i < best)) best = i;
   }
   return best;

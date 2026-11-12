@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, ChevronDown, ExternalLink, Newspaper, Plus, RefreshCw, Sparkles, X } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { computeHoldings, isoDay } from '../lib/engine.js';
-import { GENERAL_KEY, fetchNewsMany, readOff, readTopics, timeAgo, writeOff, writeTopics } from '../lib/news.js';
+import { GENERAL_KEY, companyQuery, fetchNewsMany, readOff, readTopics, timeAgo, writeOff, writeTopics } from '../lib/news.js';
 import { GENERAL_ID, classifyArticle } from '../lib/newsSubject.js';
 import { Card, EmptyState } from '../components/ui.jsx';
 import AiSummary from '../components/news/AiSummary.jsx';
@@ -40,8 +40,8 @@ export default function NewsView() {
       .filter((i) => ids.has(i.id))
       .map((i) => {
         const name = searchName(i);
-        // Google News: nazwa spółki + „giełda” (artykuły rynkowe zamiast przypadkowych)
-        return { id: `inst:${i.id}`, label: i.ticker || name, query: `${name} giełda`, symbol: i.yahooSymbol || null, title: i.name };
+        // Google News: dokładna nazwa spółki + słowa rynkowe (OR) – zob. companyQuery
+        return { id: `inst:${i.id}`, label: i.ticker || name, query: companyQuery(name), symbol: i.yahooSymbol || null, title: i.name };
       })
       .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
   }, [state]);

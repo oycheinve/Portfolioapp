@@ -9,13 +9,16 @@ const cleanSearchName = (inst) =>
   String(inst.name || inst.ticker || '')
     .replace(/\s+(S\.?A\.?|SA|ASA|AG|NV|PLC|Inc\.?|Ltd\.?)$/i, '')
     .trim();
+// Zapytanie Google News o spółkę: dokładna nazwa + słowa rynkowe połączone OR (wcześniej „nazwa giełda” – odpadały
+// artykuły bez słowa „giełda”, np. „XTB zwiększa zysk”); trafność do spółki pilnuje klasyfikacja podmiotu
+export const companyQuery = (name) => `"${name}" (akcje OR giełda OR GPW OR spółka OR wyniki OR notowania OR dywidenda OR kurs)`;
 export function heldNewsTopics(state) {
   const ids = new Set(computeHoldings(state, isoDay(new Date()), null).filter((h) => h.quantity > 1e-9).map((h) => h.instrumentId));
   return state.instruments
     .filter((i) => ids.has(i.id))
     .map((i) => {
       const name = cleanSearchName(i);
-      return { id: `inst:${i.id}`, label: i.ticker || name, query: `${name} giełda`, symbol: i.yahooSymbol || null, title: i.name };
+      return { id: `inst:${i.id}`, label: i.ticker || name, query: companyQuery(name), symbol: i.yahooSymbol || null, title: i.name };
     })
     .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
 }
