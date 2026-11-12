@@ -135,6 +135,22 @@ export function Layout({ view, onNavigate, children }) {
     }, 10000);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Tygodniowy przegląd portfela (AI): w niedzielę / poniedziałek przy pierwszym otwarciu, raz na tydzień (w tle)
+  useEffect(() => {
+    if (!aiOn(state.settings, 'weeklyReview')) return undefined;
+    const t = setTimeout(() => {
+      import('../lib/weeklyReview.js')
+        .then((m) => m.autoWeeklyReview(latestState.current))
+        .then(async (r) => {
+          if (!r) return;
+          actions.notify(`Przegląd tygodnia od AI jest gotowy – Pulpit`, 'success');
+          const n = await import('../lib/notifications.js');
+          if (n.notificationPermission?.() === 'granted') n.showNotification('FinTrack 📊 Przegląd tygodnia', { body: r.entry.review.headline, url: '/#/', tag: 'weekly-review' }).catch(() => {});
+        })
+        .catch(() => {});
+    }, 12000);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Brak sieci (np. aplikacja na telefonie offline) – widoczny znaczek; dane działają z pamięci urządzenia
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   useEffect(() => {

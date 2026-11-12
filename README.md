@@ -627,6 +627,11 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - **Filtr słów kluczowych** (`src/lib/newsFilter.js`, bez AI – natychmiast): w Ustawieniach → Strategie, Cele i Giełda → **Filtr newsów** „Ukrywaj promocje, oferty sklepów, kolekcje i oferty pracy” (domyślnie włączone, `wealth-app-news-filter`) – tytuły ze słowami szumu (promocja, rabat, gazetka, Black Friday, kolekcja, niedziela handlowa, godziny otwarcia, konkurs, praca w…, kasjer…) są ukrywane, chyba że zawierają słowo inwestycyjne (wyniki, zysk, akcje, dywidenda, prognoza, rekomendacja, GPW…). Własne słowa do ukrycia (chipy, `wealth-app-news-blocked`, konto i urządzenie) ukrywają zawsze. Linijka „Ukryto N artykułów z filtra · Pokaż” odsłania je ze znacznikiem „poza inwestycjami”. Ten sam filtr (bez własnych słów) w powiadomieniach o nowych artykułach.
 - Podsumowania AI newsów nie wtrącają stopy dywidendy z kontekstu portfela – wspominają ją tylko, gdy wiadomość dotyczy dywidendy (klucze pamięci podsumowań `a2|`, `d4|`).
 
+### Pulpit → Przegląd tygodnia (AI, BETA)
+
+- Karta na Pulpicie (`src/components/dashboard/WeeklyReviewCard.jsx`, `src/lib/weeklyReview.js`, tryb `weekly-review`): dane z aplikacji za ostatnie 7 dni – wynik portfela inwestycyjnego (zysk w zł i %, wpłaty, wartość), największe ruchy spółek / ETF-ów (cena dziś vs 7 dni temu × ilość), dywidendy z tygodnia, kamienie milowe i nagłówki newsów o spółkach (podmiot jak w Newsach, bez „Analiz ogólnych” i szumu z filtra) → AI: nagłówek, „Co napędziło wynik”, „Na co uważać”, zdanie o najbliższym kamieniu milowym (bez rekomendacji).
+- Automatycznie w niedzielę albo poniedziałek przy otwarciu aplikacji (raz na tydzień, próba raz dziennie) + powiadomienie; „Wygeneruj teraz / Odśwież” – ręcznie za ostatnie 7 dni. Zapis per użytkownik (`wealth-app-weekly-review-v1`, 12 tygodni). Ustawienia → Funkcje AI → „Tygodniowy przegląd portfela”. ~1 zapytanie AI na tydzień.
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.

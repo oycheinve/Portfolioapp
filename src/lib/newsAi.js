@@ -121,6 +121,9 @@ export async function requestShoppingCategories(titles) {
 // Ceny listy zakupów: dopasowanie semantyczne do nazw z paragonów (known) + szacunek ceny rynkowej (AI)
 export const requestShoppingPrices = (items, known = []) => callAi({ mode: 'shopping-prices', items, known });
 
+// Tygodniowy przegląd portfela: dane tygodnia z aplikacji → { review: { headline, drivers, watch, milestone } }
+export const requestWeeklyReview = (data) => callAi({ mode: 'weekly-review', data });
+
 // Wspólne wywołanie trybów pomocniczych (paragon, podsumowanie budżetu): kolejka, cicha ponowna próba przy przeciążeniu
 async function callAi(payload) {
   const token = await sessionToken();

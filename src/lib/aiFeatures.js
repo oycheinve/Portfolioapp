@@ -2,6 +2,7 @@
 // użytkownika – urządzenie + chmura). Wyłączenie ukrywa funkcję i zatrzymuje zapytania do AI; zapisane dane zostają.
 export const AI_FEATURES = [
   { id: 'newsSummary', label: 'Podsumowania newsów', desc: 'Podsumowanie dnia i znaczek „AI” przy artykułach w Newsach' },
+  { id: 'weeklyReview', label: 'Tygodniowy przegląd portfela', desc: 'Komentarz AI do minionego tygodnia na Pulpicie – automatycznie w niedzielę / poniedziałek (1 zapytanie na tydzień)' },
   { id: 'receipts', label: 'Skanowanie paragonów', desc: 'Przycisk „Skanuj paragon” w Budżecie (historia paragonów zostaje)' },
   { id: 'budgetSummary', label: 'Miesięczne podsumowania budżetu', desc: 'Podsumowanie AI miesiąca w Budżecie i automatyczne generowanie na początku miesiąca' },
   { id: 'earnings', label: 'Analityk wyników spółek', desc: 'Karta Analityka w Portfelu (historia i analizy zostają zapisane)' },
