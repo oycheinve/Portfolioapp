@@ -206,8 +206,6 @@ export default function PortfolioView({ onNavigate }) {
 
   return (
     <div className="space-y-3">
-      {/* Przegląd tygodnia (AI) – w miejscu dawnego wiersza „Wartość / Zysk” (te liczby są na Pulpicie) */}
-      {aiOn(state.settings, 'weeklyReview') && <WeeklyReviewCard />}
       {/* Pasek: filtr · zwijanie sekcji · widok (telefon) */}
       <div className="flex flex-wrap items-center gap-1.5">
         <Dropdown label="Filtruj portfel" icon={SlidersHorizontal} badge={activeFilters || null}>
@@ -503,6 +501,9 @@ export default function PortfolioView({ onNavigate }) {
 
       {/* Analityk wyników spółek (BETA): konsensus, Beat/Miss, kwartały – archiwum 12 mies. */}
       {aiOn(state.settings, 'earnings') && <EarningsAnalyst />}
+
+      {/* Przegląd tygodnia (AI) – na dole strony Portfela */}
+      {aiOn(state.settings, 'weeklyReview') && <WeeklyReviewCard />}
 
       <Modal open={!!opsFor} onClose={() => setOpsFor(null)} title={`Operacje: ${opsFor?.name || ''}`}>
         {opsFor && (

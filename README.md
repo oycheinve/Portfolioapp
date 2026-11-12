@@ -629,7 +629,7 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 
 ### Portfel → Przegląd tygodnia (AI, BETA)
 
-- Karta na górze zakładki Portfel – w miejscu dawnego wiersza „Wartość / Zysk” (`src/components/dashboard/WeeklyReviewCard.jsx`, `src/lib/weeklyReview.js`, tryb `weekly-review`): dane z aplikacji za ostatnie 7 dni – wynik portfela inwestycyjnego (zysk w zł i %, wpłaty, wartość), największe ruchy spółek / ETF-ów (cena dziś vs 7 dni temu × ilość), dywidendy z tygodnia, kamienie milowe i nagłówki newsów o spółkach (podmiot jak w Newsach, bez „Analiz ogólnych” i szumu z filtra) → AI: nagłówek, „Co napędziło wynik”, „Na co uważać”, zdanie o najbliższym kamieniu milowym (bez rekomendacji).
+- Karta na dole zakładki Portfel, pod Analitykiem wyników (`src/components/dashboard/WeeklyReviewCard.jsx`, `src/lib/weeklyReview.js`, tryb `weekly-review`): dane z aplikacji za ostatnie 7 dni – wynik portfela inwestycyjnego (zysk w zł i %, wpłaty, wartość), największe ruchy spółek / ETF-ów (cena dziś vs 7 dni temu × ilość), dywidendy z tygodnia, kamienie milowe i nagłówki newsów o spółkach (podmiot jak w Newsach, bez „Analiz ogólnych” i szumu z filtra) → AI: nagłówek, „Co napędziło wynik”, „Na co uważać”, zdanie o najbliższym kamieniu milowym (bez rekomendacji).
 - Automatycznie w niedzielę albo poniedziałek przy otwarciu aplikacji (raz na tydzień, próba raz dziennie) + powiadomienie; „Wygeneruj teraz / Odśwież” – ręcznie za ostatnie 7 dni. Zapis per użytkownik (`wealth-app-weekly-review-v1`, 12 tygodni). Ustawienia → Funkcje AI → „Tygodniowy przegląd portfela”. ~1 zapytanie AI na tydzień.
 
 ## Minimalizm i mniej przewijania (pakiet UI)
