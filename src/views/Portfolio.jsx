@@ -9,6 +9,7 @@ import OperationFormModal, { emptyOperation } from '../components/cash/Operation
 import { DividendsModal, InstrumentEditModal, PriceChartModal } from '../components/portfolio/RowModals.jsx';
 import EarningsAnalyst from '../components/portfolio/EarningsAnalyst.jsx';
 import { aiOn } from '../lib/aiFeatures.js';
+import WeeklyReviewCard from '../components/dashboard/WeeklyReviewCard.jsx';
 
 const PREFS_KEY = 'wealth-app-portfolio-filters';
 const VIEW_KEY = 'wealth-app-portfolio-mobile-view';
@@ -205,19 +206,8 @@ export default function PortfolioView({ onNavigate }) {
 
   return (
     <div className="space-y-3">
-      {/* Podsumowanie (wartość i zysk) – jeden wiersz nad tabelą */}
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-1 tabular">
-        <div className="min-w-0">
-          <span className="text-[11px] text-stone-500 dark:text-stone-400">Wartość </span>
-          <strong className="text-lg">{formatPLN(data.total)}</strong>
-        </div>
-        <div className="text-sm">
-          <span className="text-[11px] text-stone-500 dark:text-stone-400">Zysk </span>
-          <strong className={signClass(data.gain)}>
-            {formatPLN(data.gain, { sign: true })} ({formatPercent(data.gainPct, { sign: true })})
-          </strong>
-        </div>
-      </div>
+      {/* Przegląd tygodnia (AI) – w miejscu dawnego wiersza „Wartość / Zysk” (te liczby są na Pulpicie) */}
+      {aiOn(state.settings, 'weeklyReview') && <WeeklyReviewCard />}
       {/* Pasek: filtr · zwijanie sekcji · widok (telefon) */}
       <div className="flex flex-wrap items-center gap-1.5">
         <Dropdown label="Filtruj portfel" icon={SlidersHorizontal} badge={activeFilters || null}>
