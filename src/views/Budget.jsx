@@ -81,7 +81,7 @@ export default function BudgetView() {
 // Osobna kategoria „Wydatki z oszczędności”: wydatek wpisany w „Dodaj zakup” pomniejsza saldo konta
 // oszczędnościowego (wypłata), a nie budżet miesięczny – poza RAZEM i statystykami; wpisy w dzienniku miesiąca
 const SAVINGS_ID = '__savings';
-const SAVINGS_NAME = '🏦 Wydatki z oszczędności';
+const SAVINGS_NAME = 'Z oszczędności';
 const SAVINGS_ACC_KEY = 'wealth-app-budget-savings-account';
 const readSavingsAcc = () => {
   try {
@@ -207,13 +207,13 @@ function MonthlyBudget() {
     };
     const fresh = parts.map((p) => {
       const cashflowId = cashflowFor(p);
-      const name = p.id === SAVINGS_ID ? 'Wydatki z oszczędności' : rows.find((r) => r.id === p.id).name;
+      const name = p.id === SAVINGS_ID ? SAVINGS_NAME : rows.find((r) => r.id === p.id).name;
       return { id: newRowId(), rowId: p.id, name, amount: p.amount, note: text, at, ...(cashflowId ? { cashflowId } : {}) };
     });
     setEntries((list) => [...fresh.reverse(), ...list].slice(0, LOG_LIMIT));
     const main = next.find((r) => r.id === parts[0].id);
     const moved = fresh.filter((e) => e.cashflowId).length;
-    const partName = (id) => (id === SAVINGS_ID ? 'Wydatki z oszczędności' : next.find((r) => r.id === id).name);
+    const partName = (id) => (id === SAVINGS_ID ? SAVINGS_NAME : next.find((r) => r.id === id).name);
     return { name: partName(parts[0].id), left: main ? toNum(main.planned) - toNum(main.spent) : null, ...(moved ? { transfer: true, account: savingsAcc?.name || '' } : {}), parts: parts.map((p) => ({ name: partName(p.id), amount: p.amount })) };
   };
   // Korekta kwoty wydanej kategorii (edycja zapisanego paragonu z tego miesiąca)
@@ -365,11 +365,6 @@ function MonthlyBudget() {
                     <>
                       <td className="px-2 py-1 leading-snug break-words [hyphens:auto] sm:py-1.5">
                         {r.name || <span className="text-stone-400">bez nazwy</span>}
-                        {isTransferRow(r) && (
-                          <span className="block text-[10px] leading-tight text-emerald-700 dark:text-emerald-400" title="Transfer – poza sumą wydatków budżetu">
-                            🏦 {r.savings.dir === 'in' ? '+ na' : '− z'} {accountName(r.savings.accountId)} · poza wydatkami
-                          </span>
-                        )}
                       </td>
                       <td className="border-l border-stone-200 px-2 py-1 text-right whitespace-nowrap sm:py-1.5 dark:border-white/10">{zl(toNum(r.planned))}</td>
                       <td className="border-l border-stone-200 px-2 py-1 text-right whitespace-nowrap sm:py-1.5 dark:border-white/10">{zl(toNum(r.spent))}</td>
@@ -408,34 +403,24 @@ function MonthlyBudget() {
               <td className={`px-2 py-1.5 text-right whitespace-nowrap ${totals.left < -0.004 ? 'text-red-600 dark:text-red-400' : ''}`}>{zl(totals.left)}</td>
               {editing && <td />}
             </tr>
-            {savingsAcc && (savingsSpent > 0 || savingsAccounts.length > 1) && (
-              <tr className="text-[11px] text-emerald-800 sm:text-xs dark:text-emerald-300" aria-label="Wydatki z oszczędności">
-                <td className="px-2 py-1" colSpan={2}>
-                  🏦 Wydatki z oszczędności (poza RAZEM) –{' '}
-                  {savingsAccounts.length > 1 ? (
-                    <select value={savingsAcc.id} onChange={(e) => chooseSavingsAcc(e.target.value)} aria-label="Konto dla wydatków z oszczędności" className="max-w-[9rem] rounded border border-emerald-300 bg-transparent px-0.5 text-[11px] dark:border-emerald-500/40">
+            {/* Osobny byt: wydatki z oszczędności – suma kwot wydanych w miesiącu, poza RAZEM (odejmowane z konta) */}
+            {savingsAcc && !editing && (
+              <tr className="border-t-4 border-white bg-white font-normal text-stone-800 dark:border-neutral-900 dark:bg-neutral-900 dark:text-stone-200" aria-label="Z oszczędności">
+                <td className="border border-stone-200 px-2 py-1 leading-snug sm:py-1.5 dark:border-white/10">
+                  Z oszczędności
+                  {savingsAccounts.length > 1 && (
+                    <select value={savingsAcc.id} onChange={(e) => chooseSavingsAcc(e.target.value)} aria-label="Konto dla wydatków z oszczędności" className="mt-0.5 block h-6 w-full min-w-0 rounded border border-stone-200 bg-transparent px-1 text-[10px] text-stone-500 dark:border-white/10 dark:text-stone-400">
                       {savingsAccounts.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.name}
                         </option>
                       ))}
                     </select>
-                  ) : (
-                    savingsAcc.name
                   )}
                 </td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">{zl(savingsSpent)}</td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">−{zl(savingsSpent)}</td>
-                {editing && <td />}
-              </tr>
-            )}
-            {totals.transfer.count > 0 && (
-              <tr className="text-[11px] text-emerald-800 sm:text-xs dark:text-emerald-300" aria-label="Transfery z kontem oszczędnościowym">
-                <td className="px-2 py-1">🏦 Oszczędności (poza RAZEM)</td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">{zl(totals.transfer.planned)}</td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">{zl(totals.transfer.spent)}</td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">{zl(totals.transfer.planned - totals.transfer.spent)}</td>
-                {editing && <td />}
+                <td className="border border-stone-200 px-2 py-1 text-right text-stone-400 sm:py-1.5 dark:border-white/10">—</td>
+                <td className="border border-stone-200 px-2 py-1 text-right whitespace-nowrap sm:py-1.5 dark:border-white/10">{zl(savingsSpent)}</td>
+                <td className="border border-stone-200 px-2 py-1 text-right text-stone-400 sm:py-1.5 dark:border-white/10">—</td>
               </tr>
             )}
           </tfoot>
