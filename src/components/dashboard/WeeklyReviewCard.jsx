@@ -79,6 +79,12 @@ export default function WeeklyReviewCard() {
               </ul>
             </div>
           )}
+          {r.budget && (
+            <div>
+              <div className="text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Budżet w tygodniu</div>
+              <p className="mt-0.5">{r.budget}</p>
+            </div>
+          )}
           {r.milestone && <p className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200">🎯 {r.milestone}</p>}
         </div>
       )}

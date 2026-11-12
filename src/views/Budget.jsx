@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Eraser, History, Pencil, Plane, Plus, RotateCcw, ShoppingBag, Split, Trash2, X } from 'lucide-react';
-import { DAILY_KEY, LOG_LIMIT, budgetTotals, isTransferRow, readBudgetLog, writeBudgetLog, dailyAllowance, defaultFoodRow, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
+import { DAILY_KEY, LOG_LIMIT, budgetTotals, isTransferRow, spendingPace, readBudgetLog, writeBudgetLog, dailyAllowance, defaultFoodRow, demoRows, monthKey, newRowId, readBudget, rowLeft, shiftMonth, writeBudget } from '../lib/budget.js';
 import TripsBudget from '../components/budget/TripsBudget.jsx';
 import { ReceiptScanner, ReceiptsHistory } from '../components/budget/Receipts.jsx';
 import MonthSummary from '../components/budget/MonthSummary.jsx';
@@ -736,6 +736,7 @@ function DailyTile({ rows, month, savingsSpent = 0 }) {
     }
   };
   const row = named.find((r) => r.name === pick) || defaultFoodRow(rows);
+  const pace = spendingPace(row, month);
   const investRows = named.filter(isInvestRow);
   const result = Math.round((investRows.reduce((sum, r) => sum + toNum(r.spent), 0) - savingsSpent) * 100) / 100;
   if (!row) return null;
@@ -779,6 +780,12 @@ function DailyTile({ rows, month, savingsSpent = 0 }) {
       <p className="mt-1 text-[11px] text-stone-500 tabular dark:text-stone-400">
         Pozostało {zl(d.left)} z {zl(d.planned)} · plan na cały miesiąc to średnio {zl(d.planPerDay)} dziennie ({d.daysInMonth} dni)
       </p>
+      {pace && (
+        <p className={`mt-1 text-[11px] tabular ${pace.over ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'}`} aria-label="Tempo wydatków">
+          {pace.over ? '⚠️ ' : ''}Przy obecnym tempie wydasz na „{row.name}” ok. {zl(pace.projected)}
+          {pace.planned > 0 ? (pace.over ? ` – o ${zl(pace.diff)} ponad plan` : ` – w planie (${zl(pace.planned)})`) : ''}
+        </p>
+      )}
       {(investRows.length > 0 || savingsSpent > 0) && (
         <p className="mt-1.5 text-[11px] text-stone-400 tabular dark:text-stone-500" aria-label="Wynik miesiąca" title={`${investRows.length ? investRows.map((r) => `${r.name} ${zl(toNum(r.spent))}`).join(' + ') : 'Inwestycje 0,00 zł'}${savingsSpent > 0 ? ` − Z oszczędności ${zl(savingsSpent)}` : ''}`}>
           {result >= 0 ? 'Zysk miesięczny' : 'Strata miesięczna'}:{' '}

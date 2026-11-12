@@ -141,3 +141,18 @@ export function dailyAllowance(row, month, now = new Date()) {
   const left = row ? rowLeft(row) : 0;
   return { daysInMonth, daysLeft, planned, left, perDay: daysLeft > 0 ? Math.max(0, left) / daysLeft : 0, planPerDay: planned / daysInMonth, past: month < current };
 }
+
+// Tempo wydatków w bieżącym miesiącu: prognoza na koniec miesiąca przy dotychczasowym średnim dziennym tempie
+// (wydane / dni, które minęły, z dzisiejszym × dni w miesiącu). Liczona od 3. dnia miesiąca (wcześniej – za mało
+// danych); dla innych miesięcy – null. over – prognoza ponad plan (z marginesem 1%).
+export function spendingPace(row, month, now = new Date()) {
+  if (!row || month !== monthKey(now)) return null;
+  const [y, m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const elapsed = now.getDate();
+  const spent = num(row.spent);
+  const planned = num(row.planned);
+  if (elapsed < 3 || spent <= 0) return null;
+  const projected = Math.round((spent / elapsed) * daysInMonth);
+  return { projected, planned, diff: projected - planned, over: planned > 0 && projected > planned * 1.01, elapsed, daysInMonth };
+}

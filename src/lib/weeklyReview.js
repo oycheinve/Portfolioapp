@@ -2,7 +2,7 @@
 // zestaw danych z portfela inwestycyjnego (zmiana w tygodniu, największe ruchy spółek, dywidendy, kamienie milowe,
 // nagłówki newsów z tygodnia bez szumu) trafia do AI, które pisze krótki komentarz. Zapis per użytkownik
 // (`wealth-app-weekly-review-v1`, urządzenie + chmura), ostatnie 12 tygodni; klucz = data niedzieli kończącej tydzień.
-import { PREFS_CHANGED_EVENT } from './budget.js';
+import { PREFS_CHANGED_EVENT, budgetTotals, isTransferRow, monthKey, readBudget, readBudgetLog, shiftMonth, spendingPace } from './budget.js';
 import { computeHoldings, computePeriodStats, incomeEventsWithTax, isoDay } from './engine.js';
 import { createPriceResolver } from './history.js';
 import { dividendKpis } from './dividends.js';
@@ -103,13 +103,49 @@ export async function weeklyData(state, now = new Date()) {
   } catch {
     // bez newsów – przegląd z samych liczb
   }
+  const budget = budgetWeek(state, now);
   return {
     okres: `${start} – ${today}`,
+    ...(budget ? { budzet: budget } : {}),
     portfel: { wartosc_zl: r0(week.endValue || 0), zysk_tydzien_zl: r0(week.totalReturn || 0), stopa_tydzien_proc: r1((week.twr ?? week.totalReturnPct ?? 0) * 100), wplaty_tydzien_zl: r0(week.flowsInPeriod || 0), zysk_od_poczatku_zl: r0(all.totalReturn || 0) },
     ruchy_spolek: moves.slice(0, 8),
     dywidendy_w_tygodniu: dividends,
     kamienie_milowe: milestones,
     newsy: news,
+  };
+}
+
+// Budżet w tygodniu: wydatki z dziennika (ostatnie 7 dni, także z końcówki poprzedniego miesiąca) według kategorii,
+// stan bieżącego miesiąca (plan / wydane / dni) i kategorie, które przy obecnym tempie przekroczą plan. Bez
+// „Z oszczędności” i kategorii-transferów. null – moduł Budżet ukryty albo brak danych.
+export function budgetWeek(state, now = new Date()) {
+  if (state?.settings?.modules?.budget === false) return null;
+  const month = monthKey(now);
+  const rows = readBudget()[month] || [];
+  const log = readBudgetLog();
+  const from = now.getTime() - 7 * 86400000;
+  const transferIds = new Set(rows.filter(isTransferRow).map((r) => r.id));
+  const entries = [...(log[month] || []), ...(log[shiftMonth(month, -1)] || [])].filter((e) => e && e.rowId !== '__savings' && !transferIds.has(e.rowId) && Date.parse(e.at) >= from);
+  if (!rows.length && !entries.length) return null;
+  const byCat = {};
+  for (const e of entries) byCat[e.name || '?'] = (byCat[e.name || '?'] || 0) + (Number(e.amount) || 0);
+  const t = budgetTotals(rows);
+  const cons = rows.filter((r) => String(r.name || '').trim() && !isTransferRow(r));
+  const atRisk = cons
+    .map((r) => ({ r, p: spendingPace(r, month, now) }))
+    .filter((x) => x.p?.over && x.r.type !== 'Stałe koszty' && x.r.type !== 'Inwestycje' && x.r.type !== 'Oszczędności')
+    .map((x) => ({ kategoria: x.r.name, prognoza_zl: x.p.projected, plan_zl: Math.round(x.p.planned) }))
+    .slice(0, 4);
+  const [y, m] = month.split('-').map(Number);
+  return {
+    wydane_w_tygodniu_zl: r0(entries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)),
+    wpisow_w_tygodniu: entries.length,
+    kategorie_tygodnia: Object.entries(byCat)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([kategoria, zl]) => ({ kategoria, zl: r0(zl) })),
+    miesiac: { plan_zl: r0(t.planned), wydane_zl: r0(t.spent), pozostalo_zl: r0(t.left), dzien: now.getDate(), dni_w_miesiacu: new Date(y, m, 0).getDate() },
+    zagrozone_przekroczeniem: atRisk,
   };
 }
 
