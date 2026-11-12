@@ -777,17 +777,13 @@ function DailyTile({ rows, month, savingsSpent = 0 }) {
         Pozostało {zl(d.left)} z {zl(d.planned)} · plan na cały miesiąc to średnio {zl(d.planPerDay)} dziennie ({d.daysInMonth} dni)
       </p>
       {(investRows.length > 0 || savingsSpent > 0) && (
-        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-t border-stone-100 pt-2 dark:border-white/5" aria-label="Wynik miesiąca">
-          <span className="text-sm">{result >= 0 ? 'Zysk miesięczny' : 'Strata miesięczna'}</span>
-          <strong className={`text-base tabular ${result >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+        <p className="mt-1.5 text-[11px] text-stone-400 tabular dark:text-stone-500" aria-label="Wynik miesiąca" title={`${investRows.length ? investRows.map((r) => `${r.name} ${zl(toNum(r.spent))}`).join(' + ') : 'Inwestycje 0,00 zł'}${savingsSpent > 0 ? ` − Z oszczędności ${zl(savingsSpent)}` : ''}`}>
+          {result >= 0 ? 'Zysk miesięczny' : 'Strata miesięczna'}:{' '}
+          <span className={result >= 0 ? 'text-emerald-600/80 dark:text-emerald-400/70' : 'text-red-500/80 dark:text-red-400/70'}>
             {result >= 0 ? '+' : '−'}
             {zl(Math.abs(result))}
-          </strong>
-          <span className="w-full text-[11px] text-stone-500 tabular dark:text-stone-400">
-            {investRows.length ? investRows.map((r) => `${r.name} ${zl(toNum(r.spent))}`).join(' + ') : 'Inwestycje 0,00 zł'}
-            {savingsSpent > 0 ? ` − Z oszczędności ${zl(savingsSpent)}` : ''}
           </span>
-        </div>
+        </p>
       )}
     </div>
   );
