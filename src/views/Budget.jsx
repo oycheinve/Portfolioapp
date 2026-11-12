@@ -468,7 +468,7 @@ function MonthlyBudget() {
             <ReceiptsHistory key={receiptsVer} rows={rows} month={month} onAdjust={adjustSpent} />
           </div>
           <RecentEntries entries={entries} rows={rows} onUndo={undoPurchase} />
-          <DailyTile rows={rows} month={month} />
+          <DailyTile rows={rows} month={month} savingsSpent={savingsSpent} />
           <p className="mt-2 text-right text-[11px] text-stone-400">
             {isTemplate ? 'Przykładowe kategorie – zmień je w trybie „Edytuj”' : 'Zapis w tej przeglądarce i kopii zapasowej'}
           </p>
@@ -710,7 +710,12 @@ function RecentEntries({ entries, rows, onUndo }) {
 const plDays = (n) => (n === 1 ? 'dzień' : 'dni');
 
 // Kafelek dzienny: ile dni zostało do końca miesiąca i ile średnio można wydawać dziennie na jedzenie
-function DailyTile({ rows, month }) {
+// Wynik miesiąca („Na co dzień”): kwoty wydane w kategoriach inwestycyjnych (typ „Inwestycje” albo nazwa, np.
+// Inwestycje, S&P 500, ETF, IKE / IKZE, akcje, obligacje) minus wydatki „Z oszczędności” – na plusie zysk, na minusie strata
+const INVEST_RE = /inwest|s\s*&\s*p|sp\s?500|\betf|\bik(e|ze)\b|akcj|obligac/i;
+const isInvestRow = (r) => !isTransferRow(r) && (r.type === 'Inwestycje' || INVEST_RE.test(String(r.name || '')));
+
+function DailyTile({ rows, month, savingsSpent = 0 }) {
   const named = rows.filter((r) => String(r.name || '').trim());
   const [pick, setPickState] = useState(() => {
     try {
@@ -728,6 +733,8 @@ function DailyTile({ rows, month }) {
     }
   };
   const row = named.find((r) => r.name === pick) || defaultFoodRow(rows);
+  const investRows = named.filter(isInvestRow);
+  const result = Math.round((investRows.reduce((sum, r) => sum + toNum(r.spent), 0) - savingsSpent) * 100) / 100;
   if (!row) return null;
   const d = dailyAllowance(row, month);
   const over = d.left < -0.004;
@@ -769,6 +776,19 @@ function DailyTile({ rows, month }) {
       <p className="mt-1 text-[11px] text-stone-500 tabular dark:text-stone-400">
         Pozostało {zl(d.left)} z {zl(d.planned)} · plan na cały miesiąc to średnio {zl(d.planPerDay)} dziennie ({d.daysInMonth} dni)
       </p>
+      {(investRows.length > 0 || savingsSpent > 0) && (
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-t border-stone-100 pt-2 dark:border-white/5" aria-label="Wynik miesiąca">
+          <span className="text-sm">{result >= 0 ? 'Zysk miesięczny' : 'Strata miesięczna'}</span>
+          <strong className={`text-base tabular ${result >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+            {result >= 0 ? '+' : '−'}
+            {zl(Math.abs(result))}
+          </strong>
+          <span className="w-full text-[11px] text-stone-500 tabular dark:text-stone-400">
+            {investRows.length ? investRows.map((r) => `${r.name} ${zl(toNum(r.spent))}`).join(' + ') : 'Inwestycje 0,00 zł'}
+            {savingsSpent > 0 ? ` − Z oszczędności ${zl(savingsSpent)}` : ''}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
