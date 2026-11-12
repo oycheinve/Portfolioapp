@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, FileText, Filter, Landmark, Layers, LayoutGrid, LineChart, Palette, Pencil, PiggyBank, Plus, Radio, ScanLine, Scale, Sparkles, Target, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
@@ -22,7 +22,7 @@ import NewsFilterCard from '../components/settings/NewsFilterCard.jsx';
 import CompanyProfilesCard from '../components/settings/CompanyProfilesCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
-// Konta i ustawienia: pięć kategorii (akordeon – otwarta najwyżej jedna), w środku podkategorie z kafelkami sekcji.
+// Konta i ustawienia: pięć klikanych kategorii – każda na osobnej stronie z podkategoriami i kafelkami sekcji.
 // Kafelek otwiera osobny widok sekcji (#/settings/<id>) z przyciskiem powrotu; dawne #/settings/fire
 // i #/settings/notifications (także #/notifications) prowadzą wprost do sekcji.
 const SECTIONS = {
@@ -110,38 +110,73 @@ GROUPS.forEach((g) => {
   g.items = g.sections.flatMap((x) => x.items);
 });
 const groupOf = (sectionId) => GROUPS.find((g) => g.items.includes(sectionId))?.id || null;
-// Kategoria otwarta przy powrocie z sekcji (do końca sesji karty)
-let lastOpenGroup = null;
 
+const GROUP_BY_ID = Object.fromEntries(GROUPS.map((g) => [g.id, g]));
+const backCls = 'inline-flex h-9 items-center gap-1.5 rounded-lg pr-3 pl-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5';
+
+// Nawigacja: #/settings – kafelki kategorii · #/settings/<kategoria> – podkategorie z sekcjami · #/settings/<sekcja>
+// – sekcja (powrót do jej kategorii)
 export default function SettingsView({ param, onNavigate }) {
+  const go = (to) => onNavigate?.(to ? `settings/${to}` : 'settings');
   const section = SECTIONS[param];
   if (section) {
-    lastOpenGroup = groupOf(param);
+    const group = GROUP_BY_ID[groupOf(param)];
     return (
       <div className="space-y-3">
-        <button
-          type="button"
-          onClick={() => onNavigate?.('settings')}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg pr-3 pl-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5"
-        >
-          <ChevronLeft size={18} /> Konta i ustawienia
+        <button type="button" onClick={() => go(group?.id)} className={backCls}>
+          <ChevronLeft size={18} /> {group ? group.title : 'Konta i ustawienia'}
         </button>
         {section.render()}
       </div>
     );
   }
-  return <SettingsHome onOpen={(id) => onNavigate?.(`settings/${id}`)} />;
+  const group = GROUP_BY_ID[param];
+  if (group) return <SettingsCategory group={group} onBack={() => go(null)} onOpen={go} />;
+  return <SettingsHome onOpen={go} />;
 }
 
+// Strona główna: klikane kafelki kategorii
 function SettingsHome({ onOpen }) {
-  const [open, setOpen] = useState(lastOpenGroup); // jedna otwarta kategoria naraz
+  return (
+    <div className="grid gap-2.5 sm:grid-cols-2">
+      {GROUPS.map((g) => (
+        <button
+          key={g.id}
+          type="button"
+          onClick={() => onOpen(g.id)}
+          aria-label={g.title}
+          className="flex min-w-0 items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3.5 text-left shadow-sm transition-colors hover:bg-stone-50 active:bg-stone-100 dark:border-white/10 dark:bg-neutral-900 dark:hover:bg-white/[0.03] dark:active:bg-white/[0.06]"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-xl dark:bg-white/5" aria-hidden="true">
+            {g.emoji}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold">{g.title}</span>
+            <span className="block truncate text-xs text-stone-500 dark:text-stone-400">{g.subtitle}</span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-stone-400 dark:text-stone-500" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Strona kategorii: podkategorie (nagłówki) z kafelkami sekcji
+function SettingsCategory({ group, onBack, onOpen }) {
   return (
     <div className="space-y-3">
-      {GROUPS.map((g) => (
-        <SettingsGroup key={g.id} group={g} open={open === g.id} onToggle={() => setOpen((o) => (o === g.id ? null : g.id))}>
-          {g.sections.map((sec) => (
-            <div key={sec.label || g.id}>
-              {sec.label && g.sections.length > 1 && <div className="px-3 pt-2 pb-0.5 text-[11px] font-semibold tracking-wide text-stone-400 uppercase dark:text-stone-500">{sec.label}</div>}
+      <button type="button" onClick={onBack} className={backCls}>
+        <ChevronLeft size={18} /> Konta i ustawienia
+      </button>
+      <div className="flex items-center gap-3 px-1">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-lg dark:bg-white/5" aria-hidden="true">
+          {group.emoji}
+        </span>
+        <h2 className="text-lg font-semibold">{group.title}</h2>
+      </div>
+      {group.sections.map((sec) => (
+        <section key={sec.label || group.id} aria-label={sec.label || group.title} className="min-w-0 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm sm:p-2 dark:border-white/10 dark:bg-neutral-900">
+          {sec.label && group.sections.length > 1 && <div className="px-3 pt-2 pb-0.5 text-[11px] font-semibold tracking-wide text-stone-400 uppercase dark:text-stone-500">{sec.label}</div>}
           {sec.items.map((id) => {
             const it = SECTIONS[id];
             const Icon = it.icon;
@@ -163,44 +198,9 @@ function SettingsHome({ onOpen }) {
               </button>
             );
           })}
-            </div>
-          ))}
-        </SettingsGroup>
+        </section>
       ))}
     </div>
-  );
-}
-
-// Akordeon kategorii (stan w SettingsHome): płynne rozwijanie (grid-template-rows), zwinięta treść nieaktywna (inert)
-function SettingsGroup({ group, open, onToggle, children }) {
-  const [settled, setSettled] = useState(open);
-  useEffect(() => {
-    if (!open) setSettled(false);
-  }, [open]);
-  return (
-    <section className="min-w-0 rounded-2xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900" aria-label={group.title}>
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors hover:bg-stone-50 sm:px-5 dark:hover:bg-white/[0.03]">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-lg dark:bg-white/5" aria-hidden="true">
-          {group.emoji}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-semibold">{group.title}</span>
-          <span className="block truncate text-xs text-stone-500 dark:text-stone-400">{group.subtitle}</span>
-        </span>
-        <ChevronDown size={18} className={`shrink-0 text-stone-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
-      </button>
-      <div
-        className="grid grid-cols-[minmax(0,1fr)] transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none"
-        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
-        onTransitionEnd={(e) => {
-          if (e.target === e.currentTarget && open) setSettled(true);
-        }}
-      >
-        <div className={`min-h-0 ${open && settled ? '' : 'overflow-hidden'}`} inert={open ? undefined : ''} aria-hidden={open ? undefined : true}>
-          <div className="space-y-0.5 border-t border-stone-100 p-1.5 sm:p-2 dark:border-white/5">{children}</div>
-        </div>
-      </div>
-    </section>
   );
 }
 

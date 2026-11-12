@@ -635,7 +635,7 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 
 ### Ustawienia – nowy układ
 
-- Pięć kategorii (akordeon, otwarta jedna) z podkategoriami: 💼 **Majątek i konta** (Konta: konta, rejestr wpłat i wypłat, limity IKE / IKZE · Inne aktywa: nieruchomości, IKE - Julka), 🧾 **Budżet i zakupy** (Budżet – „Z oszczędności”, Paragony – podgląd, kaucja, 50/50, Zakupy i Zadania – grupowanie), 📈 **Inwestowanie** (Cele i podatki · Dane rynkowe: notowania, dywidendy, inflacja · Spółki i wiadomości: profile spółek, filtr newsów), 🔔 **Powiadomienia i AI**, ⚙️ **Aplikacja i dane** (Wygląd: motyw, widoczne moduły · Konto i dane: chmura, kopia zapasowa).
+- Pięć klikanych kategorii (kafelki; kategoria otwiera własną stronę `#/settings/<kategoria>` z podkategoriami, „wstecz” z sekcji wraca do jej kategorii): 💼 **Majątek i konta** (Konta: konta, rejestr wpłat i wypłat, limity IKE / IKZE · Inne aktywa: nieruchomości, IKE - Julka), 🧾 **Budżet i zakupy** (Budżet – „Z oszczędności”, Paragony – podgląd, kaucja, 50/50, Zakupy i Zadania – grupowanie), 📈 **Inwestowanie** (Cele i podatki · Dane rynkowe: notowania, dywidendy, inflacja · Spółki i wiadomości: profile spółek, filtr newsów), 🔔 **Powiadomienia i AI**, ⚙️ **Aplikacja i dane** (Wygląd: motyw, widoczne moduły · Konto i dane: chmura, kopia zapasowa).
 - Dawna sekcja „Moduły i widok” rozdzielona na osobne sekcje (`#/settings/modules`, `budget-options`, `receipts`, `lists`); adresy sekcji bez zmian.
 
 ## Minimalizm i mniej przewijania (pakiet UI)
