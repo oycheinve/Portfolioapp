@@ -601,6 +601,11 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - Pod listą: „Szacowany koszt zakupów: ok. X zł” – suma pozycji do kupienia (z informacją, dla ilu produktów jest cena).
 - **AI fallback** (tryb `shopping-prices` w `/api/news-summary`, Ustawienia → Funkcje AI → „Ceny zakupów od AI”): produkty bez dopasowania słownego trafiają w tle do AI razem z nazwami z Twoich paragonów – AI dopasowuje je semantycznie (np. „papier toaletowy” → „PAP.TOAL. VELVET 8 R”; serwer przyjmuje tylko nazwy faktycznie z paragonów) i wtedy liczy się cena z historii, a gdy produktu nigdy nie kupowano – podaje szacunek ceny rynkowej (znaczek ✦ przy cenie, „w tym szacunki AI: N” w sumie). Wynik zapamiętany per produkt (`wealth-app-shopping-ai-prices-v1`, konto i urządzenie), szacunki rynkowe odświeżane po 60 dniach; Twoja korekta i ceny z paragonów mają pierwszeństwo. Wyłączenie funkcji ukrywa szacunki AI i zatrzymuje zapytania.
 
+### Kaucja za napoje (paragony i lista zakupów)
+
+- Ustawienia → Moduły i widok → Skanowanie paragonów → „Doliczaj kaucję 0,50 zł do napojów” (`settings.receiptDeposit`, domyślnie włączone). Po skanie każdy napój w butelce / puszce (kategoria „Napoje” bez kawy, herbaty, kakao, syropów, napojów w proszku i kartonów) dostaje +0,50 zł × liczba sztuk (`it.deposit`, „w tym kaucja …” na ekranie weryfikacji); wiersze „KAUCJA” / opakowań zwrotnych z paragonu są pomijane (bez podwójnego liczenia, AI ich nie zwraca).
+- Lista zakupów: pamięć cen trzyma cenę napoju bez kaucji, a szacunek (z paragonów i z AI) dolicza 0,50 zł za sztukę – „w tym kaucja 0,50 zł” w podglądzie ceny; Twoja ręczna cena jest brana tak, jak ją wpiszesz.
+
 ### Budżet – kategoria „Z oszczędności”
 
 - Włączana w **Ustawienia → Moduły i widok → Budżet miesięczny → Kategoria „Z oszczędności”** (`settings.budgetSavingsCategory`, domyślnie wyłączona; wyłączenie ukrywa wiersz i kategorię, wcześniejsze wpisy i operacje na koncie zostają).

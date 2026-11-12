@@ -6,7 +6,7 @@ import { SHOPPING_CATEGORIES, categoryOf, groupByCategory, normProduct, readCats
 import { requestShoppingCategories, requestShoppingPrices } from '../lib/newsAi.js';
 import { aiOn } from '../lib/aiFeatures.js';
 import { AI_PRICES_KEY, PRICES_KEY, buildPriceIndex, estimatePrice, formatZl, knownProducts, needsAiPrice, readAiPrices, readPriceOverrides, writeAiPrices, writePriceOverride } from '../lib/shoppingPrices.js';
-import { RECEIPTS_KEY } from '../lib/receipts.js';
+import { DEPOSIT, RECEIPTS_KEY, isDepositDrink } from '../lib/receipts.js';
 import { PREFS_CHANGED_EVENT } from '../lib/budget.js';
 
 const SELECTED_KEY = 'fintrack-shopping-selected';
@@ -229,7 +229,12 @@ export default function ShoppingView() {
   const pricesAiOn = aiOn(state.settings, 'shoppingPrices');
   // Wyłączone w Ustawieniach → bez szacunków i dopasowań AI (zapamiętane wyniki zostają na później)
   const aiPrices = useMemo(() => (pricesAiOn ? readAiPrices() : {}), [priceVer, pricesAiOn]); // eslint-disable-line react-hooks/exhaustive-deps
-  const estimates = useMemo(() => Object.fromEntries(items.map((it) => [it.id, estimatePrice(it.title, it.quantity, priceIndex, overrides, aiPrices)])), [items, priceIndex, overrides, aiPrices]);
+  // Kaucja 0,50 zł za napój w butelce / puszce (to samo ustawienie co przy paragonach, domyślnie włączone)
+  const depositOn = state.settings.receiptDeposit !== false;
+  const estimates = useMemo(
+    () => Object.fromEntries(items.map((it) => [it.id, estimatePrice(it.title, it.quantity, priceIndex, overrides, aiPrices, depositOn && isDepositDrink({ name: it.title, category: categoryOf(it.title, aiCats).category }) ? DEPOSIT : 0)])),
+    [items, priceIndex, overrides, aiPrices, depositOn, aiCats],
+  );
   const priced = openItems.filter((it) => estimates[it.id]);
   const aiPriced = priced.filter((it) => estimates[it.id].source === 'ai').length;
   // AI fallback: produkty bez dopasowania w paragonach – dopasowanie semantyczne do nazw z paragonów albo szacunek
@@ -305,6 +310,7 @@ export default function ShoppingView() {
             : est?.last !== null && est?.last !== undefined
             ? `${est.semantic ? 'AI dopasowało do paragonów. ' : ''}Z paragonów: ostatnio ${formatZl(est.last)}${est.lastDate ? ` (${est.lastDate.split('-').reverse().join('.')})` : ''}${est.count > 1 ? `, średnio ${formatZl(est.avg)} (ostatnie ${Math.min(est.count, 3)} z ${est.count})` : ''}${est.lastName && est.lastName.toLowerCase() !== it.title.toLowerCase() ? ` · „${est.lastName}”` : ''}`
             : 'Brak tego produktu na zeskanowanych paragonach – wpisz cenę, zapamiętam ją.'}
+          {est?.deposit > 0 ? ` · w tym kaucja ${formatZl(est.deposit)}` : ''}
           {est?.source === 'user' ? ' · używasz swojej ceny' : ''}
           {est && est.factor > 1 ? ` · × ${est.factor} szt.` : ''}
         </p>

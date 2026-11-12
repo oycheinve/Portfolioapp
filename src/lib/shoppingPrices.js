@@ -37,7 +37,9 @@ export function buildPriceIndex(receipts = readReceipts()) {
       const price = Number(it.price);
       if (!it.name || !(price > 0)) continue;
       const q = Number(it.quantity);
-      const unit = q >= 1 && Number.isInteger(q) ? price / q : price;
+      const net = price - (Number(it.deposit) || 0); // cena bez kaucji (kaucja doliczana przy szacunku)
+      if (!(net > 0)) continue;
+      const unit = q >= 1 && Number.isInteger(q) ? net / q : net;
       out.push({ name: it.name, words: words(it.name), full: priceKey(it.name), unit: round2(unit), date });
     }
   }
@@ -123,7 +125,8 @@ export function needsAiPrice(title, index, overrides = readPriceOverrides(), ai 
 export const knownProducts = (index, limit = 400) => [...new Set(index.map((x) => x.name))].slice(0, limit);
 
 // Szacunek ceny produktu: { price, source: 'user' | 'receipts', last, lastDate, avg, count, factor, total }
-export function estimatePrice(title, quantity, index, overrides = readPriceOverrides(), ai = {}) {
+// deposit – kaucja za sztukę (napoje w butelce / puszce), doliczana do ceny z paragonów i z AI (nie do Twojej ceny)
+export function estimatePrice(title, quantity, index, overrides = readPriceOverrides(), ai = {}, deposit = 0) {
   const a = ai[priceKey(title)];
   let hits = matches(index, title);
   let semantic = false;
@@ -137,10 +140,12 @@ export function estimatePrice(title, quantity, index, overrides = readPriceOverr
   const ov = overrides[priceKey(title)];
   const useOverride = ov && (!last || String(ov.at) >= String(last.date));
   const aiPrice = !useOverride && avg === null && a?.price > 0 ? a.price : null;
-  const price = useOverride ? ov.price : avg ?? aiPrice;
-  if (price === null || price === undefined) return null;
+  const base = useOverride ? ov.price : avg ?? aiPrice;
+  if (base === null || base === undefined) return null;
+  const dep = useOverride ? 0 : Number(deposit) || 0;
+  const price = round2(base + dep);
   const factor = quantityFactor(quantity);
-  return { price, source: useOverride ? 'user' : aiPrice !== null ? 'ai' : 'receipts', semantic, aiUnit: aiPrice !== null ? a.unit || '' : '', last: last?.unit ?? null, lastDate: last?.date || '', lastName: last?.name || '', avg, count: hits.length, factor, total: round2(price * factor) };
+  return { price, source: useOverride ? 'user' : aiPrice !== null ? 'ai' : 'receipts', deposit: dep, semantic, aiUnit: aiPrice !== null ? a.unit || '' : '', last: last?.unit ?? null, lastDate: last?.date || '', lastName: last?.name || '', avg, count: hits.length, factor, total: round2(price * factor) };
 }
 
 export const formatZl = (v) => `${Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;

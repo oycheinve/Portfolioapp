@@ -123,6 +123,30 @@ export function applyMemory(receipt, mem = readCats()) {
   };
 }
 
+// ── Kaucja (system kaucyjny, od X 2025): 0,50 zł doliczane do każdego napoju w butelce / puszce ──
+// Napój = kategoria „Napoje” bez produktów suchych i kartonów (kawa, herbata, kakao, syropy, napoje w proszku,
+// soki / mleko w kartonie). Wiersze „KAUCJA” z paragonu są pomijane – zamiast nich kaucja trafia do napoju
+// (bez podwójnego liczenia); it.deposit = doliczona kwota (podgląd i pamięć cen bez kaucji).
+export const DEPOSIT = 0.5;
+const NOT_DEPOSIT = /kaw|herbat|kakao|syrop|w proszku|rozpuszcz|karton|tetra|saszet|kapsuł|kapsul|instant/i;
+export const isDepositName = (name) => /kaucj|opak(\.|owanie)? zwrotn/i.test(String(name || ''));
+export const isDepositDrink = (it) => it?.category === 'Napoje' && !NOT_DEPOSIT.test(String(it.name || '')) && !isDepositName(it.name);
+export const depositUnits = (q) => {
+  const n = Number(q);
+  return n >= 1 && Number.isInteger(n) ? Math.min(n, 99) : 1;
+};
+export function applyDeposits(receipt, on = true) {
+  if (!on || !receipt?.items?.length) return receipt;
+  const items = receipt.items
+    .filter((it) => !isDepositName(it.name))
+    .map((it) => {
+      if (!isDepositDrink(it) || it.deposit) return it;
+      const deposit = Math.round(DEPOSIT * depositUnits(it.quantity) * 100) / 100;
+      return { ...it, price: Math.round(((Number(it.price) || 0) + deposit) * 100) / 100, deposit };
+    });
+  return { ...receipt, items };
+}
+
 // ── Kategorie budżetu: pozycje trafiają WYŁĄCZNIE do kategorii zdefiniowanych przez użytkownika w Budżecie ──
 // Kolejność: pamięć produktu (poprawki użytkownika i wcześniejsze paragony) → wskazanie AI (enum z listy użytkownika)
 // → reguły słownikowe (kategoria sklepowa → nazwa kategorii budżetu) → kategoria jedzeniowa / „Nieprzewidziane”.

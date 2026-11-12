@@ -63,6 +63,14 @@ export default function ModulesCard() {
         />
         <div className="mt-4 border-t border-stone-100 pt-4 dark:border-white/5">
           <Toggle
+            checked={state.settings.receiptDeposit !== false}
+            onChange={(v) => actions.updateSettings({ receiptDeposit: v })}
+            label="Doliczaj kaucję 0,50 zł do napojów"
+            description={state.settings.receiptDeposit !== false ? 'Każdy napój w butelce lub puszce na paragonie (× liczba sztuk) i jego szacowana cena na liście zakupów zawiera kaucję; osobne wiersze „KAUCJA” z paragonu nie są liczone drugi raz.' : 'Wyłączone – kwoty bez kaucji.'}
+          />
+        </div>
+        <div className="mt-4 border-t border-stone-100 pt-4 dark:border-white/5">
+          <Toggle
             checked={state.settings.receiptSplit === true}
             onChange={(v) => actions.updateSettings({ receiptSplit: v })}
             label="Włącz opcję dzielenia pozycji z paragonu na pół (np. ze współlokatorem/partnerem)"

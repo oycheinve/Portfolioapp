@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Check, ChevronDown, Image as ImageIcon, Loader2, Pencil, Plus, Receipt, Split, Trash2, X } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
-import { applyMemory, assignBudgetRows, itemShare, cacheReceipt, cachedReceipt, compressImage, imageHash, learnBudget, learnFromReceipt, readReceipts, receiptParts, receiptRows, receiptTotals, writeReceipts } from '../../lib/receipts.js';
+import { applyDeposits, applyMemory, assignBudgetRows, itemShare, cacheReceipt, cachedReceipt, compressImage, imageHash, learnBudget, learnFromReceipt, readReceipts, receiptParts, receiptRows, receiptTotals, writeReceipts } from '../../lib/receipts.js';
 import { requestReceipt } from '../../lib/newsAi.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
 import { BetaBadge } from '../ui.jsx';
@@ -9,7 +9,7 @@ import { BetaBadge } from '../ui.jsx';
 const inputCls = 'h-9 min-w-0 rounded-lg border border-stone-200 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-white/10 dark:bg-neutral-800';
 const named = (rows) => rows.filter((r) => String(r.name || '').trim());
 const SOURCE_LABEL = { user: 'poprawione – zapamiętam', memory: 'z pamięci', ai: 'AI', rule: 'dopasowane' };
-const toStored = (rows) => (it) => ({ name: it.name, quantity: it.quantity, price: it.price, category: it.category, rowId: it.rowId, rowName: rows.find((r) => r.id === it.rowId)?.name || it.rowName || '', ...(it.half ? { half: true } : {}) });
+const toStored = (rows) => (it) => ({ name: it.name, quantity: it.quantity, price: it.price, category: it.category, rowId: it.rowId, rowName: rows.find((r) => r.id === it.rowId)?.name || it.rowName || '', ...(it.half ? { half: true } : {}), ...(it.deposit ? { deposit: it.deposit } : {}) });
 
 // Skanowanie paragonu → (weryfikacja) → wydatki w budżecie + historia. rows – kategorie budżetu miesiąca; każda
 // pozycja trafia wyłącznie do jednej z nich (bez nowych podgrup). onSave(receipt, parts) – parts: [{ id, amount }].
@@ -58,7 +58,8 @@ export function ReceiptScanner({ rows, onSave, month }) {
       }
       if (!receipt?.items?.length) throw new Error('Nie rozpoznano pozycji – zrób wyraźniejsze zdjęcie całego paragonu');
       // Krok 2: kategorie budżetu użytkownika – pamięć (poprawki) → AI → reguły; nic spoza jego listy
-      const ready = assignBudgetRows({ ...applyMemory(receipt), id: `rc${hash.slice(0, 12)}`, date: receipt.date || todayISO() }, rows);
+      // Kaucja 0,50 zł do napojów (Ustawienia → paragony, domyślnie włączone) – po kategoriach z pamięci / AI
+      const ready = assignBudgetRows(applyDeposits({ ...applyMemory(receipt), id: `rc${hash.slice(0, 12)}`, date: receipt.date || todayISO() }, state.settings.receiptDeposit !== false), rows);
       if (review) setDraft(ready);
       else persist(ready, { auto: true });
     } catch (err) {
@@ -320,6 +321,7 @@ export function ReceiptReview({ receipt, rows, onCancel, onSave, title = 'Weryfi
                     <span className="min-w-0 break-words uppercase">
                       {it.name}
                       {Number(it.quantity) > 0 && Number(it.quantity) !== 1 && <span className="text-neutral-500"> {String(it.quantity).replace('.', ',')}×</span>}
+                      {it.deposit > 0 && <span className="block text-[11px] text-neutral-500 normal-case">w tym kaucja {money(it.deposit)} zł</span>}
                     </span>
                     {it.half ? (
                       <span className="shrink-0 text-right tabular">
