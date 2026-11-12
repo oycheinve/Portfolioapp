@@ -609,10 +609,6 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - **Zysk / strata miesięczna** (na dole „Na co dzień”): suma kwot wydanych w kategoriach inwestycyjnych (typ „Inwestycje” albo nazwa: inwestycje, S&P 500, ETF, IKE / IKZE, akcje, obligacje) minus wydatki „Z oszczędności” w miesiącu; na plusie – „Zysk miesięczny” (zielony), na minusie – „Strata miesięczna” (czerwony), z rozbiciem składników.
 - Zgodność: kategorie budżetu powiązane wcześniej z kontem (`row.savings`) działają dalej (poza RAZEM, z operacją na koncie) i można je odłączyć w trybie „Edytuj”.
 
-### Budżet 2 (BETA)
-
-- Rozwijana lista „Rodzaj budżetu” → **Budżet 2 (BETA)** (wybór zapamiętany jak dotąd, `wealth-app-budget-mode = monthly2`; powrót – „Budżet Miesięczny”). Te same dane i logika co budżet miesięczny (`src/components/budget/BudgetV2.jsx` dostaje je z `MonthlyBudget`): duża karta „Zostało do wydania w [miesiącu]” (plan − wydane bez „Z oszczędności”), „To ok. X zł dziennie do końca miesiąca”, pasek wydatków podzielony na kategorie; kafelki „Ile zostało w kategoriach” (ikona dobrana z nazwy, pasek, „zostało z X zł” / przekroczenie); „Nowy wydatek” – duże cyfry, przyciski kategorii (także „Z oszczędności”, gdy włączona), notatka, „Zapisz wydatek”. Skan paragonu, ostatnie wpisy z cofaniem, historia paragonów i podsumowanie AI minionego miesiąca – jak w klasycznym widoku; „Edytuj” otwiera klasyczną tabelę edycji.
-
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.
