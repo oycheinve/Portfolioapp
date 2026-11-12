@@ -4,10 +4,13 @@ import { DAILY_KEY, LOG_LIMIT, budgetTotals, isTransferRow, readBudgetLog, write
 import TripsBudget from '../components/budget/TripsBudget.jsx';
 import { ReceiptScanner, ReceiptsHistory } from '../components/budget/Receipts.jsx';
 import MonthSummary from '../components/budget/MonthSummary.jsx';
+import BudgetV2 from '../components/budget/BudgetV2.jsx';
 import { useApp } from '../state/AppContext.jsx';
 import { aiOn } from '../lib/aiFeatures.js';
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
+// Miejscownik nazw miesięcy („w listopadzie”) – nagłówek Budżetu 2
+const MONTHS_LOC = ['styczniu', 'lutym', 'marcu', 'kwietniu', 'maju', 'czerwcu', 'lipcu', 'sierpniu', 'wrześniu', 'październiku', 'listopadzie', 'grudniu'];
 const monthName = (key) => {
   const [y, m] = key.split('-').map(Number);
   return `${MONTHS[m - 1]} ${y}`;
@@ -35,7 +38,8 @@ const MODE_KEY = 'wealth-app-budget-mode';
 const OLD_MODE_KEY = 'fintrack-budget-mode';
 const readMode = () => {
   try {
-    return (localStorage.getItem(MODE_KEY) ?? localStorage.getItem(OLD_MODE_KEY)) === 'trips' ? 'trips' : 'monthly';
+    const v = localStorage.getItem(MODE_KEY) ?? localStorage.getItem(OLD_MODE_KEY);
+    return v === 'trips' || v === 'monthly2' ? v : 'monthly';
   } catch {
     return 'monthly';
   }
@@ -62,6 +66,7 @@ export default function BudgetView() {
           <Icon size={16} className="pointer-events-none shrink-0" />
           <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Rodzaj budżetu" className="h-full cursor-pointer appearance-none bg-transparent pr-6 pl-2 text-sm font-semibold outline-none [&>option]:text-neutral-900">
             <option value="monthly">Budżet Miesięczny</option>
+            <option value="monthly2">Budżet 2 (BETA)</option>
             <option value="trips">Budżet Wakacyjny (BETA)</option>
           </select>
           <ChevronDown size={16} className="pointer-events-none absolute right-3 shrink-0" />
@@ -72,7 +77,7 @@ export default function BudgetView() {
           <TripsBudget />
         </section>
       ) : (
-        <MonthlyBudget />
+        <MonthlyBudget variant={mode === 'monthly2' ? 'v2' : 'classic'} />
       )}
     </div>
   );
@@ -91,7 +96,7 @@ const readSavingsAcc = () => {
   }
 };
 
-function MonthlyBudget() {
+function MonthlyBudget({ variant = 'classic' }) {
   const { state: app, actions: appActions } = useApp(); // Ustawienia → Funkcje AI; konta oszczędnościowe (transfery)
   const savingsAccounts = useMemo(() => app.accounts.filter((a) => a.type === 'SAVINGS'), [app.accounts]);
   const accountName = (id) => app.accounts.find((a) => a.id === id)?.name || 'konto oszczędnościowe';
@@ -236,6 +241,46 @@ function MonthlyBudget() {
   const purchaseRows = savingsAcc ? [...rows, { id: SAVINGS_ID, name: SAVINGS_NAME }] : rows;
   const showSavingsRow = !!savingsAcc && !editing;
 
+  const onReceiptSave = (receipt, parts) => {
+    const res = addPurchase(parts, null, `Paragon${receipt.shop ? `: ${receipt.shop}` : ''}${receipt.halved > 0 ? ' (½ – podział 50/50)' : ''}`);
+    setReceiptsVer((v) => v + 1);
+    return res;
+  };
+
+  // Budżet 2 (BETA): ta sama logika i dane, lżejszy widok (tryb „Edytuj” – klasyczna tabela)
+  if (variant === 'v2' && !editing) {
+    const day = dailyAllowance(null, month);
+    const showSummary = month < monthKey() && saved?.length > 0 && aiOn(app.settings, 'budgetSummary');
+    return (
+      <BudgetV2
+        month={month}
+        monthLabel={monthName(month)}
+        monthShort={MONTHS_LOC[Number(month.slice(5, 7)) - 1]}
+        onPrev={() => setMonth(shiftMonth(month, -1))}
+        onNext={() => setMonth(shiftMonth(month, 1))}
+        onPickMonth={setMonth}
+        rows={rows}
+        totals={totals}
+        daysLeft={day.daysLeft}
+        past={day.past}
+        savingsAcc={savingsAcc}
+        savingsSpent={savingsSpent}
+        savingsId={SAVINGS_ID}
+        purchaseRows={purchaseRows}
+        onAdd={addPurchase}
+        onEdit={startEdit}
+        isTemplate={isTemplate}
+        prevLabel={prevKey ? monthName(prevKey) : ''}
+        onCopyPrev={applyPrevPlan}
+        receiptScanner={rows.length > 0 && aiOn(app.settings, 'receipts') ? <ReceiptScanner rows={rows} month={month} onSave={onReceiptSave} /> : null}
+        monthSummary={showSummary ? <MonthSummary key={month} month={month} label={monthName(month)} /> : null}
+        receiptsHistory={<ReceiptsHistory key={receiptsVer} rows={rows} month={month} onAdjust={adjustSpent} />}
+        recentEntries={<RecentEntries entries={entries} rows={rows} onUndo={undoPurchase} />}
+        footerNote={isTemplate ? 'Przykładowe kategorie – zmień je w „Edytuj”' : ''}
+      />
+    );
+  }
+
   const navBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent dark:text-stone-400 dark:hover:bg-white/5';
   const linkBtn = 'inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5';
 
@@ -289,11 +334,7 @@ function MonthlyBudget() {
             <ReceiptScanner
               rows={rows}
               month={month}
-              onSave={(receipt, parts) => {
-                const res = addPurchase(parts, null, `Paragon${receipt.shop ? `: ${receipt.shop}` : ''}${receipt.halved > 0 ? ' (½ – podział 50/50)' : ''}`);
-                setReceiptsVer((v) => v + 1);
-                return res;
-              }}
+              onSave={onReceiptSave}
             />
           )}
         </div>
