@@ -232,6 +232,7 @@ function MonthlyBudget() {
 
   const savingsSpent = Math.round(entries.filter((e) => e.rowId === SAVINGS_ID).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) * 100) / 100;
   const purchaseRows = savingsAcc ? [...rows, { id: SAVINGS_ID, name: SAVINGS_NAME }] : rows;
+  const showSavingsRow = !!savingsAcc && !editing;
 
   const navBtn = 'inline-flex h-8 w-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent dark:text-stone-400 dark:hover:bg-white/5';
   const linkBtn = 'inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/5';
@@ -321,10 +322,30 @@ function MonthlyBudget() {
             </tr>
           </thead>
           <tbody className="tabular">
+            {/* Pierwszy wiersz: „Z oszczędności” – suma wydatków z konta oszczędnościowego w miesiącu; osobny byt, poza RAZEM */}
+            {showSavingsRow && (
+              <tr className="border-b border-stone-200 dark:border-white/10" aria-label="Z oszczędności">
+                <td className="px-2 py-1 leading-snug break-words sm:py-1.5">
+                  Z oszczędności
+                  {savingsAccounts.length > 1 && (
+                    <select value={savingsAcc.id} onChange={(e) => chooseSavingsAcc(e.target.value)} aria-label="Konto dla wydatków z oszczędności" className="mt-0.5 block h-6 w-full min-w-0 rounded border border-stone-200 bg-transparent px-1 text-[10px] text-stone-500 dark:border-white/10 dark:text-stone-400">
+                      {savingsAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </td>
+                <td className="border-l border-stone-200 px-2 py-1 text-right text-stone-400 sm:py-1.5 dark:border-white/10">—</td>
+                <td className="border-l border-stone-200 px-2 py-1 text-right whitespace-nowrap sm:py-1.5 dark:border-white/10">{zl(savingsSpent)}</td>
+                <td className="border-l border-stone-200 px-2 py-1 text-right text-stone-400 sm:py-1.5 dark:border-white/10">—</td>
+              </tr>
+            )}
             {shown.map((r, i) => {
               const left = rowLeft(r);
               return (
-                <tr key={r.id} className={`border-b border-stone-200 dark:border-white/10 ${i % 2 ? 'bg-stone-50 dark:bg-white/[0.03]' : ''}`}>
+                <tr key={r.id} className={`border-b border-stone-200 dark:border-white/10 ${(i + (showSavingsRow ? 1 : 0)) % 2 ? 'bg-stone-50 dark:bg-white/[0.03]' : ''}`}>
                   {editing ? (
                     <>
                       <td className="px-0.5 py-0.5">
@@ -403,26 +424,6 @@ function MonthlyBudget() {
               <td className={`px-2 py-1.5 text-right whitespace-nowrap ${totals.left < -0.004 ? 'text-red-600 dark:text-red-400' : ''}`}>{zl(totals.left)}</td>
               {editing && <td />}
             </tr>
-            {/* Osobny byt: wydatki z oszczędności – suma kwot wydanych w miesiącu, poza RAZEM (odejmowane z konta) */}
-            {savingsAcc && !editing && (
-              <tr className="border-t-4 border-white bg-white font-normal text-stone-800 dark:border-neutral-900 dark:bg-neutral-900 dark:text-stone-200" aria-label="Z oszczędności">
-                <td className="border border-stone-200 px-2 py-1 leading-snug sm:py-1.5 dark:border-white/10">
-                  Z oszczędności
-                  {savingsAccounts.length > 1 && (
-                    <select value={savingsAcc.id} onChange={(e) => chooseSavingsAcc(e.target.value)} aria-label="Konto dla wydatków z oszczędności" className="mt-0.5 block h-6 w-full min-w-0 rounded border border-stone-200 bg-transparent px-1 text-[10px] text-stone-500 dark:border-white/10 dark:text-stone-400">
-                      {savingsAccounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </td>
-                <td className="border border-stone-200 px-2 py-1 text-right text-stone-400 sm:py-1.5 dark:border-white/10">—</td>
-                <td className="border border-stone-200 px-2 py-1 text-right whitespace-nowrap sm:py-1.5 dark:border-white/10">{zl(savingsSpent)}</td>
-                <td className="border border-stone-200 px-2 py-1 text-right text-stone-400 sm:py-1.5 dark:border-white/10">—</td>
-              </tr>
-            )}
           </tfoot>
         </table>
       </div>
