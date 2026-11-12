@@ -43,8 +43,8 @@ const VIEWS = {
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc
 // Dawna zakładka Statystyki – podsumowania są teraz w Wykresach
-// Dawny panel #/notifications – teraz w Ustawieniach (System i Konto → Powiadomienia)
-// Rejestr wpłat i wypłat – teraz w Ustawieniach (Portfel i Aktywa)
+// Dawny panel #/notifications – teraz w Ustawieniach (Powiadomienia i AI → Powiadomienia)
+// Rejestr wpłat i wypłat – teraz w Ustawieniach (Majątek i konta)
 // Cash Flow Forecast – teraz sekcja Dywidend; FIRE – ukryty (adres prowadzi na Pulpit)
 const ALIASES = { cash: 'settings/cash', notifications: 'settings/notifications', stats: 'charts', stress: 'simulations/stress', quotes: 'charts/quotes', cashflow: 'dividends/cashflow', fire: 'dashboard' };
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, FileText, Filter, Landmark, LayoutGrid, LineChart, Palette, Pencil, Plus, Radio, Scale, Sparkles, Target, Trash2, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, FileText, Filter, Landmark, Layers, LayoutGrid, LineChart, Palette, Pencil, PiggyBank, Plus, Radio, ScanLine, Scale, Sparkles, Target, Trash2, Wallet } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
@@ -12,7 +12,7 @@ import NotificationsView from './NotificationsView.jsx';
 import FireGoalsCard from '../components/settings/FireGoalsCard.jsx';
 import DividendSyncCard from '../components/dividends/DividendSyncCard.jsx';
 import AppearanceCard from '../components/settings/AppearanceCard.jsx';
-import ModulesCard from '../components/settings/ModulesCard.jsx';
+import { BudgetOptionsCard, ListsGroupingCard, ModulesVisibilityCard, ReceiptsOptionsCard } from '../components/settings/ModulesCard.jsx';
 import InflationCard from '../components/settings/InflationCard.jsx';
 import CashRegister from './CashRegister.jsx';
 import AltPurchasesCard from '../components/alternatives/AltPurchasesCard.jsx';
@@ -22,7 +22,7 @@ import NewsFilterCard from '../components/settings/NewsFilterCard.jsx';
 import CompanyProfilesCard from '../components/settings/CompanyProfilesCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
 
-// Konta i ustawienia: trzy kategorie (akordeon – otwarta najwyżej jedna), w środku płaskie kafelki podkategorii.
+// Konta i ustawienia: pięć kategorii (akordeon – otwarta najwyżej jedna), w środku podkategorie z kafelkami sekcji.
 // Kafelek otwiera osobny widok sekcji (#/settings/<id>) z przyciskiem powrotu; dawne #/settings/fire
 // i #/settings/notifications (także #/notifications) prowadzą wprost do sekcji.
 const SECTIONS = {
@@ -42,7 +42,10 @@ const SECTIONS = {
   'other-assets': { title: 'Nieruchomości i inne aktywa', hint: 'Wliczane do Majątku Całkowitego', icon: Building2, render: () => <OtherAssetsSection /> },
   limits: { title: 'Limity wpłat IKE / IKZE', hint: 'Roczne limity i wykorzystanie', icon: CalendarClock, render: () => <LimitsCard /> },
   ai: { title: 'Funkcje AI', hint: 'Włączanie i wyłączanie poszczególnych funkcji AI', icon: Sparkles, render: () => <AiFeaturesCard /> },
-  modules: { title: 'Moduły i widok', hint: 'Widoczność modułów, kategoria „Z oszczędności”, paragony', icon: LayoutGrid, render: () => <ModulesCard /> },
+  modules: { title: 'Widoczne moduły', hint: 'Które zakładki są w menu', icon: LayoutGrid, render: () => <ModulesVisibilityCard /> },
+  'budget-options': { title: 'Budżet', hint: 'Kategoria „Z oszczędności”', icon: PiggyBank, render: () => <BudgetOptionsCard /> },
+  receipts: { title: 'Paragony', hint: 'Podgląd przed zapisem, kaucja za napoje, podział 50/50', icon: ScanLine, render: () => <ReceiptsOptionsCard /> },
+  lists: { title: 'Zakupy i Zadania', hint: 'Grupowanie według kategorii', icon: Layers, render: () => <ListsGroupingCard /> },
   appearance: { title: 'Wygląd', hint: 'Motyw: jasny, ciemny, różowy lub systemowy', icon: Palette, render: () => <AppearanceCard /> },
   'dividend-sync': { title: 'Dane dywidend', hint: 'Automatyczne daty i kwoty z Yahoo / historii wypłat', icon: CloudDownload, render: () => <DividendSyncCard /> },
   'company-profiles': { title: 'Profile spółek', hint: 'Opis, profil i notatki – kontekst dla Analityka wyników', icon: FileText, render: () => <CompanyProfilesCard /> },
@@ -55,11 +58,57 @@ const SECTIONS = {
   inflation: { title: 'Inflacja CPI (GUS)', hint: 'Odczyty miesięczne, korekty, benchmark', icon: LineChart, render: () => <InflationCard /> },
   backup: { title: 'Kopia zapasowa danych', hint: 'Eksport i wczytanie pliku JSON', icon: Database, render: () => <BackupCard /> },
 };
+// Kategorie z podkategoriami (sections: [{ label, items }]) – od najczęściej używanych
 const GROUPS = [
-  { id: 'assets', emoji: '💼', title: 'Portfel i Aktywa', subtitle: 'Konta · wpłaty i wypłaty · nieruchomości · limity · IKE - Julka', items: ['accounts', 'cash', 'other-assets', 'limits', 'julka'] },
-  { id: 'strategy', emoji: '📈', title: 'Strategie, Cele i Giełda', subtitle: 'Cele FIRE · podatki · notowania · dane dywidend · profile spółek · filtr newsów', items: ['fire', 'tax', 'prices', 'dividend-sync', 'company-profiles', 'news-filter'] },
-  { id: 'system', emoji: '⚙️', title: 'System i Konto', subtitle: 'Motyw · moduły · funkcje AI · konto i chmura · powiadomienia · inflacja · kopia zapasowa', items: ['appearance', 'modules', 'ai', 'cloud', 'notifications', 'inflation', 'backup'] },
+  {
+    id: 'assets',
+    emoji: '💼',
+    title: 'Majątek i konta',
+    subtitle: 'Konta, wpłaty, limity IKE / IKZE, inne aktywa',
+    sections: [
+      { label: 'Konta', items: ['accounts', 'cash', 'limits'] },
+      { label: 'Inne aktywa', items: ['other-assets', 'julka'] },
+    ],
+  },
+  {
+    id: 'budget',
+    emoji: '🧾',
+    title: 'Budżet i zakupy',
+    subtitle: 'Budżet, paragony, listy zakupów i zadań',
+    sections: [{ label: 'Opcje', items: ['budget-options', 'receipts', 'lists'] }],
+  },
+  {
+    id: 'invest',
+    emoji: '📈',
+    title: 'Inwestowanie',
+    subtitle: 'Cele FIRE, podatki, notowania, dywidendy, spółki, newsy',
+    sections: [
+      { label: 'Cele i podatki', items: ['fire', 'tax'] },
+      { label: 'Dane rynkowe', items: ['prices', 'dividend-sync', 'inflation'] },
+      { label: 'Spółki i wiadomości', items: ['company-profiles', 'news-filter'] },
+    ],
+  },
+  {
+    id: 'smart',
+    emoji: '🔔',
+    title: 'Powiadomienia i AI',
+    subtitle: 'Powiadomienia w telefonie, funkcje AI',
+    sections: [{ label: '', items: ['notifications', 'ai'] }],
+  },
+  {
+    id: 'app',
+    emoji: '⚙️',
+    title: 'Aplikacja i dane',
+    subtitle: 'Wygląd, moduły w menu, konto w chmurze, kopia zapasowa',
+    sections: [
+      { label: 'Wygląd', items: ['appearance', 'modules'] },
+      { label: 'Konto i dane', items: ['cloud', 'backup'] },
+    ],
+  },
 ];
+GROUPS.forEach((g) => {
+  g.items = g.sections.flatMap((x) => x.items);
+});
 const groupOf = (sectionId) => GROUPS.find((g) => g.items.includes(sectionId))?.id || null;
 // Kategoria otwarta przy powrocie z sekcji (do końca sesji karty)
 let lastOpenGroup = null;
@@ -90,7 +139,10 @@ function SettingsHome({ onOpen }) {
     <div className="space-y-3">
       {GROUPS.map((g) => (
         <SettingsGroup key={g.id} group={g} open={open === g.id} onToggle={() => setOpen((o) => (o === g.id ? null : g.id))}>
-          {g.items.map((id) => {
+          {g.sections.map((sec) => (
+            <div key={sec.label || g.id}>
+              {sec.label && g.sections.length > 1 && <div className="px-3 pt-2 pb-0.5 text-[11px] font-semibold tracking-wide text-stone-400 uppercase dark:text-stone-500">{sec.label}</div>}
+          {sec.items.map((id) => {
             const it = SECTIONS[id];
             const Icon = it.icon;
             return (
@@ -111,6 +163,8 @@ function SettingsHome({ onOpen }) {
               </button>
             );
           })}
+            </div>
+          ))}
         </SettingsGroup>
       ))}
     </div>

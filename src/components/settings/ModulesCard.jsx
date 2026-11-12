@@ -4,15 +4,28 @@ import { TOGGLEABLE_MODULES, navLabel } from '../Layout.jsx';
 import { BetaBadge, Card, Toggle } from '../ui.jsx';
 
 // Personalizacja: widoczność modułów w menu (zapis w ustawieniach użytkownika – Supabase przez user_id i localStorage)
-// oraz tryb weryfikacji paragonów (podgląd i potwierdzenie albo zapis automatyczny w tle)
+// oraz tryb weryfikacji paragonów (podgląd i potwierdzenie albo zapis automatyczny w tle)// Ustawienia (podział na sekcje): widoczność modułów · porządkowanie list · budżet · paragony. Domyślny eksport
+// (dawna sekcja „Moduły i widok”) – wszystkie karty razem; w Ustawieniach każda karta to osobna sekcja.
 export default function ModulesCard() {
+  return (
+    <div className="space-y-4">
+      <ModulesVisibilityCard />
+      <ListsGroupingCard />
+      <BudgetOptionsCard />
+      <ReceiptsOptionsCard />
+    </div>
+  );
+}
+
+// Widoczne moduły w menu
+export function ModulesVisibilityCard() {
   const { state, actions } = useApp();
   const modules = state.settings.modules || {};
   const setModule = (id, on) => actions.updateSettings({ modules: { ...modules, [id]: on } });
   const receiptReview = state.settings.receiptReview !== false;
   const hidden = TOGGLEABLE_MODULES.filter((n) => modules[n.id] === false).length;
   return (
-    <div className="space-y-4">
+    <>
       <Card title="Widoczne moduły" subtitle={hidden ? `Ukryte: ${hidden} – nadal dostępne z adresu, dane nie są usuwane` : 'Wszystkie moduły widoczne w menu'} icon={LayoutGrid}>
         <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Widoczność modułów">
           {TOGGLEABLE_MODULES.map((n) => {
@@ -34,6 +47,19 @@ export default function ModulesCard() {
         </div>
         <p className="mt-3 text-[11px] text-stone-500 dark:text-stone-400">Pulpit i Ustawienia są zawsze widoczne. Ukrycie modułu nie usuwa jego danych – po ponownym włączeniu wszystko wraca.</p>
       </Card>
+    </>
+  );
+}
+
+// Zakupy i Zadania – grupowanie według kategorii
+export function ListsGroupingCard() {
+  const { state, actions } = useApp();
+  const modules = state.settings.modules || {};
+  const setModule = (id, on) => actions.updateSettings({ modules: { ...modules, [id]: on } });
+  const receiptReview = state.settings.receiptReview !== false;
+  const hidden = TOGGLEABLE_MODULES.filter((n) => modules[n.id] === false).length;
+  return (
+    <>
       <Card title="Porządkowanie list" subtitle="Zakupy i Zadania" icon={Layers}>
         <Toggle
           checked={state.settings.groupByCategory !== false}
@@ -42,6 +68,19 @@ export default function ModulesCard() {
           description={state.settings.groupByCategory !== false ? 'Produkty w Zakupach i zadania w Zadaniach są dzielone na sekcje kategorii; nowe pozycje rozpoznaje pamięć i AI.' : 'Wyłączone – zwykłe listy bez sekcji (kategorie i pamięć zostają zapisane).'}
         />
       </Card>
+    </>
+  );
+}
+
+// Budżet – dodatkowe kategorie (Z oszczędności)
+export function BudgetOptionsCard() {
+  const { state, actions } = useApp();
+  const modules = state.settings.modules || {};
+  const setModule = (id, on) => actions.updateSettings({ modules: { ...modules, [id]: on } });
+  const receiptReview = state.settings.receiptReview !== false;
+  const hidden = TOGGLEABLE_MODULES.filter((n) => modules[n.id] === false).length;
+  return (
+    <>
       <Card title="Budżet miesięczny" subtitle="Dodatkowe kategorie" icon={PiggyBank}>
         <Toggle
           checked={state.settings.budgetSavingsCategory === true}
@@ -54,6 +93,19 @@ export default function ModulesCard() {
           }
         />
       </Card>
+    </>
+  );
+}
+
+// Paragony – podgląd, kaucja, podział 50/50
+export function ReceiptsOptionsCard() {
+  const { state, actions } = useApp();
+  const modules = state.settings.modules || {};
+  const setModule = (id, on) => actions.updateSettings({ modules: { ...modules, [id]: on } });
+  const receiptReview = state.settings.receiptReview !== false;
+  const hidden = TOGGLEABLE_MODULES.filter((n) => modules[n.id] === false).length;
+  return (
+    <>
       <Card title={<>Skanowanie paragonów<BetaBadge /></>} subtitle="Podgląd przed zapisem" icon={ScanLine}>
         <Toggle
           checked={receiptReview}
@@ -82,6 +134,6 @@ export default function ModulesCard() {
           />
         </div>
       </Card>
-    </div>
+    </>
   );
 }

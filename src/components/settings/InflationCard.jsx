@@ -10,7 +10,7 @@ import { CpiCard } from '../bonds/SavingsSection.jsx';
 const pct = (v) => (Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%` : '—');
 const monthName = (key) => new Date(`${key}-01T12:00:00`).toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' });
 
-// Ustawienia → System i Konto → Inflacja CPI (GUS): stan danych z bazy inflation_rates, synchronizacja na żądanie
+// Ustawienia → Inwestowanie → Inflacja CPI (GUS): stan danych z bazy inflation_rates, synchronizacja na żądanie
 // (ta sama funkcja co harmonogram) i ręczne korekty odczytów
 export default function InflationCard() {
   const { state, actions } = useApp();

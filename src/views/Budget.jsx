@@ -97,7 +97,7 @@ function MonthlyBudget() {
   const savingsAccounts = useMemo(() => app.accounts.filter((a) => a.type === 'SAVINGS'), [app.accounts]);
   const accountName = (id) => app.accounts.find((a) => a.id === id)?.name || 'konto oszczędnościowe';
   const [savingsAccPref, setSavingsAccPref] = useState(readSavingsAcc);
-  // Kategoria „Z oszczędności” – do włączenia w Ustawieniach → Moduły i widok (domyślnie wyłączona)
+  // Kategoria „Z oszczędności” – do włączenia w Ustawieniach → Budżet i zakupy → Budżet (domyślnie wyłączona)
   const savingsCategoryOn = app.settings.budgetSavingsCategory === true;
   const savingsAcc = savingsCategoryOn ? savingsAccounts.find((a) => a.id === savingsAccPref) || savingsAccounts[0] || null : null;
   const chooseSavingsAcc = (id) => {

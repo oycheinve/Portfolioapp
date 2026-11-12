@@ -96,7 +96,7 @@ function CloudStatus({ onNavigate }) {
 
 export function Layout({ view, onNavigate, children }) {
   const { state, actions, refreshing, cloud } = useApp();
-  // Moduły wyłączone w Ustawieniach → Moduły i widok – znikają z menu (Pulpit i Ustawienia zawsze widoczne)
+  // Moduły wyłączone w Ustawieniach → Aplikacja i dane → Widoczne moduły – znikają z menu (Pulpit i Ustawienia zawsze widoczne)
   const moduleOn = (n) => !isModuleHidden(state.settings, n.id);
   useNotificationScheduler(state, cloud?.enabled ? cloud.user?.id : null);
   // IKE - Julka (konto odizolowane): zaległe automatyczne zakupy miesięczne – po cichu, chwilę po starcie

@@ -632,6 +632,11 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - Karta na dole zakładki Portfel, nad Analitykiem wyników (`src/components/dashboard/WeeklyReviewCard.jsx`, `src/lib/weeklyReview.js`, tryb `weekly-review`): dane z aplikacji za ostatnie 7 dni – wynik portfela inwestycyjnego (zysk w zł i %, wpłaty, wartość), największe ruchy spółek / ETF-ów (cena dziś vs 7 dni temu × ilość), dywidendy z tygodnia, kamienie milowe i nagłówki newsów o spółkach (podmiot jak w Newsach, bez „Analiz ogólnych” i szumu z filtra) → AI: nagłówek, „Co napędziło wynik”, „Na co uważać”, zdanie o najbliższym kamieniu milowym (bez rekomendacji).
 - Automatycznie w niedzielę albo poniedziałek przy otwarciu aplikacji (raz na tydzień, próba raz dziennie) + powiadomienie; „Wygeneruj teraz / Odśwież” – ręcznie za ostatnie 7 dni. Zapis per użytkownik (`wealth-app-weekly-review-v1`, 12 tygodni). Ustawienia → Funkcje AI → „Tygodniowy przegląd portfela”. ~1 zapytanie AI na tydzień.
 
+### Ustawienia – nowy układ
+
+- Pięć kategorii (akordeon, otwarta jedna) z podkategoriami: 💼 **Majątek i konta** (Konta: konta, rejestr wpłat i wypłat, limity IKE / IKZE · Inne aktywa: nieruchomości, IKE - Julka), 🧾 **Budżet i zakupy** (Budżet – „Z oszczędności”, Paragony – podgląd, kaucja, 50/50, Zakupy i Zadania – grupowanie), 📈 **Inwestowanie** (Cele i podatki · Dane rynkowe: notowania, dywidendy, inflacja · Spółki i wiadomości: profile spółek, filtr newsów), 🔔 **Powiadomienia i AI**, ⚙️ **Aplikacja i dane** (Wygląd: motyw, widoczne moduły · Konto i dane: chmura, kopia zapasowa).
+- Dawna sekcja „Moduły i widok” rozdzielona na osobne sekcje (`#/settings/modules`, `budget-options`, `receipts`, `lists`); adresy sekcji bez zmian.
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.
