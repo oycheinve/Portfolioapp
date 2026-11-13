@@ -471,7 +471,7 @@ function MonthlyBudget() {
             <ReceiptsHistory key={receiptsVer} rows={rows} month={month} onAdjust={adjustSpent} />
           </div>
           <RecentEntries entries={entries} rows={rows} onUndo={undoPurchase} />
-          <DailyTile rows={rows} month={month} savingsSpent={savingsSpent} />
+          <DailyTile rows={rows} month={month} savingsSpent={savingsSpent} entries={entries} />
           <p className="mt-2 text-right text-[11px] text-stone-400">
             {isTemplate ? 'Przykładowe kategorie – zmień je w trybie „Edytuj”' : 'Zapis w tej przeglądarce i kopii zapasowej'}
           </p>
@@ -718,7 +718,7 @@ const plDays = (n) => (n === 1 ? 'dzień' : 'dni');
 const INVEST_RE = /inwest|s\s*&\s*p|sp\s?500|\betf|\bik(e|ze)\b|akcj|obligac/i;
 const isInvestRow = (r) => !isTransferRow(r) && (r.type === 'Inwestycje' || INVEST_RE.test(String(r.name || '')));
 
-function DailyTile({ rows, month, savingsSpent = 0 }) {
+function DailyTile({ rows, month, savingsSpent = 0, entries = [] }) {
   const named = rows.filter((r) => String(r.name || '').trim());
   const [pick, setPickState] = useState(() => {
     try {
@@ -737,6 +737,13 @@ function DailyTile({ rows, month, savingsSpent = 0 }) {
   };
   const row = named.find((r) => r.name === pick) || defaultFoodRow(rows);
   const pace = spendingPace(row, month);
+  // Wydane dzisiaj (bieżący miesiąc): wpisy z „Dodaj zakup” i paragonów z dzisiejszą datą – bez „Z oszczędności”
+  // i kategorii-transferów; osobno kwota w wybranej kategorii
+  const todayLocal = new Date().toLocaleDateString('sv');
+  const transferIds = new Set(rows.filter(isTransferRow).map((r) => r.id));
+  const todayEntries = month === monthKey() ? entries.filter((e) => e && e.rowId !== '__savings' && !transferIds.has(e.rowId) && e.at && new Date(e.at).toLocaleDateString('sv') === todayLocal) : [];
+  const todayTotal = Math.round(todayEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0) * 100) / 100;
+  const todayRow = row ? Math.round(todayEntries.filter((e) => e.rowId === row.id).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) * 100) / 100 : 0;
   const investRows = named.filter(isInvestRow);
   const result = Math.round((investRows.reduce((sum, r) => sum + toNum(r.spent), 0) - savingsSpent) * 100) / 100;
   if (!row) return null;
@@ -775,6 +782,13 @@ function DailyTile({ rows, month, savingsSpent = 0 }) {
         <p className="text-sm leading-relaxed">
           Do końca miesiąca {d.daysLeft === 1 ? 'pozostał' : 'pozostało'} <strong>{d.daysLeft} {plDays(d.daysLeft)}</strong>. Na „{row.name}” możesz wydawać średnio{' '}
           <strong className="text-lg text-[#1f3864] tabular dark:text-blue-300">{zl(d.perDay)}</strong> dziennie.
+        </p>
+      )}
+      {month === monthKey() && (
+        <p className="mt-1.5 text-sm tabular" aria-label="Wydane dzisiaj">
+          Dzisiaj wydano: <strong>{zl(todayTotal)}</strong>
+          {todayTotal > 0 && todayRow !== todayTotal && <span className="text-xs text-stone-500 dark:text-stone-400"> (w tym „{row.name}” {zl(todayRow)})</span>}
+          {todayTotal === 0 && <span className="text-xs text-stone-400"> – brak wpisów</span>}
         </p>
       )}
       <p className="mt-1 text-[11px] text-stone-500 tabular dark:text-stone-400">

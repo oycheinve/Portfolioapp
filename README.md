@@ -640,6 +640,11 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - Pięć klikanych kategorii (kafelki; kategoria otwiera własną stronę `#/settings/<kategoria>` z podkategoriami, „wstecz” z sekcji wraca do jej kategorii): 💼 **Majątek i konta** (Konta: konta, rejestr wpłat i wypłat, limity IKE / IKZE · Inne aktywa: nieruchomości, IKE - Julka), 🧾 **Budżet i zakupy** (Budżet – „Z oszczędności”, Paragony – podgląd, kaucja, 50/50, Zakupy i Zadania – grupowanie), 📈 **Inwestowanie** (Cele i podatki · Dane rynkowe: notowania, dywidendy, inflacja · Spółki i wiadomości: profile spółek, filtr newsów), 🔔 **Powiadomienia i AI**, ⚙️ **Aplikacja i dane** (Wygląd: motyw, widoczne moduły · Konto i dane: chmura, kopia zapasowa).
 - Dawna sekcja „Moduły i widok” rozdzielona na osobne sekcje (`#/settings/modules`, `budget-options`, `receipts`, `lists`); adresy sekcji bez zmian.
 
+### Serie zadań z tolerancją przerwy i „Wydane dzisiaj”
+
+- Serie (🔥) nawyków dziennych i zadań co miesiąc (`graceStreak` w `src/lib/dailyTasks.js`): jeden pominięty dzień / miesiąc nie zeruje serii (nie jest doliczany), przy liczniku pojawia się „!” (seria zagrożona), a po ponownym odhaczeniu seria trwa dalej; dwa pominięte z rzędu – seria od nowa.
+- Budżet → „Na co dzień”: „Dzisiaj wydano: X zł (w tym „kategoria” Y zł)” – wpisy z „Dodaj zakup” i paragonów z dzisiejszą datą, bez „Z oszczędności” i transferów.
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.

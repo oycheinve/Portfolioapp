@@ -59,15 +59,40 @@ export function historyDays(tasks, doneSet, today, limit = 14) {
   return out;
 }
 
-// Seria nawyku: kolejne wykonane dni do wskazanego dnia (dzień jeszcze nieodhaczony nie przerywa serii)
-export function habitStreak(task, doneSet, day) {
-  let d = doneSet.has(dayKey(task.id, day)) ? day : shiftDay(day, -1);
+// Seria z tolerancją jednej przerwy (dni albo miesiące): idąc wstecz od wskazanego okresu (bieżący jeszcze
+// nieodhaczony nie przerywa serii), pojedynczy pominięty okres nie zeruje serii (nie jest doliczany), dwa pominięte
+// z rzędu – koniec serii. atRisk – ostatni miniony okres pominięty, a bieżący jeszcze nieodhaczony (ostrzeżenie „!”);
+// gaps – liczba pominiętych okresów wewnątrz serii. isDone(p), prev(p), first – pierwszy okres zadania.
+export function graceStreak(isDone, start, prev, first) {
+  let p = isDone(start) ? start : prev(start);
+  const currentDone = isDone(start);
   let n = 0;
-  while (d >= task.day && doneSet.has(dayKey(task.id, d))) {
-    n += 1;
-    d = shiftDay(d, -1);
+  let gaps = 0;
+  let miss = 0;
+  let firstMissed = null;
+  while (p >= first) {
+    if (isDone(p)) {
+      n += 1;
+      gaps += miss;
+      miss = 0;
+    } else {
+      if (n === 0 && firstMissed === null) firstMissed = p;
+      miss += 1;
+      if (miss >= 2) break;
+    }
+    p = prev(p);
   }
-  return n;
+  // Przerwa tuż przed bieżącym okresem (pominięty wczoraj / poprzedni miesiąc, dziś jeszcze nic) – seria zagrożona
+  const atRisk = !currentDone && n > 0 && firstMissed !== null && firstMissed === prev(start);
+  return { n, gaps, atRisk };
+}
+
+// Seria nawyku (dni): liczba wykonanych dni w serii; jeden pominięty dzień nie zeruje serii
+export function habitStreakInfo(task, doneSet, day) {
+  return graceStreak((d) => doneSet.has(dayKey(task.id, d)), day, (d) => shiftDay(d, -1), task.day);
+}
+export function habitStreak(task, doneSet, day) {
+  return habitStreakInfo(task, doneSet, day).n;
 }
 
 const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`);

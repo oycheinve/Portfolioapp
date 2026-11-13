@@ -3,6 +3,7 @@ import { CalendarCheck2, CalendarRange, Check, ChevronLeft, ChevronRight, Flame,
 import { useApp } from '../../state/AppContext.jsx';
 import { MissingTablesError } from '../../lib/weeklyTasks.js';
 import { daysLeftInMonth, hasTarget, historyMonths, makeMonthlyTask, monthDoneSet, monthId, monthKey, monthLabel, monthProgress, monthProgressMap, monthlyCloudStore, monthlyLocalStore, shiftMonthId, tasksForMonth } from '../../lib/monthlyTasks.js';
+import { graceStreak } from '../../lib/dailyTasks.js';
 import { Card, Segmented } from '../ui.jsx';
 import TaskAccordion from './TaskAccordion.jsx';
 import { GroupedTaskList, TaskGroupBar, useTaskCategories } from './TaskGroups.jsx';
@@ -16,15 +17,9 @@ const inputCls = 'h-9 min-w-0 rounded-lg border border-stone-200 bg-white px-2 t
 const stepBtn = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 hover:bg-stone-100 disabled:opacity-40 dark:border-white/10 dark:hover:bg-white/5';
 const plMonths = (n) => (n === 1 ? 'miesiąc' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'miesiące' : 'miesięcy');
 
-// Seria zadania co miesiąc: kolejne wykonane miesiące do wskazanego (bieżący nieodhaczony nie przerywa serii)
+// Seria zadania co miesiąc z tolerancją jednej przerwy (jak serie dzienne): jeden pominięty miesiąc nie zeruje serii
 function monthStreak(task, doneSet, month) {
-  let m = doneSet.has(monthKey(task.id, month)) ? month : shiftMonthId(month, -1);
-  let n = 0;
-  while (m >= task.month && doneSet.has(monthKey(task.id, m))) {
-    n += 1;
-    m = shiftMonthId(m, -1);
-  }
-  return n;
+  return graceStreak((m) => doneSet.has(monthKey(task.id, m)), month, (m) => shiftMonthId(m, -1), task.month);
 }
 
 // Zadania miesięczne: większe obowiązki co miesiąc (audyt portfela, przegląd subskrypcji…) i zadania na dany miesiąc,
@@ -287,7 +282,8 @@ export default function MonthlyTasksPanel({ onDataChange }) {
                   cats={cats}
                   renderItem={(t) => {
                     const done = doneSet.has(monthKey(t.id, month));
-                    const streak = t.isRecurring ? monthStreak(t, doneSet, month) : 0;
+                    const info = t.isRecurring ? monthStreak(t, doneSet, month) : { n: 0, gaps: 0, atRisk: false };
+                    const streak = info.n;
                     const target = hasTarget(t) ? Number(t.target) : null;
                     const value = progressMap.get(monthKey(t.id, month)) || (target && done ? target : 0);
                     const share = target ? Math.min(1, value / target) : 0;
@@ -300,8 +296,13 @@ export default function MonthlyTasksPanel({ onDataChange }) {
                           </span>
                           <span className={`min-w-0 flex-1 text-sm break-words ${done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{t.title}</span>
                           {streak > 1 && (
-                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-orange-50 px-1.5 py-0.5 text-[11px] font-semibold text-orange-600 dark:bg-orange-500/10 dark:text-orange-400" title={`${streak} ${plMonths(streak)} z rzędu`}>
+                            <span
+                              className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${info.atRisk ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' : 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400'}`}
+                              title={info.atRisk ? `Seria ${streak} ${plMonths(streak)} – w poprzednim miesiącu przerwa. Odhacz w tym miesiącu, a seria trwa dalej.` : `Seria: ${streak} ${plMonths(streak)}${info.gaps ? ` (z przerwą)` : ' z rzędu'}`}
+                              aria-label={info.atRisk ? `Seria ${streak}, zagrożona` : `Seria ${streak}`}
+                            >
                               <Flame size={12} /> {streak}
+                              {info.atRisk && <span className="ml-0.5 font-bold">!</span>}
                             </span>
                           )}
                         </button>

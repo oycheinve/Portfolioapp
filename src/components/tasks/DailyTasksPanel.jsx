@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarCheck2, Check, ChevronLeft, ChevronRight, Flame, Plus, Repeat, Sun, Trash2 } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { MissingTablesError } from '../../lib/weeklyTasks.js';
-import { dailyCloudStore, dailyLocalStore, dayId, dayKey, dayLabel, dayProgress, dayShort, habitStreak, historyDays, makeDailyTask, shiftDay, tasksForDay } from '../../lib/dailyTasks.js';
+import { dailyCloudStore, dailyLocalStore, dayId, dayKey, dayLabel, dayProgress, dayShort, habitStreakInfo, historyDays, makeDailyTask, shiftDay, tasksForDay } from '../../lib/dailyTasks.js';
 import { Card, Segmented } from '../ui.jsx';
 import TaskAccordion from './TaskAccordion.jsx';
 import { GroupedTaskList, TaskGroupBar, useTaskCategories } from './TaskGroups.jsx';
@@ -193,7 +193,8 @@ export default function DailyTasksPanel({ onDataChange }) {
                   cats={cats}
                   renderItem={(t) => {
                     const done = doneSet.has(dayKey(t.id, day));
-                    const streak = t.isRecurring ? habitStreak(t, doneSet, day) : 0;
+                    const info = t.isRecurring ? habitStreakInfo(t, doneSet, day) : { n: 0, gaps: 0, atRisk: false };
+                    const streak = info.n;
                     return (
                       <li key={t.id} className="group flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-white/[0.03]">
                         <button type="button" role="checkbox" aria-checked={done} onClick={() => toggle(t)} disabled={isFuture} title={isFuture ? 'Odhaczysz w dniu zadania' : undefined} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left disabled:cursor-default">
@@ -202,8 +203,13 @@ export default function DailyTasksPanel({ onDataChange }) {
                           </span>
                           <span className={`min-w-0 flex-1 text-sm break-words ${done ? 'text-stone-400 line-through dark:text-stone-500' : 'font-medium'}`}>{t.title}</span>
                           {streak > 1 && (
-                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-orange-50 px-1.5 py-0.5 text-[11px] font-semibold text-orange-600 dark:bg-orange-500/10 dark:text-orange-400" title={`${streak} ${plDays(streak)} z rzędu`}>
+                            <span
+                              className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${info.atRisk ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' : 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400'}`}
+                              title={info.atRisk ? `Seria ${streak} ${plDays(streak)} – wczoraj przerwa. Odhacz dziś, a seria trwa dalej (dwa dni przerwy z rzędu ją zerują).` : `Seria: ${streak} ${plDays(streak)}${info.gaps ? ` (z ${info.gaps} ${info.gaps === 1 ? 'dniem' : 'dniami'} przerwy)` : ' z rzędu'}`}
+                              aria-label={info.atRisk ? `Seria ${streak}, zagrożona` : `Seria ${streak}`}
+                            >
                               <Flame size={12} /> {streak}
+                              {info.atRisk && <span className="ml-0.5 font-bold">!</span>}
                             </span>
                           )}
                         </button>
