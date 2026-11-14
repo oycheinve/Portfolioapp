@@ -1,8 +1,8 @@
-import { Area, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, CartesianGrid, ComposedChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import { useApp } from '../../state/AppContext.jsx';
 import { benchmarkLabel, isCustomBenchmark } from '../../lib/constants.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
-import { formatAxisPLN, formatPercent } from '../../lib/format.js';
+import { formatAxisPLN, formatDate, formatPLN, formatPercent } from '../../lib/format.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
 import { Select } from '../ui.jsx';
 import { Legend, PROFIT_COLORS, SeriesTooltip, axisDateFormatter, benchmarkColor } from './chartUtils.jsx';
@@ -22,6 +22,97 @@ function useAxes(span) {
   };
   const y = (formatter) => ({ tick: { fill: chrome.muted, fontSize: 11 }, tickLine: false, axisLine: false, width: 64, tickFormatter: formatter });
   return { chrome, x, y, isDark };
+}
+
+// Wartość portfela z wpłatami (+) i wypłatami (−): przepływ w punkcie = zmiana wkładu własnego netto względem
+// poprzedniego punktu (zgodnie z wybranym filtrem kont / aktywów i zakresem); znacznik na linii wartości
+const FLOW_MIN = 0.5;
+export function flowPoints(data) {
+  return (data || []).map((p, i) => {
+    const prev = i > 0 ? data[i - 1] : null;
+    const flow = prev && Number.isFinite(p.contrib) && Number.isFinite(prev.contrib) ? Math.round((p.contrib - prev.contrib) * 100) / 100 : 0;
+    return { ...p, flow, depMark: flow > FLOW_MIN ? p.value : null, wdMark: flow < -FLOW_MIN ? p.value : null };
+  });
+}
+const FlowMark = (sign, color) =>
+  function Mark({ cx, cy }) {
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={6} fill={color} stroke="#fff" strokeWidth={1.5} />
+        <text x={cx} y={cy + 3.5} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">
+          {sign}
+        </text>
+      </g>
+    );
+  };
+function FlowTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0]?.payload || {};
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs shadow-lg dark:border-white/10 dark:bg-neutral-900">
+      <div className="mb-1 font-medium">{formatDate(label || p.date)}</div>
+      <div className="flex gap-3">
+        <span className="text-stone-500 dark:text-stone-400">Wartość</span>
+        <span className="ml-auto font-medium tabular">{formatPLN(p.value)}</span>
+      </div>
+      {Math.abs(p.flow || 0) > FLOW_MIN && (
+        <div className={`flex gap-3 font-semibold ${p.flow > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+          <span>{p.flow > 0 ? 'Wpłata' : 'Wypłata'}</span>
+          <span className="ml-auto tabular">{formatPLN(p.flow, { sign: true })}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+export function FlowsChart({ data, span }) {
+  const { chrome, x, y, isDark } = useAxes(span);
+  const valueColor = seriesColor(0, isDark);
+  const rows = flowPoints(data);
+  const dep = rows.filter((r) => r.flow > FLOW_MIN);
+  const wd = rows.filter((r) => r.flow < -FLOW_MIN);
+  const sum = (list) => list.reduce((s, r) => s + r.flow, 0);
+  const green = isDark ? '#34d399' : '#059669';
+  const red = isDark ? '#f87171' : '#dc2626';
+  return (
+    <>
+      <Legend
+        items={[
+          { key: 'v', label: 'Wartość portfela', color: valueColor },
+          { key: 'd', label: 'Wpłata (+)', color: green },
+          { key: 'w', label: 'Wypłata (−)', color: red },
+        ]}
+      />
+      <div className="mt-2 h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={rows} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="flowFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={valueColor} stopOpacity={0.22} />
+                <stop offset="100%" stopColor={valueColor} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={chrome.grid} vertical={false} />
+            <XAxis {...x} />
+            <YAxis {...y(formatAxisPLN)} domain={['auto', 'auto']} />
+            <Tooltip content={<FlowTooltip />} cursor={{ stroke: chrome.axis }} />
+            <Area type="monotone" dataKey="value" name="Wartość" stroke={valueColor} strokeWidth={2} fill="url(#flowFill)" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+            <Scatter dataKey="depMark" name="Wpłata" shape={FlowMark('+', green)} isAnimationActive={false} />
+            <Scatter dataKey="wdMark" name="Wypłata" shape={FlowMark('−', red)} isAnimationActive={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-stone-100 pt-3 text-xs tabular dark:border-white/5">
+        <span>
+          Wpłaty: <strong className="text-emerald-700 dark:text-emerald-400">{formatPLN(sum(dep), { sign: true })}</strong> <span className="text-stone-400">({dep.length})</span>
+        </span>
+        <span>
+          Wypłaty: <strong className="text-red-600 dark:text-red-400">{formatPLN(sum(wd), { sign: true })}</strong> <span className="text-stone-400">({wd.length})</span>
+        </span>
+        <span className="text-stone-500 dark:text-stone-400">Wkład netto w okresie: {formatPLN(sum(dep) + sum(wd), { sign: true })}</span>
+      </div>
+    </>
+  );
 }
 
 // 1. Wartość portfela vs wkład własny (+ „gdyby wpłaty szły w benchmark”)

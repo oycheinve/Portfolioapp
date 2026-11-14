@@ -645,6 +645,10 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 - Serie (🔥) nawyków dziennych i zadań co miesiąc (`graceStreak` w `src/lib/dailyTasks.js`): jeden pominięty dzień / miesiąc nie zeruje serii (nie jest doliczany), przy liczniku pojawia się „!” (seria zagrożona), a po ponownym odhaczeniu seria trwa dalej; dwa pominięte z rzędu – seria od nowa.
 - Budżet → „Na co dzień”: „Dzisiaj wydano: X zł (w tym „kategoria” Y zł)” – wpisy z „Dodaj zakup” i paragonów z dzisiejszą datą, bez „Z oszczędności” i transferów.
 
+### Wykresy → Wartość z wpłatami i wypłatami
+
+- Nowy wykres w grupie Portfel (`#/charts/flows`, `FlowsChart`): linia wartości portfela z zielonymi „+” (wpłaty) i czerwonymi „−” (wypłaty) w dniach przepływów – przepływ = zmiana wkładu własnego netto między punktami, więc wykres respektuje filtr kont / aktywów i zakres. Podpowiedź: data, wartość, kwota wpłaty / wypłaty; pod wykresem sumy wpłat i wypłat w okresie z liczbą operacji.
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.

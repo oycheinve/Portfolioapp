@@ -17,7 +17,7 @@ import { computeHoldings, isoDay, livePriceLookup, valuePortfolio } from '../../
 import { formatDate, formatDateTime, formatPLN, formatPercent, signClass } from '../../lib/format.js';
 import { instrumentColorMap } from '../allocation/AllocationDonut.jsx';
 import { Button, Card, Dropdown, Input, Segmented, Select } from '../ui.jsx';
-import { DrawdownChart, ProfitChart, ValueChart } from './PortfolioCharts.jsx';
+import { DrawdownChart, FlowsChart, ProfitChart, ValueChart } from './PortfolioCharts.jsx';
 import { DividendsMonthlyChart, DividendsYearlyChart } from './DividendCharts.jsx';
 import CompositionChart from './CompositionChart.jsx';
 import { benchmarkColor } from './chartUtils.jsx';
@@ -28,6 +28,7 @@ import Summaries from '../reports/Summaries.jsx';
 // Lista wykresów (wybór z rozwijanej listy zamiast poziomych zakładek)
 export const CHART_OPTIONS = [
   { id: 'value', label: 'Wartość vs wkład', group: 'Portfel', kind: 'series' },
+  { id: 'flows', label: 'Wartość z wpłatami i wypłatami', group: 'Portfel', kind: 'series' },
   { id: 'profit', label: 'Zysk w czasie', group: 'Portfel', kind: 'series' },
   { id: 'drawdown', label: 'Drawdown (obsunięcie)', group: 'Portfel', kind: 'series' },
   { id: 'composition', label: 'Skład portfela', group: 'Portfel', kind: 'composition' },
@@ -248,7 +249,7 @@ export default function ChartsCenter({ param }) {
   const reconstructed = Object.values(resolver.sources).includes('reconstructed');
   const usesSelection = option.kind === 'series' || option.kind === 'dividends';
   // Wartość vs wkład – bez benchmarków (porównanie z benchmarkiem tylko na wykresach stopy zwrotu i obsunięcia)
-  const usesBenchmarks = option.kind === 'series' && chart !== 'value';
+  const usesBenchmarks = option.kind === 'series' && chart !== 'value' && chart !== 'flows';
 
   return (
     <div className="space-y-3 sm:space-y-5">
@@ -415,6 +416,7 @@ export default function ChartsCenter({ param }) {
       {option.kind !== 'market' && option.kind !== 'composition' && option.kind !== 'summary' && (
         <Card title={option.label} bodyClassName="p-4 sm:p-5">
           {chart === 'value' && <ValueChart data={series.points} span={span} benchmarks={[]} compareIds={compareIds} />}
+          {chart === 'flows' && <FlowsChart data={series.points} span={span} />}
           {chart === 'profit' && <ProfitChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} mode={compareIds.length ? 'PCT' : profitMode} onModeChange={setProfitMode} />}
           {chart === 'drawdown' && <DrawdownChart data={series.points} span={span} benchmarks={benchmarks} compareIds={compareIds} />}
           {option.kind === 'dividends' && (
