@@ -168,7 +168,7 @@ export function buildPortfolioRows(state) {
     rows.push({
       id: `alt_${p.id}`,
       ops: [],
-      since: null,
+      since: p.since || null, // okres inwestycji: pierwszy zakup z rejestru albo data wpisana w Surowcach i Krypto
       category: 'ALT',
       name: p.label,
       sub: `${p.short} · ${p.qty.toLocaleString('pl-PL', { maximumFractionDigits: p.digits })} ${p.unit}${p.hasPrice ? '' : ' · brak notowania'}`,

@@ -106,7 +106,8 @@ export function alternativesValue(state) {
   const s = altSettings(state);
   const positions = ALT_ASSETS.map((a) => {
     const h = effectiveHolding(state, a.id);
-    return { ...valueAltPosition(a, h, s.quotes), fromPurchases: h.fromPurchases, purchases: h.purchases || null };
+    // since – początek inwestycji: pierwszy zakup z rejestru, a bez rejestru – data wpisana przy pozycji
+    return { ...valueAltPosition(a, h, s.quotes), fromPurchases: h.fromPurchases, purchases: h.purchases || null, since: h.purchases?.first || (/^\d{4}-\d{2}-\d{2}$/.test(String(h.since || '')) ? h.since : null) };
   });
   const held = positions.filter((p) => p.qty > 0);
   const value = held.reduce((sum, p) => sum + p.value, 0);

@@ -257,6 +257,10 @@ export default function AlternativesView({ onNavigate }) {
                   />
                 </Field>
               )}
+              {/* Data (pierwszego) zakupu – licznik okresu inwestycji w tabeli Portfela */}
+              <Field label="Data zakupu" className="w-40" hint="okres inwestycji w Portfelu">
+                <Input type="date" value={holding.since || ''} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setHolding(p.id, { since: e.target.value || '' })} aria-label={`Data zakupu – ${p.label}`} />
+              </Field>
             </div>
                 <button type="button" onClick={() => onNavigate?.('settings/cash')} className="mt-2 text-[11px] text-blue-600 hover:underline dark:text-blue-400">
                   albo dodaj zakupy w rejestrze (Ustawienia → Rejestr wpłat i wypłat) – średnia cena nabycia policzy się sama

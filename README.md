@@ -649,6 +649,10 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 
 - Nowy wykres w grupie Portfel (`#/charts/flows`, `FlowsChart`): linia wartości portfela z zielonymi „+” (wpłaty) i czerwonymi „−” (wypłaty) w dniach przepływów – przepływ = zmiana wkładu własnego netto między punktami, więc wykres respektuje filtr kont / aktywów i zakres. Podpowiedź: data, wartość, kwota wpłaty / wypłaty; pod wykresem sumy wpłat i wypłat w okresie z liczbą operacji.
 
+### Portfel – okres inwestycji dla Surowców i Krypto
+
+- Wiersze surowców i krypto w tabeli Portfela (i w widoku Karty) mają okres inwestycji w dniach: od pierwszego zakupu z rejestru zakupów, a dla pozycji wpisanej ręcznie – od pola „Data zakupu” w zakładce Surowce i Krypto (`holdings[id].since`). Wliczane też do średniego okresu ważonego wartością.
+
 ## Minimalizm i mniej przewijania (pakiet UI)
 
 - **Ustawienia → Moduły i widok → Porządkowanie list**: jeden globalny przełącznik „Grupuj elementy według kategorii (AI i pamięć)” dla Zakupów i Zadań (`settings.groupByCategory`, domyślnie włączony) – zastępuje lokalne pola w widokach. IKE - Julka pozostaje wyłącznie w Ustawieniach.
