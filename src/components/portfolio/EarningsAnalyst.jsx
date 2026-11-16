@@ -183,7 +183,7 @@ export default function EarningsAnalyst() {
         }
       }
       if (!res.analysis) throw new Error(res.error || 'Brak analizy');
-      if (/^groq\//.test(res.model || '') && bin.length) actions.notify('Gemini przeciążony – analizę przygotował model zapasowy z samego tekstu (bez zrzutów ekranu)', 'warn');
+      if (res.fallback?.skipped > 0) actions.notify(`Gemini przeciążony – analizę przygotował model zapasowy (${res.fallback.provider}) bez ${res.fallback.skipped} załącznika(-ów)`, 'warn');
       if (profile) res.analysis.profileUsed = matched.ticker || matched.name;
       const entry = saveEarnings(res);
       setList(readEarnings());
@@ -577,7 +577,7 @@ function Analysis({ entry, onInterpret, interpreting, profile }) {
         </div>
       )}
       <p className="text-[11px] text-stone-500 dark:text-stone-400">
-        {refCol === 'consensus' ? (mixedRef ? 'Ocena względem konsensusu; pozycje bez konsensusu – względem tego samego okresu rok wcześniej (r/r)' : 'Ocena względem podanego konsensusu') : refCol === 'previous' ? 'Ocena względem tego samego okresu rok wcześniej' : 'Brak punktu odniesienia – dopisz konsensus albo wgraj raport z danymi porównawczymi'}. Na podstawie Twoich materiałów – AI może się mylić.{/^groq\//.test(entry.model || '') ? ' Przygotował model zapasowy (Gemini był przeciążony) – tylko z tekstu, bez zrzutów; sprawdź kluczowe liczby.' : ''} Zapisano {new Date(entry.at).toLocaleString('pl-PL')}.
+        {refCol === 'consensus' ? (mixedRef ? 'Ocena względem konsensusu; pozycje bez konsensusu – względem tego samego okresu rok wcześniej (r/r)' : 'Ocena względem podanego konsensusu') : refCol === 'previous' ? 'Ocena względem tego samego okresu rok wcześniej' : 'Brak punktu odniesienia – dopisz konsensus albo wgraj raport z danymi porównawczymi'}. Na podstawie Twoich materiałów – AI może się mylić.{/^(groq|mistral|openrouter)\//.test(entry.model || '') ? ` Przygotował model zapasowy (${entry.model.split('/')[0]}, Gemini był przeciążony) – sprawdź kluczowe liczby.` : ''} Zapisano {new Date(entry.at).toLocaleString('pl-PL')}.
       </p>
     </article>
   );
