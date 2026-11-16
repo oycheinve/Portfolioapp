@@ -360,10 +360,102 @@ async function discoverFlash(client) {
 export const lastRoute = { backend: null, model: null, attempts: [] };
 const keyRejected = (e) => e instanceof ApiError && (e.status === 401 || e.status === 403 || (e.status === 400 && /api key|api_key|credential|auth/i.test(e.message || '')));
 
+// ── Zapasowy dostawca: Groq (API zgodne z OpenAI, darmowy plan) ─────────────────────────────────────────────────────
+// Włączany tylko wtedy, gdy jest GROQ_API_KEY (serwer, bez VITE_), wszystkie modele Gemini są przeciążone / nie zdążyły /
+// mają wyczerpany limit, a zadanie na to pozwala (spec.groq – analityk wyników, interpretacja, streszczenia newsów;
+// budżet, paragony i przegląd tygodnia zostają wyłącznie na Gemini). Tylko tekst: załączniki graficzne są pomijane
+// (z adnotacją dla modelu); zadanie bez żadnego tekstu nie idzie do Groq. Format odpowiedzi: JSON wg tego samego
+// schematu (w instrukcji systemowej), walidowany tymi samymi funkcjami parse co odpowiedzi Gemini.
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_RESERVE_MS = 20000; // czas zostawiony na Groq z łącznego budżetu zapytania
+const groqKey = () => env('GROQ_API_KEY');
+const groqModels = () => (env('GROQ_MODELS') ? env('GROQ_MODELS').split(',').map((m) => m.trim()).filter(Boolean) : ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']);
+const groqAllowed = (spec) => (spec ? spec.groq === true : true); // domyślny spec (streszczenie newsa) – tak
+
+function groqContent(userContent) {
+  const parts = typeof userContent === 'string' ? [{ text: userContent }] : Array.isArray(userContent) ? userContent : [];
+  const text = parts.filter((p) => typeof p?.text === 'string').map((p) => p.text).join('\n\n');
+  const skipped = parts.filter((p) => p?.inlineData).length;
+  return { text, skipped };
+}
+
+async function groqGenerate(model, system, text, spec, deadline) {
+  const ms = Math.max(3000, deadline - Date.now());
+  const body = {
+    model,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: text },
+    ],
+    temperature: spec?.temperature ?? 0.2,
+    max_completion_tokens: Math.min(spec?.maxTokens || 4096, 8192),
+    response_format: { type: 'json_object' },
+    ...(/gpt-oss/.test(model) ? { reasoning_effort: 'low' } : {}),
+  };
+  const r = await fetch(GROQ_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey()}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(ms) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiError({ message: `Groq ${model}: ${j?.error?.message || `HTTP ${r.status}`}`, status: r.status });
+  const choice = j.choices?.[0] || {};
+  // Odpowiedź w kształcie odpowiedzi Gemini – dla wspólnych funkcji parse
+  return { text: choice.message?.content || '', modelVersion: `groq/${j.model || model}`, candidates: [{ finishReason: choice.finish_reason === 'length' ? 'MAX_TOKENS' : 'STOP' }] };
+}
+
+async function groqFallback(userContent, spec, deadline) {
+  const { text, skipped } = groqContent(userContent);
+  if (!text.trim()) return null;
+  const schema = spec?.schema || SCHEMA;
+  const system = `${spec?.system || SYSTEM}\n\nOdpowiedz WYŁĄCZNIE jednym obiektem JSON (bez komentarzy i bloków kodu) zgodnym z tym JSON Schema:\n${JSON.stringify(schema)}`;
+  let input = skipped ? `${text}\n\n(Uwaga: pominięto ${skipped} załącznik(i) graficzne / PDF – analizuj wyłącznie powyższy tekst.)` : text;
+  let lastErr;
+  for (const model of groqModels()) {
+    for (let shrink = 0; shrink < 2; shrink += 1) {
+      if (Date.now() > deadline - 2500) return lastErr ? Promise.reject(lastErr) : null;
+      try {
+        const response = await groqGenerate(model, system, input, spec, deadline);
+        Object.assign(lastRoute, { backend: 'groq', model });
+        return (spec?.parse || parseResponse)(response, `groq/${model}`);
+      } catch (e) {
+        lastErr = e;
+        lastRoute.attempts.push(`groq:${model} → ${timedOut(e) ? 'limit czasu' : e.status ?? 'błąd'}`);
+        // 413 / limit tokenów na minutę darmowego planu – tekst przycięty proporcjonalnie, jedna ponowna próba
+        const m = /limit\D*(\d+)\D+requested\D*(\d+)/i.exec(e.message || '');
+        if (e.status === 413 || (e.status === 429 && m)) {
+          const ratio = m ? (Number(m[1]) / Number(m[2])) * 0.8 : 0.5;
+          if (ratio > 0.15 && ratio < 1) {
+            input = `${input.slice(0, Math.floor(input.length * ratio))}\n(…tekst skrócony ze względu na limit modelu zapasowego)`;
+            continue;
+          }
+        }
+        break; // inny błąd – następny model Groq
+      }
+    }
+  }
+  throw lastErr;
+}
+
 export async function summarize(userContent, spec = null) {
   const key = apiKey();
   lastRoute.attempts = [];
-  const deadline = Date.now() + Math.min(TIME_BUDGET_MS, spec?.budgetMs || TIME_BUDGET_MS); // spec.budgetMs – krótszy budżet (np. druga próba)
+  const hardDeadline = Date.now() + Math.min(TIME_BUDGET_MS, spec?.budgetMs || TIME_BUDGET_MS); // spec.budgetMs – krótszy budżet (np. druga próba)
+  const useGroq = !!groqKey() && groqAllowed(spec);
+  // Z zapasowym dostawcą Gemini ma krótszy budżet – reszta czasu na Groq
+  const deadline = useGroq ? hardDeadline - GROQ_RESERVE_MS : hardDeadline;
+  try {
+    return await summarizeGemini(key, userContent, spec, deadline);
+  } catch (e) {
+    const busy = overloaded(e) || timedOut(e);
+    if (!useGroq || !busy) throw e;
+    try {
+      const r = await groqFallback(userContent, spec, hardDeadline);
+      if (r) return r;
+    } catch {
+      // Groq też zawiódł – zwracamy błąd Gemini (czytelny komunikat o przeciążeniu)
+    }
+    throw e;
+  }
+}
+
+async function summarizeGemini(key, userContent, spec, deadline) {
   let firstError; // błąd pierwszej usługi (Gemini API) – ważniejszy niż błąd usługi zapasowej
   for (const backend of backends(key)) {
     // Vertex AI tylko wtedy, gdy Gemini API odrzuciło sam klucz (nie przy przeciążeniu, limicie czy braku modelu)
@@ -542,7 +634,7 @@ function send(res, status, body) {
 
 async function checkConfig(req, res) {
   const key = apiKey();
-  const info = { keySet: !!key, keyKind: key ? keyKind(key) : null, models: modelChain(), anon: env('AI_ALLOW_ANON') === '1' };
+  const info = { keySet: !!key, keyKind: key ? keyKind(key) : null, models: modelChain(), fallback: groqKey() ? { provider: 'groq', models: groqModels() } : null, anon: env('AI_ALLOW_ANON') === '1' };
   if (!key) return send(res, 503, { ok: false, ...info, error: 'Brak GEMINI_API_KEY na serwerze (po dodaniu zmiennej potrzebne jest ponowne wdrożenie)' });
   const auth = await authorize(req);
   if (!auth.ok) return send(res, auth.status, { ok: false, ...info, error: auth.error });
@@ -704,7 +796,7 @@ function earningsParse(response, model) {
   if (!analysis.company || !analysis.quarter) throw Object.assign(new Error('W materiałach nie znaleziono wyników spółki – wklej komunikat, zrzut ekranu albo raport PDF'), { status: 422 });
   return { analysis, model: response.modelVersion || model };
 }
-const EARNINGS_SPEC = { system: EARNINGS_SPEC_SYSTEM, schema: EARNINGS_SCHEMA, maxTokens: 12288, temperature: 0.1, parse: earningsParse };
+const EARNINGS_SPEC = { system: EARNINGS_SPEC_SYSTEM, schema: EARNINGS_SCHEMA, maxTokens: 12288, temperature: 0.1, parse: earningsParse, groq: true };
 const MAX_EARNINGS_TEXT = 150000; // wklejony tekst + tekst wyciągnięty z dużych PDF w przeglądarce
 const MAX_EARNINGS_FILES_B64 = 4_000_000; // pliki (zrzuty, PDF) łącznie – limit treści zapytania na Vercelu (4,5 MB)
 const FILE_MIME = /^(image\/(jpeg|png|webp)|application\/pdf)$/;
@@ -739,6 +831,7 @@ async function earnings(body, res) {
 
 // ── Interpretacja zapisanej analizy (np. danych startowych): tylko liczby z analizy + historia + profil, bez plików ──
 const INTERPRET_SPEC = {
+  groq: true,
   system: `Jesteś analitykiem finansowym. Dostajesz zapisaną analizę wyników kwartalnych spółki (<analiza>: wskaźniki z wartością bieżącą, rokiem wcześniej i konsensusem, krótkie wnioski), jej historię liczb kwartał po kwartale (<historia>) i opcjonalnie profil spółki od użytkownika (<profil_spolki>). Napisz omówienie jak w komentarzu analityka, po polsku, rzeczowo:
 • summary – 3–6 zdań: co się wydarzyło w kwartale, jak wynik wypada na tle konsensusu / roku wcześniej i trendu z historii (dynamiki r/r i q/q, marże), co jest najważniejsze dla oceny spółki;
 • drivers – 2–5 czynników wyjaśniających wynik, wyłącznie takich, które wynikają z przekazanych danych i wniosków (np. akwizycja wspomniana w analizie, zmiana marży, koszty); każdy z liczbą lub kierunkiem;
