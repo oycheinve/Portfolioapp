@@ -618,7 +618,7 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 ### Cele → Kamienie milowe (automatyczne)
 
 - Karta na górze zakładki Cele (`src/components/goals/MilestonesCard.jsx`, `src/lib/milestones.js`): cztery ścieżki liczone tymi samymi funkcjami co Pulpit – wartość portfela (łączna wartość wszystkich kont), zysk wygenerowany (zysk całkowity od początku), procent zysku (stopa zwrotu od początku) i dywidendy roczne (netto, ostatnie 12 mies.).
-- Progi gęsto na starcie i coraz rzadziej dalej (np. 1k / 2k / 3k / 5k / 7,5k / 10k … 100k / 125k / 150k / 200k … zł, +1% / +2% / +3% / +5% … +50% / +75% / +100%, 50 / 100 / 200 / 300 / 500 … zł/rok) odhaczają się same; powyżej ostatniego progu kolejne są podwajane (bez limitu). Pasek postępu do następnego progu i „brakuje X”; data pierwszego osiągnięcia zapisana per użytkownik (`wealth-app-milestones-v1`) – próg zostaje odhaczony także po chwilowym spadku. Nowy próg – krótkie powiadomienie w aplikacji (przy pierwszym uruchomieniu zapis po cichu).
+- Progi gęściej na starcie i coraz rzadziej dalej (np. 1k / 2,5k / 5k / 10k / 15k / 25k / 50k / 75k / 100k / 150k / 250k … zł, +1% / +2% / +5% / +10% / +15% / +25% / +50% … , 50 / 100 / 250 / 500 / 1k … zł/rok) odhaczają się same; powyżej ostatniego progu kolejne są podwajane (bez limitu). Pasek postępu do następnego progu i „brakuje X”; data pierwszego osiągnięcia zapisana per użytkownik (`wealth-app-milestones-v1`) – próg zostaje odhaczony także po chwilowym spadku. Nowy próg – krótkie powiadomienie w aplikacji (przy pierwszym uruchomieniu zapis po cichu).
 
 ### Newsy – więcej trafnych artykułów o spółkach
 
