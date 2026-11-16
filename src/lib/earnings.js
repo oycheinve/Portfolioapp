@@ -55,6 +55,18 @@ export function saveEarnings({ analysis, sources = [], grounded = false, searchN
   return entry;
 }
 
+// Pamięć analiz spółki dla AI: skróty zapisanych analiz (najnowszy okres pierwszy, max 6), bez okresu `skipKey`
+// i opcjonalnie tylko starsze niż `beforeQuarter` (interpretacja zapisanej analizy – bez „przyszłych” okresów)
+export function analysisMemory(company, { skipKey = '', beforeQuarter = '', now = Date.now() } = {}) {
+  if (!company) return [];
+  const limit = beforeQuarter ? periodOrder(beforeQuarter) : Infinity;
+  return readEarnings(now)
+    .filter((e) => companyKey(e.analysis) === company && e.key !== skipKey && periodOrder(e.analysis.quarter) < limit)
+    .sort((x, y) => periodOrder(y.analysis.quarter) - periodOrder(x.analysis.quarter))
+    .slice(0, 6)
+    .map(({ analysis: a }) => ({ quarter: a.quarter, verdict: a.verdict, headline: a.headline, takeaway: a.interpretation?.takeaway || '', highlights: (a.highlights || []).slice(0, 3), risks: (a.risks || []).slice(0, 3), outlook: a.outlook || '' }));
+}
+
 // Dopisanie interpretacji AI do zapisanej analizy (bez zmiany daty zapisu i historii liczb)
 export function setInterpretation(key, interpretation, extra = {}) {
   const list = readEarnings();

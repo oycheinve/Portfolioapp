@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { FileText, Image as ImageIcon, Loader2, Paperclip, Sparkles, Trash2, X } from 'lucide-react';
+import { ChevronDown, FileText, History, Image as ImageIcon, Loader2, Paperclip, Sparkles, Trash2, X } from 'lucide-react';
 import { useApp } from '../../state/AppContext.jsx';
 import { requestEarnings, requestEarningsInterpretation } from '../../lib/newsAi.js';
 import { compressImage } from '../../lib/receipts.js';
-import { RETENTION_DAYS, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
+import { RETENTION_DAYS, analysisMemory, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, profileKpis, readProfiles } from '../../lib/companyProfiles.js';
 import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
@@ -58,6 +58,7 @@ export default function EarningsAnalyst() {
   const [hist, setHist] = useState(readHistory);
   const [company, setCompany] = useState(() => companyKey(readEarnings()[0]?.analysis || {}) || Object.keys(readHistory())[0] || null);
   const [openKey, setOpenKey] = useState(() => readEarnings()[0]?.key || null);
+  const [toggled, setToggled] = useState({}); // ręcznie rozwinięte / zwinięte analizy (domyślnie: tylko najświeższa)
   const fileRef = useRef(null);
   // Dane startowe XTB (Q1–Q3 2026 vs konsensus): wczytywane automatycznie, gdy XTB jest w portfelu, inaczej – przyciskiem
   // Dane startowe spółek (XTB, LPP…): automatycznie, gdy spółka jest w portfelu, inaczej – przyciskiem
@@ -166,7 +167,9 @@ export default function EarningsAnalyst() {
     setBusy('AI analizuje Twoje materiały…');
     try {
       const profile = profileContext(matched);
-      const payload = { query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile };
+      // Pamięć analiz: skróty wcześniejszych analiz tej spółki – AI sprawdza, czy trendy / zapowiedzi się materializują
+      const memory = analysisMemory(query.trim() ? companyKey({ ticker: query.trim() }) : company);
+      const payload = { query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile, memory };
       // Przeciążenie modeli Google (503) – do 2 automatycznych ponowień po 15 i 30 s, z odliczaniem w przycisku
       let res;
       for (let attempt = 0; ; attempt += 1) {
@@ -190,6 +193,7 @@ export default function EarningsAnalyst() {
       setHist(readHistory());
       setCompany(companyKey(entry.analysis));
       setOpenKey(entry.key);
+      setToggled({});
       setText('');
       setFiles([]);
       actions.notify(`Zapisano: ${entry.analysis.company} ${entry.analysis.quarter} – historia spółki zaktualizowana`, 'success');
@@ -212,7 +216,7 @@ export default function EarningsAnalyst() {
     const history = h ? companyPeriods(h).map(({ quarter, revenue, netIncome, ebitda }) => ({ quarter, revenue, netIncome, ebitda })) : [];
     setInterpreting(entry.key);
     try {
-      const res = await requestEarningsInterpretation({ analysis: a, history, profile: profileContext(prof) });
+      const res = await requestEarningsInterpretation({ analysis: a, history, profile: profileContext(prof), memory: analysisMemory(companyKey(a), { skipKey: entry.key, beforeQuarter: a.quarter }) });
       if (!res.interpretation) throw new Error(res.error || 'Brak interpretacji');
       setInterpretation(entry.key, res.interpretation, { profileUsed: prof ? prof.ticker || prof.name : '' });
       setList(readEarnings());
@@ -323,20 +327,28 @@ export default function EarningsAnalyst() {
       {sel && <CompanyHistory company={sel} profile={profileFor({ ticker: sel.ticker, company: sel.company })} />}
 
       {sel && entries.length > 0 && (
-        <div className="mt-4">
-          <div className="mb-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Analizy spółki">
-            {entries.map((e) => (
-              <span key={e.key} className={`inline-flex h-7 items-center gap-1 rounded-full border pr-1 pl-2.5 text-[11px] ${open?.key === e.key ? 'border-violet-400 bg-violet-50 dark:border-violet-400/40 dark:bg-violet-500/10' : 'border-stone-200 dark:border-white/10'}`}>
-                <button type="button" onClick={() => setOpenKey(e.key)} className="inline-flex items-center gap-1 font-semibold" aria-label={`Otwórz analizę ${e.analysis.company} ${e.analysis.quarter}`}>
-                  {e.analysis.quarter} <Verdict v={e.analysis.verdict} />
-                </button>
-                <button type="button" onClick={() => removeEntry(e.key)} className="inline-flex h-5 w-5 items-center justify-center rounded text-stone-400 hover:text-red-600" aria-label={`Usuń analizę ${e.analysis.company} ${e.analysis.quarter}`}>
-                  <X size={11} />
-                </button>
-              </span>
-            ))}
-          </div>
-          {open && <Analysis entry={open} onInterpret={() => interpret(open)} interpreting={interpreting === open.key} profile={profileFor(open.analysis)} />}
+        // Najświeższy okres (albo właśnie otwarty) rozwinięty na górze; starsze – kompaktowe, zwinięte paski
+        <div className="mt-4 space-y-1.5" role="list" aria-label="Analizy spółki">
+          {entries.map((e) => {
+            const isOpen = toggled[e.key] ?? e.key === open?.key;
+            const a = e.analysis;
+            return (
+              <div key={e.key} role="listitem">
+                <div className={`flex items-center gap-1 rounded-xl border pr-1 ${isOpen ? 'border-violet-300 bg-violet-50/60 dark:border-violet-400/30 dark:bg-violet-500/[0.06]' : 'border-stone-200 hover:bg-stone-50 dark:border-white/10 dark:hover:bg-white/[0.03]'}`}>
+                  <button type="button" onClick={() => setToggled((t) => ({ ...t, [e.key]: !isOpen }))} aria-expanded={isOpen} className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left" aria-label={`${isOpen ? 'Zwiń' : 'Rozwiń'} analizę ${a.company} ${a.quarter}`}>
+                    <span className="shrink-0 text-xs font-semibold tabular">{a.quarter}</span>
+                    <Verdict v={a.verdict} />
+                    {!isOpen && <span className="min-w-0 flex-1 truncate text-xs text-stone-500 dark:text-stone-400">{a.tldr || a.headline}</span>}
+                    <ChevronDown size={14} className={`ml-auto shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  <button type="button" onClick={() => removeEntry(e.key)} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-stone-400 hover:text-red-600" aria-label={`Usuń analizę ${a.company} ${a.quarter}`}>
+                    <X size={12} />
+                  </button>
+                </div>
+                {isOpen && <Analysis entry={e} onInterpret={() => interpret(e)} interpreting={interpreting === e.key} profile={profileFor(a)} />}
+              </div>
+            );
+          })}
         </div>
       )}
       {sel && (
@@ -481,7 +493,13 @@ function Analysis({ entry, onInterpret, interpreting, profile }) {
   // Wiersze bez konsensusu oceniane r/r (gdy znany rok wcześniej) – oznaczone „r/r” w kolumnie odniesienia
   const mixedRef = hasCons && a.metrics.some((m) => metricRef(m).kind === 'previous');
   return (
-    <article className="mt-2 space-y-3 rounded-xl border border-stone-200 p-3 dark:border-white/10" aria-label={`Analiza ${a.company} ${a.quarter}`}>
+    <article className="mt-1.5 space-y-3 rounded-xl border border-stone-200 p-3 dark:border-white/10" aria-label={`Analiza ${a.company} ${a.quarter}`}>
+      {a.tldr && (
+        <p className="rounded-lg border-l-4 border-violet-500 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-950 dark:bg-violet-500/10 dark:text-violet-100" aria-label="TL;DR">
+          <span className="mr-1.5 text-[10px] font-bold tracking-wider text-violet-600 uppercase dark:text-violet-300">TL;DR</span>
+          {a.tldr}
+        </p>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h4 className="text-sm font-semibold">
@@ -631,6 +649,14 @@ function Interpretation({ it, onInterpret, busy, profileName, profileUsed }) {
         </div>
       )}
       {it.summary && <p>{it.summary}</p>}
+      {it.continuity && (
+        <div className="rounded-lg border border-violet-200/70 bg-white/70 p-2.5 dark:border-violet-400/20 dark:bg-white/5">
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-300">
+            <History size={12} /> Na tle poprzednich kwartałów
+          </div>
+          <p className="mt-0.5">{it.continuity}</p>
+        </div>
+      )}
       {it.drivers?.length > 0 && (
         <div>
           <div className="text-[11px] font-semibold text-stone-500 dark:text-stone-400">Co napędziło wynik</div>
