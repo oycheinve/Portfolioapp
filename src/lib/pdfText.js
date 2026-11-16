@@ -10,15 +10,18 @@ async function pdfjs() {
   return lib;
 }
 
-export async function pdfToText(file, { maxChars = 140000, onProgress } = {}) {
+// pages: true – zwraca też tekst każdej strony (pageTexts) i czyta cały dokument (do maxPages), żeby esencja
+// finansowa (reportDigest) mogła wybrać strony z dowolnego miejsca raportu
+export async function pdfToText(file, { maxChars = 140000, onProgress, pages: perPage = false, maxPages = 400 } = {}) {
   const { getDocument } = await pdfjs();
   const data = new Uint8Array(await file.arrayBuffer());
   const task = getDocument({ data, isEvalSupported: false });
   const doc = await task.promise;
   let out = '';
   let pages = 0;
+  const pageTexts = [];
   try {
-    for (let i = 1; i <= doc.numPages && out.length < maxChars; i += 1) {
+    for (let i = 1; i <= doc.numPages && (perPage ? i <= maxPages : out.length < maxChars); i += 1) {
       const page = await doc.getPage(i);
       const tc = await page.getTextContent();
       // Wiersze: nowa linia przy zmianie pozycji pionowej (tabele z raportów zachowują układ kolumn)
@@ -35,7 +38,9 @@ export async function pdfToText(file, { maxChars = 140000, onProgress } = {}) {
         lastY = y;
       }
       if (line.trim()) lines.push(line.trim());
-      out += `\n[strona ${i}]\n${lines.filter(Boolean).join('\n')}`;
+      const pageText = lines.filter(Boolean).join('\n');
+      if (perPage) pageTexts.push(pageText);
+      else out += `\n[strona ${i}]\n${pageText}`;
       pages = i;
       page.cleanup();
       onProgress?.(i, doc.numPages);
@@ -43,5 +48,7 @@ export async function pdfToText(file, { maxChars = 140000, onProgress } = {}) {
   } finally {
     await doc.destroy();
   }
+  const totalPages = doc.numPages ?? pages;
+  if (perPage) return { pageTexts, pages, totalPages, truncated: pages < totalPages };
   return { text: out.slice(0, maxChars), pages, totalPages: doc.numPages ?? pages, truncated: out.length > maxChars };
 }

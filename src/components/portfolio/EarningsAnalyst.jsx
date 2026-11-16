@@ -34,6 +34,7 @@ const inputCls = 'h-10 w-full min-w-0 rounded-lg border border-stone-200 bg-whit
 const MAX_B64 = 3_800_000;
 const MAX_PDF_INLINE = 2_600_000; // większy PDF → tekst wyciągnięty w przeglądarce
 const MAX_TEXT = 145000;
+const PDF_DIGEST_CHARS = 40000; // esencja finansowa jednego raportu PDF (~10–12 tys. tokenów)
 const TEXT_RE = /\.(txt|csv|tsv|md|json|html?|xml)$/i;
 const b64Of = (file) =>
   new Promise((resolve, reject) => {
@@ -104,6 +105,7 @@ export default function EarningsAnalyst() {
     const picked = [...(e.target.files || [])];
     e.target.value = '';
     let used = b64Used;
+    let textUsed = text.length + files.reduce((n, f) => n + (f.text?.length || 0), 0);
     for (const file of picked) {
       const id = `${file.name}-${file.size}-${Date.now()}`;
       try {
@@ -114,18 +116,26 @@ export default function EarningsAnalyst() {
           used += img.base64.length;
           setFiles((f) => [...f, { id, name: file.name, kind: 'image', mime: img.mime, data: img.base64, size: img.bytes }]);
         } else if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-          if (file.size <= MAX_PDF_INLINE && used + file.size * 1.37 <= MAX_B64) {
+          // Raport PDF: tekst wyciągnięty w przeglądarce i zawężony do esencji finansowej (sprawozdania, wybrane dane,
+          // komentarz zarządu) – bez spisu treści, oświadczeń, danych audytora itp. Mały payload = mniej przeciążeń AI.
+          // Skan bez warstwy tekstowej – jak dotąd cały plik (gdy mieści się w limicie zapytania).
+          setBusy(`Odczyt tekstu z PDF: ${file.name}…`);
+          const { pdfToText } = await import('../../lib/pdfText.js');
+          const { reportDigest } = await import('../../lib/reportDigest.js');
+          const r = await pdfToText(file, { pages: true, onProgress: (i, n) => setBusy(`Odczyt PDF ${file.name}: strona ${i}/${n}…`) });
+          if (r.pageTexts.some((t) => t.trim())) {
+            const budget = Math.max(12000, Math.min(PDF_DIGEST_CHARS, MAX_TEXT - textUsed));
+            const d = reportDigest(r.pageTexts, { maxChars: budget });
+            textUsed += d.chars;
+            const kept = d.kept.length && d.kept.length < r.totalPages ? `${d.kept.length}/${r.totalPages} str. (esencja finansowa)` : `${r.pages}/${r.totalPages} str.`;
+            setFiles((f) => [...f, { id, name: file.name, kind: 'text', text: d.text, size: file.size, note: `PDF → tekst, ${kept}${d.rawChars > d.chars ? ` · ${kb(d.chars)} z ${kb(d.rawChars)}` : ''}` }]);
+          } else if (file.size <= MAX_PDF_INLINE && used + file.size * 1.37 <= MAX_B64) {
             setBusy(`Wczytywanie PDF: ${file.name}…`);
             const data = await b64Of(file);
             used += data.length;
-            setFiles((f) => [...f, { id, name: file.name, kind: 'pdf', mime: 'application/pdf', data, size: file.size }]);
+            setFiles((f) => [...f, { id, name: file.name, kind: 'pdf', mime: 'application/pdf', data, size: file.size, note: 'skan – bez warstwy tekstowej' }]);
           } else {
-            // Duży raport: tekst wyciągnięty w przeglądarce (tabele zachowane jako wiersze)
-            setBusy(`Odczyt tekstu z PDF: ${file.name}…`);
-            const { pdfToText } = await import('../../lib/pdfText.js');
-            const r = await pdfToText(file, { onProgress: (i, n) => setBusy(`Odczyt PDF ${file.name}: strona ${i}/${n}…`) });
-            if (!r.text.trim()) throw new Error('PDF nie zawiera tekstu (skan) – dodaj zrzuty ekranu kluczowych tabel');
-            setFiles((f) => [...f, { id, name: file.name, kind: 'text', text: r.text, size: file.size, note: `PDF → tekst, ${r.pages}/${r.totalPages} str.${r.truncated ? ' (skrócony)' : ''}` }]);
+            throw new Error('PDF nie zawiera tekstu (skan) – dodaj zrzuty ekranu kluczowych tabel');
           }
         } else if (file.type.startsWith('text/') || TEXT_RE.test(file.name)) {
           const raw = await file.text();
@@ -268,7 +278,7 @@ export default function EarningsAnalyst() {
             Profil spółki {matched.ticker || matched.name} z Ustawień zostanie użyty jako kontekst
           </p>
         )}
-        <p className="text-[11px] text-stone-500 dark:text-stone-400">Analityk korzysta wyłącznie z Twoich materiałów (bez wyszukiwania w internecie). Duże raporty PDF są zamieniane na tekst w przeglądarce.</p>
+        <p className="text-[11px] text-stone-500 dark:text-stone-400">Analityk korzysta wyłącznie z Twoich materiałów (bez wyszukiwania w internecie). Z raportów PDF do AI trafia tylko esencja finansowa (sprawozdania, wybrane dane, komentarz zarządu) – wyciągnięta w przeglądarce.</p>
       </form>
 
       {seeds.length > 0 && (
