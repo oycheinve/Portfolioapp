@@ -736,7 +736,7 @@ function DailyTile({ rows, month, savingsSpent = 0, entries = [] }) {
     }
   };
   const row = named.find((r) => r.name === pick) || defaultFoodRow(rows);
-  const pace = spendingPace(row, month);
+  const pace = spendingPace(row, month, new Date(), entries);
   // Wydane dzisiaj (bieżący miesiąc): wpisy z „Dodaj zakup” i paragonów z dzisiejszą datą – bez „Z oszczędności”
   // i kategorii-transferów; osobno kwota w wybranej kategorii
   const todayLocal = new Date().toLocaleDateString('sv');
@@ -796,8 +796,9 @@ function DailyTile({ rows, month, savingsSpent = 0, entries = [] }) {
       </p>
       {pace && (
         <p className={`mt-1 text-[11px] tabular ${pace.over ? 'text-amber-700 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'}`} aria-label="Tempo wydatków">
-          {pace.over ? '⚠️ ' : ''}Przy obecnym tempie wydasz na „{row.name}” ok. {zl(pace.projected)}
-          {pace.planned > 0 ? (pace.over ? ` – o ${zl(pace.diff)} ponad plan` : ` – w planie (${zl(pace.planned)})`) : ''}
+          {pace.over ? '⚠️ ' : ''}
+          {pace.mode === 'pace' ? `Przy obecnym tempie wydasz na „${row.name}” ok. ${zl(pace.projected)}` : `Prognoza na koniec miesiąca dla „${row.name}”: ${zl(pace.projected)}`}
+          {pace.planned > 0 ? (pace.over ? ` – o ${zl(pace.diff)} ponad plan` : pace.mode === 'pace' ? ` – w planie (${zl(pace.planned)})` : toNum(row.spent) >= pace.planned - 0.004 ? ' – opłacone zgodnie z planem' : ` – opłata stała / jednorazowa (plan ${zl(pace.planned)})`) : ''}
         </p>
       )}
       {(investRows.length > 0 || savingsSpent > 0) && (

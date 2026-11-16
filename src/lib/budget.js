@@ -142,10 +142,15 @@ export function dailyAllowance(row, month, now = new Date()) {
   return { daysInMonth, daysLeft, planned, left, perDay: daysLeft > 0 ? Math.max(0, left) / daysLeft : 0, planPerDay: planned / daysInMonth, past: month < current };
 }
 
-// Tempo wydatków w bieżącym miesiącu: prognoza na koniec miesiąca przy dotychczasowym średnim dziennym tempie
-// (wydane / dni, które minęły, z dzisiejszym × dni w miesiącu). Liczona od 3. dnia miesiąca (wcześniej – za mało
-// danych); dla innych miesięcy – null. over – prognoza ponad plan (z marginesem 1%).
-export function spendingPace(row, month, now = new Date()) {
+// Tempo wydatków w bieżącym miesiącu (prognoza na koniec miesiąca) – wyłącznie z historii danej kategorii:
+// • opłata jednorazowa / stała – typ „Stałe koszty”, „Inwestycje”, „Oszczędności” albo najwyżej jeden wpis w
+//   miesiącu (np. abonament Canal+, bilet miesięczny): prognoza = wydane, a gdy mniej niż plan – plan (bez
+//   przeliczania dziennym tempem); ostrzeżenie tylko przy faktycznym przekroczeniu planu;
+// • kategoria w pełni wykorzystana (pozostało 0) bez wpisu dzisiaj – prognoza = wydane;
+// • pozostałe (kilka wpisów) – średnie dzienne tempo tej kategorii (wydane / dni, które minęły × dni w miesiącu).
+// entries – dziennik miesiąca (wpisy z „Dodaj zakup” / paragonów: { rowId, amount, at }). Od 3. dnia miesiąca.
+const ONE_OFF_TYPES = new Set(['Stałe koszty', 'Inwestycje', 'Oszczędności']);
+export function spendingPace(row, month, now = new Date(), entries = []) {
   if (!row || month !== monthKey(now)) return null;
   const [y, m] = month.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
@@ -153,6 +158,11 @@ export function spendingPace(row, month, now = new Date()) {
   const spent = num(row.spent);
   const planned = num(row.planned);
   if (elapsed < 3 || spent <= 0) return null;
-  const projected = Math.round((spent / elapsed) * daysInMonth);
-  return { projected, planned, diff: projected - planned, over: planned > 0 && projected > planned * 1.01, elapsed, daysInMonth };
+  const own = (entries || []).filter((e) => e && e.rowId === row.id);
+  const today = now.toLocaleDateString('sv');
+  const todayMoved = own.some((e) => e.at && new Date(e.at).toLocaleDateString('sv') === today);
+  const result = (projected, mode) => ({ projected, planned, diff: projected - planned, over: planned > 0 && projected > planned + 0.004, elapsed, daysInMonth, mode });
+  if (ONE_OFF_TYPES.has(row.type) || own.length <= 1) return result(Math.round(Math.max(spent, planned) * 100) / 100, 'oneoff');
+  if (planned > 0 && spent >= planned - 0.004 && !todayMoved) return result(Math.round(spent * 100) / 100, 'closed');
+  return result(Math.round((spent / elapsed) * daysInMonth), 'pace');
 }
