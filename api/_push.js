@@ -10,7 +10,7 @@ import { fetchNews } from './news.js';
 import { proxyYahoo } from './yahoo.js';
 import { parseYahooChart } from '../src/lib/prices.js';
 import { quoteDayChangePct } from '../src/lib/engine.js';
-import { articlesMessage, dueKinds, freshArticles, localClock, quietHour, newsDigest, newsDigestMessage, normalizePrefs, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../src/lib/notifyPlan.js';
+import { articlesMessage, dueKinds, monthlySummaryMessage, weeklySummaryMessage, freshArticles, localClock, quietHour, newsDigest, newsDigestMessage, normalizePrefs, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../src/lib/notifyPlan.js';
 
 const MAX_TOPICS = 30; // spółki z portfela (do 15) + Twoje frazy z Newsów
 
@@ -152,6 +152,10 @@ export async function runPushCron({ cfg, sb, now = new Date(), dry = false, load
         const { topics: all, items } = await loadNewsFn(sub.watch);
         const topics = all.filter((t) => !String(t.id).startsWith('custom:')); // raport – tylko spółki z portfela (jak dotąd)
         msg = topics.length ? newsDigestMessage(newsDigest(items, topics, previousDay(clock.day), sub.tz), prefs.news.min) : null;
+      } else if (kind === 'weekly') {
+        msg = weeklySummaryMessage();
+      } else if (kind === 'monthly') {
+        msg = monthlySummaryMessage(clock.day);
       } else if (kind === 'articles') {
         const { topics, items } = await loadNewsFn(sub.watch);
         const { fresh, state } = freshArticles(items, topics, lastSent.articles, now);

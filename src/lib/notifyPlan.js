@@ -1,7 +1,8 @@
 // Treść powiadomień – czyste funkcje wspólne dla aplikacji (harmonogram lokalny) i serwera (/api/push-cron):
 //  • wieczorne przypomnienie o niewykonanych zadaniach dziennych,
 //  • poranne / południowe podsumowanie wiadomości z poprzedniego dnia o spółkach z portfela (od progu liczby artykułów),
-//  • zmiany notowań – dzisiejsza zmiana spółki z portfela przekracza próg (domyślnie ±4%).
+//  • zmiany notowań – dzisiejsza zmiana spółki z portfela przekracza próg (domyślnie ±4%),
+//  • niedziela wieczorem – przegląd tygodnia; ostatni dzień miesiąca wieczorem – podsumowanie miesiąca.
 // Bez zależności od przeglądarki i Reacta.
 import { GENERAL_ID, classifyArticle } from './newsSubject.js';
 import { isNoiseTitle } from './newsFilter.js';
@@ -20,7 +21,10 @@ export const DEFAULT_PREFS = {
   news: { on: false, min: 3, slot: 'MORNING' },
   prices: { on: false, threshold: 4 },
   articles: { on: false }, // nowy artykuł w Newsach (spółki z portfela + Twoje frazy) – co godzinę, poza nocą
+  weekly: { on: true }, // niedziela wieczorem (od SUMMARY_HOUR) – przegląd tygodnia
+  monthly: { on: true }, // ostatni dzień miesiąca wieczorem – podsumowanie miesiąca (budżet, portfel)
 };
+export const SUMMARY_HOUR = 19; // podsumowania tygodnia / miesiąca: od 19:00 do 22:59
 
 // Ustawienia z zapisu (także starszego formatu { enabled, taskHour }) z poprawnymi wartościami domyślnymi
 export function normalizePrefs(raw = {}) {
@@ -39,6 +43,8 @@ export function normalizePrefs(raw = {}) {
       threshold: Math.max(1, Math.min(20, Number(r.prices?.threshold) || DEFAULT_PREFS.prices.threshold)),
     },
     articles: { on: !!r.articles?.on },
+    weekly: { on: r.weekly ? r.weekly.on !== false : true },
+    monthly: { on: r.monthly ? r.monthly.on !== false : true },
   };
 }
 
@@ -123,7 +129,40 @@ export function dueKinds(prefs, clock, lastSent = {}) {
   // Podsumowanie wiadomości w oknie 6 godzin od wybranej pory (nie wieczorem, gdy aplikację otwarto później)
   const h = NEWS_SLOTS[p.news.slot].hour;
   if (p.news.on && clock.hour >= h && clock.hour < h + 6 && lastSent.news !== clock.day) out.push('news');
+  // Podsumowania wieczorem (19:00–22:59): niedziela – tydzień, ostatni dzień miesiąca – miesiąc
+  const evening = clock.hour >= SUMMARY_HOUR && clock.hour < 23;
+  if (p.weekly.on && evening && isSunday(clock.day) && lastSent.weekly !== clock.day) out.push('weekly');
+  if (p.monthly.on && evening && isLastDayOfMonth(clock.day) && lastSent.monthly !== clock.day) out.push('monthly');
   return out;
+}
+
+const dayDate = (day) => {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+};
+export const isSunday = (day) => dayDate(day).getUTCDay() === 0;
+export const isLastDayOfMonth = (day) => {
+  const d = dayDate(day);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)).getUTCDate() === 1;
+};
+const MONTHS_PL = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'];
+
+export function weeklySummaryMessage() {
+  return {
+    title: NOTIFY_TITLE,
+    body: '🗓️ Koniec tygodnia! Zajrzyj do przeglądu tygodnia – jak poszło Twojemu portfelowi, największe ruchy spółek i dywidendy. 📈',
+    url: '/#/portfolio',
+    tag: 'weekly-summary',
+  };
+}
+export function monthlySummaryMessage(day) {
+  const month = MONTHS_PL[dayDate(day).getUTCMonth()];
+  return {
+    title: NOTIFY_TITLE,
+    body: `📅 Ostatni dzień miesiąca (${month})! Uzupełnij wydatki w Budżecie – jutro czeka podsumowanie miesiąca i wynik portfela. 💰`,
+    url: '/#/budget',
+    tag: 'monthly-summary',
+  };
 }
 
 // ── Zmiany notowań (alarm cenowy) ──

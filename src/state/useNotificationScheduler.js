@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { loadAllTasks } from '../lib/taskStats.js';
 import { fetchNewsMany, heldNewsTopics, notifyTopics } from '../lib/news.js';
-import { dueKinds, localClock, newsDigest, newsDigestMessage, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../lib/notifyPlan.js';
+import { dueKinds, localClock, monthlySummaryMessage, weeklySummaryMessage, newsDigest, newsDigestMessage, previousDay, priceAlertMessage, priceAlerts, tasksReminderMessage, unfinishedDailyTasks } from '../lib/notifyPlan.js';
 import { heldDayChanges } from '../lib/priceAlerts.js';
 import { markSent, notificationPermission, readNotifySettings, readSent, showNotification, syncPushSubscription, writeSentState } from '../lib/notifications.js';
 
@@ -40,6 +40,9 @@ export function useNotificationScheduler(state, userId) {
             const { items } = await fetchNewsMany(topics, { force: false });
             const msg = newsDigestMessage(newsDigest(items, topics, previousDay(clock.day)), prefs.news.min);
             if (msg) await showNotification(msg.title, msg);
+          } else if (kind === 'weekly' || kind === 'monthly') {
+            const msg = kind === 'weekly' ? weeklySummaryMessage() : monthlySummaryMessage(clock.day);
+            await showNotification(msg.title, msg);
           }
         }
       } catch {

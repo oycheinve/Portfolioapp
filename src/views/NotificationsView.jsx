@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Bell, BellOff, CalendarCheck2, Cloud, Eye, Newspaper, Send, Smartphone } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { NEWS_SLOTS, NOTIFY_TITLE, localClock, newsDigest, newsDigestMessage, previousDay, priceAlertMessage } from '../lib/notifyPlan.js';
+import { NEWS_SLOTS, NOTIFY_TITLE, SUMMARY_HOUR, localClock, newsDigest, newsDigestMessage, previousDay, priceAlertMessage } from '../lib/notifyPlan.js';
 import { heldDayChanges } from '../lib/priceAlerts.js';
 import {
   currentPushSubscription,
@@ -69,7 +69,7 @@ export default function NotificationsView() {
   }, []);
 
   const save = (patch) => {
-    const next = { ...prefs, ...patch, tasks: { ...prefs.tasks, ...(patch.tasks || {}) }, news: { ...prefs.news, ...(patch.news || {}) }, prices: { ...prefs.prices, ...(patch.prices || {}) }, articles: { ...(prefs.articles || {}), ...(patch.articles || {}) } };
+    const next = { ...prefs, ...patch, tasks: { ...prefs.tasks, ...(patch.tasks || {}) }, news: { ...prefs.news, ...(patch.news || {}) }, prices: { ...prefs.prices, ...(patch.prices || {}) }, articles: { ...(prefs.articles || {}), ...(patch.articles || {}) }, weekly: { ...(prefs.weekly || {}), ...(patch.weekly || {}) }, monthly: { ...(prefs.monthly || {}), ...(patch.monthly || {}) } };
     setPrefs(next);
     writeNotifySettings(next);
     if (pushSub && userId) syncPushSubscription(userId, next, watch).catch((e) => actions.notify(`Powiadomienia z serwera: ${e.message}`, 'warn'));
@@ -211,6 +211,20 @@ export default function NotificationsView() {
             </select>
           </label>
           <p className="text-[11px] text-stone-500 dark:text-stone-400">Np. „FinTrack 📊 – ⏳ Zostały Ci 2 zadania na dziś: Sprawdzenie portfela, Zapisanie wydatków. ✅ Odhacz je przed końcem dnia!” Raz dziennie; bez powiadomienia, gdy wszystko jest odhaczone.</p>
+        </div>
+      </Card>
+
+      <Card title="Podsumowania tygodnia i miesiąca" subtitle="Przypomnienie wieczorem: w niedzielę i ostatniego dnia miesiąca" icon={CalendarCheck2}>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-stone-700 dark:text-stone-200">Niedziela wieczorem – przegląd tygodnia</span>
+            <Switch on={prefs.weekly?.on !== false} onChange={(v) => save({ weekly: { on: v } })} label="Powiadomienie o przeglądzie tygodnia" disabled={!ready} />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-stone-700 dark:text-stone-200">Koniec miesiąca – podsumowanie miesiąca</span>
+            <Switch on={prefs.monthly?.on !== false} onChange={(v) => save({ monthly: { on: v } })} label="Powiadomienie o podsumowaniu miesiąca" disabled={!ready} />
+          </div>
+          <p className="text-[11px] text-stone-500 dark:text-stone-400">Od {SUMMARY_HOUR}:00. Np. „FinTrack 📊 – 🗓️ Koniec tygodnia! Zajrzyj do przeglądu tygodnia…” (otwiera Portfel z przeglądem tygodnia) i „📅 Ostatni dzień miesiąca (listopad)! Uzupełnij wydatki w Budżecie – jutro czeka podsumowanie miesiąca…” (otwiera Budżet). Raz w tygodniu / raz w miesiącu.</p>
         </div>
       </Card>
 
@@ -415,6 +429,7 @@ function PushDiagnostics({ diag, permission }) {
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
             <li>{prefs.tasks?.on === false ? 'Przypomnienie o zadaniach – wyłączone' : `Przypomnienie o zadaniach – raz dziennie od ${hour}:00, tylko gdy masz niewykonane zadania dzienne${dev.lastSent?.tasks ? ` (ostatnio sprawdzone: ${dev.lastSent.tasks})` : ''}`}</li>
             <li>{prefs.news?.on ? `Podsumowanie wiadomości – ${prefs.news.slot === 'NOON' ? 'w południe' : 'rano'}, gdy jest co najmniej ${prefs.news.min || 3} newsów o Twoich spółkach` : 'Podsumowanie wiadomości – wyłączone'}</li>
+            <li>{`Przegląd tygodnia – ${prefs.weekly?.on === false ? 'wyłączony' : `w niedzielę od ${SUMMARY_HOUR}:00`}; podsumowanie miesiąca – ${prefs.monthly?.on === false ? 'wyłączone' : `ostatniego dnia miesiąca od ${SUMMARY_HOUR}:00`}`}</li>
             <li>{prefs.prices?.on ? `Zmiany notowań – w czasie sesji, przy ruchu ≥ ${prefs.prices.threshold || 4}%` : 'Zmiany notowań – wyłączone'}</li>
           </ul>
           <p className="mt-1 text-stone-500 dark:text-stone-400">Serwer wysyła tylko w tych porach i tylko gdy jest o czym przypomnieć – poza tym telefon milczy.</p>
