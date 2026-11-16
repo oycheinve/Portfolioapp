@@ -9,6 +9,10 @@
 // • AI (fallback, `wealth-app-shopping-ai-prices-v1`): gdy słowa nie pasują – dopasowanie semantyczne do nazwy z paragonów
 //   (match → cena z historii tej pozycji), a gdy produktu nigdy nie kupowano – szacunek ceny rynkowej (source 'ai').
 //   Wynik zapamiętany per produkt; szacunki rynkowe odświeżane po AI_TTL_DAYS.
+// • Waga: pozycja ważona na paragonie (unit „kg” od AI albo ilość niecałkowita, np. 0,734) daje też cenę za kg
+//   (wartość / waga). Ilość na liście z jednostką wagi („1,5 kg”, „500 g”, „50 dag”) → koszt = cena za kg × waga
+//   (z paragonów, Twojej ceny za kg albo szacunku AI za kg). Ilość w sztukach – jak dotąd (cena za sztukę / typowy
+//   zakup na wagę × liczba sztuk). Brak ceny za kg przy ilości w wadze – cena jak bez ilości (bez przeliczenia).
 import { PREFS_CHANGED_EVENT } from './budget.js';
 import { readReceipts } from './receipts.js';
 
@@ -40,7 +44,9 @@ export function buildPriceIndex(receipts = readReceipts()) {
       const net = price - (Number(it.deposit) || 0); // cena bez kaucji (kaucja doliczana przy szacunku)
       if (!(net > 0)) continue;
       const unit = q >= 1 && Number.isInteger(q) ? net / q : net;
-      out.push({ name: it.name, words: words(it.name), full: priceKey(it.name), unit: round2(unit), date });
+      // Ważone: oznaczone przez AI („kg”) albo ilość niecałkowita (waga w kg)
+      const weighed = q > 0 && q < 50 && (it.unit === 'kg' || !Number.isInteger(q));
+      out.push({ name: it.name, words: words(it.name), full: priceKey(it.name), unit: round2(unit), ...(weighed ? { perKg: round2(net / q), kg: q } : {}), date });
     }
   }
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date))); // najnowsze najpierw
@@ -63,11 +69,12 @@ export function readPriceOverrides() {
     return {};
   }
 }
-export function writePriceOverride(title, price) {
+// per: 'kg' – Twoja cena za kilogram (pozycja z ilością w wadze); bez – za sztukę / opakowanie
+export function writePriceOverride(title, price, per) {
   const all = readPriceOverrides();
   const k = priceKey(title);
   if (price === null || price === undefined || !(Number(price) > 0)) delete all[k];
-  else all[k] = { price: round2(Number(price)), at: new Date().toISOString().slice(0, 10) };
+  else all[k] = { price: round2(Number(price)), ...(per === 'kg' ? { per: 'kg' } : {}), at: new Date().toISOString().slice(0, 10) };
   try {
     localStorage.setItem(PRICES_KEY, JSON.stringify(all));
     window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: { key: PRICES_KEY } }));
@@ -87,6 +94,22 @@ export function quantityFactor(q) {
   return n >= 1 && n <= 99 ? n : 1;
 }
 
+// Ilość z listy: { kind: 'kg', kg } dla wagi („1,5 kg”, „0.5kg”, „500 g”, „50 dag”), { kind: 'szt', n } dla sztuk,
+// null – brak / nieczytelna
+export function parseQuantity(q) {
+  const t = String(q || '').trim().toLowerCase().replace(',', '.');
+  if (!t) return null;
+  const w = t.match(/^(\d+(?:\.\d+)?)\s*(kg|kilo|g|gr|dag|dkg)\.?$/);
+  if (w) {
+    const v = Number(w[1]);
+    const kg = w[2] === 'g' || w[2] === 'gr' ? v / 1000 : w[2] === 'dag' || w[2] === 'dkg' ? v / 100 : v;
+    return kg > 0 && kg <= 100 ? { kind: 'kg', kg: Math.round(kg * 1000) / 1000 } : null;
+  }
+  const n = t.match(/^(\d+)\s*(szt\.?|x|×|op\.?|opak\.?)?$/);
+  return n && Number(n[1]) >= 1 && Number(n[1]) <= 99 ? { kind: 'szt', n: Number(n[1]) } : null;
+}
+export const formatKg = (kg) => (kg < 1 ? `${Math.round(kg * 1000)} g` : `${String(Math.round(kg * 1000) / 1000).replace('.', ',')} kg`);
+
 export function readAiPrices() {
   try {
     const v = JSON.parse(localStorage.getItem(AI_PRICES_KEY) || '{}');
@@ -101,7 +124,7 @@ export function writeAiPrices(titles, prices) {
   const at = new Date().toISOString().slice(0, 10);
   for (const t of titles) {
     const x = prices[t];
-    all[priceKey(t)] = x ? { match: x.match || '', price: Number(x.price) > 0 ? round2(Number(x.price)) : null, unit: x.unit || '', at } : { match: '', price: null, unit: '', at };
+    all[priceKey(t)] = x ? { match: x.match || '', price: Number(x.price) > 0 ? round2(Number(x.price)) : null, unit: x.unit || '', ...(x.per === 'kg' ? { per: 'kg' } : {}), at } : { match: '', price: null, unit: '', at };
   }
   try {
     localStorage.setItem(AI_PRICES_KEY, JSON.stringify(all));
@@ -124,7 +147,11 @@ export function needsAiPrice(title, index, overrides = readPriceOverrides(), ai 
 // Nazwy produktów z paragonów (najnowsze najpierw, bez powtórzeń) – kontekst dopasowania semantycznego
 export const knownProducts = (index, limit = 400) => [...new Set(index.map((x) => x.name))].slice(0, limit);
 
-// Szacunek ceny produktu: { price, source: 'user' | 'receipts', last, lastDate, avg, count, factor, total }
+// Cena AI za kg: oznaczona „per: kg” albo (starsze zapisy) jednostka „1 kg” / „kg”
+const aiPerKg = (a) => !!a && (a.per === 'kg' || (a.per === undefined && /^\s*(1\s*)?kg\b/i.test(String(a.unit || ''))));
+
+// Szacunek ceny produktu: { price, source: 'user' | 'receipts' | 'ai', last, lastDate, avg, count, factor, total,
+//   mode: 'kg' (cena za kg × waga z listy) | 'szt', perKg, weightKg, typicalKg, noWeightPrice }
 // deposit – kaucja za sztukę (napoje w butelce / puszce), doliczana do ceny z paragonów i z AI (nie do Twojej ceny)
 export function estimatePrice(title, quantity, index, overrides = readPriceOverrides(), ai = {}, deposit = 0) {
   const a = ai[priceKey(title)];
@@ -139,13 +166,51 @@ export function estimatePrice(title, quantity, index, overrides = readPriceOverr
   const last = hits[0] || null;
   const ov = overrides[priceKey(title)];
   const useOverride = ov && (!last || String(ov.at) >= String(last.date));
+  // Cena za kg z ostatnich ważonych zakupów (paragony) i typowa waga zakupu
+  const weighed = hits.filter((x) => x.perKg > 0).slice(0, RECENT);
+  const receiptsPerKg = weighed.length ? round2(weighed.reduce((s, x) => s + x.perKg, 0) / weighed.length) : null;
+  const typicalKg = weighed.length ? Math.round((weighed.reduce((s, x) => s + x.kg, 0) / weighed.length) * 1000) / 1000 : null;
+  const q = parseQuantity(quantity);
+
+  // Ilość w wadze → cena za kg × waga
+  if (q?.kind === 'kg') {
+    const userKg = useOverride && ov.per === 'kg' ? ov.price : null;
+    const aiKg = !useOverride && receiptsPerKg === null && avg === null && a?.price > 0 && aiPerKg(a) ? a.price : null;
+    const perKg = userKg ?? (receiptsPerKg !== null && !(useOverride && ov.per !== 'kg') ? receiptsPerKg : null) ?? aiKg;
+    if (perKg !== null) {
+      const lastKg = weighed[0] || null;
+      const source = userKg !== null ? 'user' : aiKg !== null ? 'ai' : 'receipts';
+      return { price: perKg, source, mode: 'kg', perKg, weightKg: q.kg, typicalKg, deposit: 0, semantic, aiUnit: source === 'ai' ? a.unit || '1 kg' : '', last: lastKg?.perKg ?? null, lastDate: lastKg?.date || '', lastName: lastKg?.name || '', avg: receiptsPerKg, count: weighed.length, factor: 1, total: round2(perKg * q.kg) };
+    }
+  }
+
   const aiPrice = !useOverride && avg === null && a?.price > 0 ? a.price : null;
   const base = useOverride ? ov.price : avg ?? aiPrice;
   if (base === null || base === undefined) return null;
   const dep = useOverride ? 0 : Number(deposit) || 0;
   const price = round2(base + dep);
   const factor = quantityFactor(quantity);
-  return { price, source: useOverride ? 'user' : aiPrice !== null ? 'ai' : 'receipts', deposit: dep, semantic, aiUnit: aiPrice !== null ? a.unit || '' : '', last: last?.unit ?? null, lastDate: last?.date || '', lastName: last?.name || '', avg, count: hits.length, factor, total: round2(price * factor) };
+  const unitKg = (useOverride && ov.per === 'kg') || (aiPrice !== null && aiPerKg(a));
+  return {
+    price,
+    source: useOverride ? 'user' : aiPrice !== null ? 'ai' : 'receipts',
+    mode: 'szt',
+    perKg: unitKg ? price : receiptsPerKg,
+    priceIsPerKg: unitKg, // cena dotyczy 1 kg (Twoja / AI), a ilość nie jest w wadze
+    weightKg: null,
+    typicalKg: !useOverride && aiPrice === null ? typicalKg : null, // „typowy zakup” na wagę z paragonów
+    noWeightPrice: q?.kind === 'kg', // ilość w wadze, ale brak ceny za kg – bez przeliczenia
+    deposit: dep,
+    semantic,
+    aiUnit: aiPrice !== null ? a.unit || '' : '',
+    last: last?.unit ?? null,
+    lastDate: last?.date || '',
+    lastName: last?.name || '',
+    avg,
+    count: hits.length,
+    factor,
+    total: round2(price * factor),
+  };
 }
 
 export const formatZl = (v) => `${Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;

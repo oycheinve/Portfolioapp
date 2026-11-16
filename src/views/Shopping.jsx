@@ -5,7 +5,7 @@ import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortIte
 import { SHOPPING_CATEGORIES, categoryOf, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
 import { requestShoppingCategories, requestShoppingPrices } from '../lib/newsAi.js';
 import { aiOn } from '../lib/aiFeatures.js';
-import { AI_PRICES_KEY, PRICES_KEY, buildPriceIndex, estimatePrice, formatZl, knownProducts, needsAiPrice, readAiPrices, readPriceOverrides, writeAiPrices, writePriceOverride } from '../lib/shoppingPrices.js';
+import { AI_PRICES_KEY, PRICES_KEY, buildPriceIndex, estimatePrice, formatKg, formatZl, parseQuantity, knownProducts, needsAiPrice, readAiPrices, readPriceOverrides, writeAiPrices, writePriceOverride } from '../lib/shoppingPrices.js';
 import { DEPOSIT, RECEIPTS_KEY, isDepositDrink } from '../lib/receipts.js';
 import { PREFS_CHANGED_EVENT } from '../lib/budget.js';
 
@@ -116,13 +116,20 @@ export default function ShoppingView() {
   // ── Pozycje ──
   const [title, setTitle] = useState('');
   const [qty, setQty] = useState('');
+  // Jednostka ilości: sztuki (jak dotąd – sama liczba) albo waga (kg / g – cena przeliczana z ceny za kg)
+  const [qtyUnit, setQtyUnit] = useState('szt');
+  const qtyText = () => {
+    const v = qty.trim();
+    if (!v || qtyUnit === 'szt' || /[a-ząćęłńóśźż]/i.test(v)) return v; // własny zapis („2 opak.”, „1 kg”) – bez zmian
+    return `${v.replace('.', ',')} ${qtyUnit}`;
+  };
   const titleRef = useRef(null);
   // Dodanie produktu (z pola albo z podpowiedzi): zapis w uczącej się pamięci – użycie i kategoria rozpoznana
   // lokalnie (pamięć / słowo kluczowe / słownik); produkt nowy dostanie kategorię od AI (efekt poniżej)
   const addProduct = (name) => {
     const t = String(name || '').trim();
     if (!current || !t) return;
-    const item = makeItem(current.id, t, qty);
+    const item = makeItem(current.id, t, qtyText());
     run((d) => ({ ...d, items: [...d.items, item] }), () => store.addItem(item));
     setAiCats((prev) => {
       const r = resolveLocal(t, prev);
@@ -267,7 +274,7 @@ export default function ShoppingView() {
   const openPrice = (it) => {
     if (priceFor === it.id) return setPriceFor(null);
     const est = estimates[it.id];
-    setPriceDraft(est ? String(est.price).replace('.', ',') : '');
+    setPriceDraft(est && (est.mode === 'kg' || parseQuantity(it.quantity)?.kind !== 'kg' || est.priceIsPerKg) ? String(est.price).replace('.', ',') : '');
     setPriceFor(it.id);
     return undefined;
   };
@@ -275,7 +282,7 @@ export default function ShoppingView() {
     e.preventDefault();
     const v = Number(String(priceDraft).replace(/\s/g, '').replace(',', '.'));
     if (!(v > 0)) return;
-    writePriceOverride(it.title, v);
+    writePriceOverride(it.title, v, parseQuantity(it.quantity)?.kind === 'kg' ? 'kg' : undefined);
     setPriceFor(null);
   };
   const resetPrice = (it) => {
@@ -302,10 +309,13 @@ export default function ShoppingView() {
   const priceEditor = (it) => {
     if (priceFor !== it.id) return null;
     const est = estimates[it.id];
+    const byWeight = parseQuantity(it.quantity)?.kind === 'kg'; // ilość w wadze – cena wpisywana za kg
     return (
       <form onSubmit={(e) => savePrice(e, it)} className="mx-2 mb-1.5 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs dark:border-white/10 dark:bg-white/[0.03]" aria-label={`Cena ${it.title}`}>
         <p className="text-stone-600 dark:text-stone-300">
-          {est?.source === 'ai'
+          {est?.mode === 'kg'
+            ? `${est.source === 'ai' ? 'Szacunek AI – cena rynkowa za 1 kg' : est.source === 'user' ? 'Twoja cena za 1 kg' : `${est.semantic ? 'AI dopasowało do paragonów. ' : ''}Z paragonów (na wagę): ostatnio ${formatZl(est.last)}/kg${est.lastDate ? ` (${est.lastDate.split('-').reverse().join('.')})` : ''}${est.count > 1 ? `, średnio ${formatZl(est.avg)}/kg` : ''}${est.lastName && est.lastName.toLowerCase() !== it.title.toLowerCase() ? ` · „${est.lastName}”` : ''}`}: ${formatZl(est.perKg)}/kg × ${formatKg(est.weightKg)} = ${formatZl(est.total)}`
+            : est?.source === 'ai'
             ? `Szacunek AI – cena rynkowa${est.aiUnit ? ` za ${est.aiUnit}` : ''} (tego produktu nie ma jeszcze na Twoich paragonach). Popraw, jeśli płacisz inaczej.`
             : est?.last !== null && est?.last !== undefined
             ? `${est.semantic ? 'AI dopasowało do paragonów. ' : ''}Z paragonów: ostatnio ${formatZl(est.last)}${est.lastDate ? ` (${est.lastDate.split('-').reverse().join('.')})` : ''}${est.count > 1 ? `, średnio ${formatZl(est.avg)} (ostatnie ${Math.min(est.count, 3)} z ${est.count})` : ''}${est.lastName && est.lastName.toLowerCase() !== it.title.toLowerCase() ? ` · „${est.lastName}”` : ''}`
@@ -313,10 +323,12 @@ export default function ShoppingView() {
           {est?.deposit > 0 ? ` · w tym kaucja ${formatZl(est.deposit)}` : ''}
           {est?.source === 'user' ? ' · używasz swojej ceny' : ''}
           {est && est.factor > 1 ? ` · × ${est.factor} szt.` : ''}
+          {est?.mode === 'szt' && est.typicalKg ? ` · cena za typowy zakup na wagę (ok. ${formatKg(est.typicalKg)}${est.perKg ? `, ${formatZl(est.perKg)}/kg` : ''}) – wybierz ilość w kg / g, by przeliczyć` : ''}
+          {est?.noWeightPrice ? ' · brak ceny za kg – wpisz ją, by przeliczać według wagi' : ''}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input autoFocus inputMode="decimal" value={priceDraft} onChange={(e) => setPriceDraft(e.target.value)} placeholder="Cena za szt." aria-label={`Twoja cena ${it.title}`} className={`${inputCls} h-8 w-28`} />
-          <span className="text-stone-400">zł / szt.</span>
+          <input autoFocus inputMode="decimal" value={priceDraft} onChange={(e) => setPriceDraft(e.target.value)} placeholder={byWeight ? 'Cena za kg' : 'Cena za szt.'} aria-label={`Twoja cena ${it.title}`} className={`${inputCls} h-8 w-28`} />
+          <span className="text-stone-400">{byWeight ? 'zł / kg' : 'zł / szt.'}</span>
           <button type="submit" className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-600 px-2.5 font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-neutral-950">
             <Check size={13} /> Zapisz
           </button>
@@ -445,7 +457,14 @@ export default function ShoppingView() {
 
           <form onSubmit={addItem} className="flex gap-2 px-3 pt-3 sm:px-4" aria-label="Nowa pozycja">
             <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Dodaj produkt, np. Mleko" aria-label="Nazwa produktu" autoComplete="off" className={`${inputCls} flex-1`} />
-            <input value={qty} onChange={(e) => setQty(e.target.value)} maxLength={30} placeholder="Ilość" aria-label="Ilość" className={`${inputCls} w-20 sm:w-28`} />
+            <div className="flex shrink-0 rounded-lg border border-stone-200 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 dark:border-white/10 dark:bg-neutral-800">
+              <input value={qty} onChange={(e) => setQty(e.target.value)} maxLength={30} inputMode={qtyUnit === 'szt' ? 'text' : 'decimal'} placeholder="Ilość" aria-label="Ilość" className="h-10 w-14 min-w-0 rounded-l-lg bg-transparent px-2.5 text-sm outline-none sm:w-20" />
+              <select value={qtyUnit} onChange={(e) => setQtyUnit(e.target.value)} aria-label="Jednostka ilości" className="h-10 rounded-r-lg border-l border-stone-200 bg-transparent pr-1 pl-1.5 text-xs font-medium text-stone-600 outline-none dark:border-white/10 dark:text-stone-300">
+                <option value="szt">szt.</option>
+                <option value="kg">kg</option>
+                <option value="g">g</option>
+              </select>
+            </div>
             <button type="submit" disabled={!title.trim()} aria-label="Dodaj produkt" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:px-3 dark:bg-blue-500 dark:text-neutral-950">
               <Plus size={18} /> <span className="hidden sm:ml-1 sm:inline sm:text-sm sm:font-semibold">Dodaj</span>
             </button>

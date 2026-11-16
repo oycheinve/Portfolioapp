@@ -9,7 +9,7 @@ import { BetaBadge } from '../ui.jsx';
 const inputCls = 'h-9 min-w-0 rounded-lg border border-stone-200 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-white/10 dark:bg-neutral-800';
 const named = (rows) => rows.filter((r) => String(r.name || '').trim());
 const SOURCE_LABEL = { user: 'poprawione – zapamiętam', memory: 'z pamięci', ai: 'AI', rule: 'dopasowane' };
-const toStored = (rows) => (it) => ({ name: it.name, quantity: it.quantity, price: it.price, category: it.category, rowId: it.rowId, rowName: rows.find((r) => r.id === it.rowId)?.name || it.rowName || '', ...(it.half ? { half: true } : {}), ...(it.deposit ? { deposit: it.deposit } : {}) });
+const toStored = (rows) => (it) => ({ name: it.name, quantity: it.quantity, ...(it.unit === 'kg' ? { unit: 'kg' } : {}), price: it.price, category: it.category, rowId: it.rowId, rowName: rows.find((r) => r.id === it.rowId)?.name || it.rowName || '', ...(it.half ? { half: true } : {}), ...(it.deposit ? { deposit: it.deposit } : {}) });
 
 // Skanowanie paragonu → (weryfikacja) → wydatki w budżecie + historia. rows – kategorie budżetu miesiąca; każda
 // pozycja trafia wyłącznie do jednej z nich (bez nowych podgrup). onSave(receipt, parts) – parts: [{ id, amount }].
