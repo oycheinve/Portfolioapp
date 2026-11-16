@@ -1,4 +1,4 @@
-// Automatyczne kamienie milowe (Cele): progi odhaczane same na podstawie portfela – wkład własny, zysk całkowity,
+// Automatyczne kamienie milowe (Cele): progi odhaczane same na podstawie portfela – wartość całego portfela, zysk całkowity,
 // stopa zwrotu i dywidendy netto z ostatnich 12 miesięcy. Bez górnego limitu: po ostatnim progu z listy kolejne
 // są podwajane. Data pierwszego osiągnięcia progu zapisywana per użytkownik (`wealth-app-milestones-v1`, urządzenie
 // + chmura) – osiągnięty próg zostaje odhaczony także po chwilowym spadku wartości.
@@ -6,11 +6,13 @@ import { PREFS_CHANGED_EVENT } from './budget.js';
 
 export const MILESTONES_KEY = 'wealth-app-milestones-v1';
 
+// Progi gęsto na starcie, coraz rzadziej dalej (ok. ×1,2–1,5 na początku, ×1,3–1,5 wyżej); po ostatnim – podwajanie.
+// „Wartość portfela” zastąpiła „Wartość wpłaconą” (nowe id – zapisane daty starej ścieżki zostają, ale nie są pokazywane). Pasek progów przewija się sam do następnego progu..
 export const MILESTONE_TRACKS = [
-  { id: 'contrib', label: 'Wartość wpłacona', hint: 'wkład własny w portfel inwestycyjny', unit: 'zł', steps: [10000, 25000, 50000, 100000, 250000, 500000, 1000000] },
-  { id: 'gain', label: 'Zysk wygenerowany', hint: 'zysk całkowity od początku (kursy, dywidendy, odsetki)', unit: 'zł', steps: [1000, 5000, 10000, 25000, 50000, 100000, 250000] },
-  { id: 'gainPct', label: 'Procent zysku', hint: 'stopa zwrotu portfela od początku', unit: '%', steps: [5, 10, 25, 50, 100, 200] },
-  { id: 'dividends', label: 'Dywidendy roczne', hint: 'dywidendy netto z ostatnich 12 miesięcy', unit: 'zł/rok', steps: [500, 1000, 2500, 5000, 10000, 25000] },
+  { id: 'value', label: 'Wartość portfela', hint: 'łączna wartość całego portfela (wszystkie konta)', unit: 'zł', steps: [1000, 2000, 3000, 5000, 7500, 10000, 12500, 15000, 20000, 25000, 30000, 40000, 50000, 60000, 75000, 100000, 125000, 150000, 200000, 250000, 300000, 400000, 500000, 750000, 1000000, 1500000, 2000000] },
+  { id: 'gain', label: 'Zysk wygenerowany', hint: 'zysk całkowity od początku (kursy, dywidendy, odsetki)', unit: 'zł', steps: [100, 250, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 7500, 10000, 12500, 15000, 20000, 25000, 35000, 50000, 75000, 100000, 150000, 250000, 500000] },
+  { id: 'gainPct', label: 'Procent zysku', hint: 'stopa zwrotu portfela od początku', unit: '%', steps: [1, 2, 3, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 300] },
+  { id: 'dividends', label: 'Dywidendy roczne', hint: 'dywidendy netto z ostatnich 12 miesięcy', unit: 'zł/rok', steps: [50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 2500, 3500, 5000, 7500, 10000, 15000, 20000, 25000, 50000] },
 ];
 
 // Progi do wyświetlenia: z listy, a powyżej ostatniego – podwajane, aż do pierwszego nieosiągniętego (bez limitu)

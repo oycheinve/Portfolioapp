@@ -82,7 +82,8 @@ export async function weeklyData(state, now = new Date()) {
   const dividends = incomeEventsWithTax(state)
     .filter((i) => i.type === 'DIVIDEND' && i.date > start && i.date <= today)
     .map((i) => ({ spolka: state.instruments.find((x) => x.id === i.instrumentId)?.ticker || '', netto_zl: r0(i.net) }));
-  const values = { contrib: all.contributionsAll || 0, gain: Math.max(0, all.totalReturn || 0), gainPct: Math.max(0, (all.totalReturnPct || 0) * 100), dividends: dividendKpis(state).last12Net || 0 };
+  const whole = computePeriodStats(state, { period: 'ALL', filter: 'ALL', priceAt: resolver.instrumentPLN, preferHistory: true });
+  const values = { value: Math.max(0, whole.endValue || 0), gain: Math.max(0, all.totalReturn || 0), gainPct: Math.max(0, (all.totalReturnPct || 0) * 100), dividends: dividendKpis(state).last12Net || 0 };
   const saved = readMilestones();
   const milestones = MILESTONE_TRACKS.map((t) => {
     const s = trackStatus(t, values[t.id], saved);
