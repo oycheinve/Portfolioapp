@@ -513,6 +513,8 @@ export async function summarize(userContent, spec = null) {
   // Z dostawcami zapasowymi Gemini ma krótszy budżet – reszta czasu dla nich
   const deadline = useFallback ? hardDeadline - FALLBACK_RESERVE_MS : hardDeadline;
   try {
+    // Test konfiguracji: AI_FORCE_FALLBACK=1 – z pominięciem Gemini (tylko zadania, które mogą iść do zapasowych)
+    if (useFallback && env('AI_FORCE_FALLBACK') === '1') throw new ApiError({ message: 'AI_FORCE_FALLBACK – test dostawców zapasowych', status: 503 });
     return await summarizeGemini(key, userContent, spec, deadline);
   } catch (e) {
     const busy = overloaded(e) || timedOut(e);
