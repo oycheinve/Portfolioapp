@@ -166,7 +166,22 @@ export default function EarningsAnalyst() {
     setBusy('AI analizuje Twoje materiały…');
     try {
       const profile = profileContext(matched);
-      const res = await requestEarnings({ query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile });
+      const payload = { query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile };
+      // Przeciążenie modeli Google (503) – do 2 automatycznych ponowień po 15 i 30 s, z odliczaniem w przycisku
+      let res;
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          res = await requestEarnings(payload);
+          break;
+        } catch (err) {
+          if (attempt >= 2 || !/przeciąż|nie zdążył/i.test(err.message || '')) throw err;
+          for (let s = attempt ? 30 : 15; s > 0; s -= 1) {
+            setBusy(`Modele AI przeciążone – ponawiam za ${s} s (próba ${attempt + 2}/3)…`);
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+          setBusy('AI analizuje Twoje materiały…');
+        }
+      }
       if (!res.analysis) throw new Error(res.error || 'Brak analizy');
       if (profile) res.analysis.profileUsed = matched.ticker || matched.name;
       const entry = saveEarnings(res);

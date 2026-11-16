@@ -319,7 +319,12 @@ export const keyKind = (key = apiKey()) => backends(key).join(' → ');
 // Modele po kolei: wybrany (GEMINI_MODEL), domyślny, alias najnowszego „flash”; przy 404 – wykryty z listy modeli
 // Przeciążenie (503), przekroczony czas po stronie Google (504 DEADLINE_EXCEEDED) albo limit modelu (429)
 // → kolejny model z listy (osobne limity darmowego pakietu; wersja lite zwykle odpowiada szybciej)
-const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-lite-latest'].filter(Boolean)).values()].filter((m) => !missingModels.has(m));
+// Na końcu – starsze, stabilne wersje z osobną pulą mocy obliczeniowej (alias „latest” wskazuje najnowszy model, który
+// bywa najczęściej przeciążony); lista do nadpisania zmienną GEMINI_FALLBACK_MODELS (po przecinku). Niedostępne (404)
+// są pomijane do końca życia instancji.
+const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const fallbackModels = () => (env('GEMINI_FALLBACK_MODELS') ? env('GEMINI_FALLBACK_MODELS').split(',').map((m) => m.trim()) : FALLBACK_MODELS);
+const modelChain = () => [...new Set([env('GEMINI_MODEL'), DEFAULT_MODEL, 'gemini-flash-lite-latest', ...fallbackModels()].filter(Boolean)).values()].filter((m) => !missingModels.has(m));
 // Modele, które zwróciły 404 (wycofane / niedostępne dla klucza) – pomijane w kolejnych zapytaniach tej instancji
 const missingModels = new Set();
 // Łączny czas prób w jednym zapytaniu (Vercel przerywa funkcję po czasie → HTTP 504)
@@ -364,10 +369,12 @@ export async function summarize(userContent, spec = null) {
     // Vertex AI tylko wtedy, gdy Gemini API odrzuciło sam klucz (nie przy przeciążeniu, limicie czy braku modelu)
     if (firstError && !keyRejected(firstError)) break;
     let lastError;
+    let busyError; // przeciążenie / limit czasu – ważniejsze niż 404 modelu zapasowego, który nie istnieje dla klucza
     const client = clientFor(backend, key);
     const tried = new Set();
     let chain = modelChain();
-    for (let round = 0; round < 2; round += 1) {
+    let rested = false;
+    for (let round = 0; round < 3; round += 1) {
       for (const model of chain) {
         if (tried.has(model)) continue;
         tried.add(model);
@@ -389,19 +396,31 @@ export async function summarize(userContent, spec = null) {
           lastError = e;
           lastRoute.attempts.push(`${backend}:${model} → ${timedOut(e) ? 'limit czasu' : e.status ?? 'błąd'}`);
           if (e instanceof ApiError && e.status === 404) missingModels.add(model);
-          if (overloaded(e) || timedOut(e)) continue; // przeciążony / limit / za długo – następny model
+          if (overloaded(e) || timedOut(e)) {
+            busyError = e;
+            continue; // przeciążony / limit / za długo – następny model
+          }
           if (!(e instanceof ApiError) && e.status === 502) continue; // ucięta / nieczytelna odpowiedź (JSON) – następny model
           if (e instanceof ApiError && e.status === 400 && !keyRejected(e)) continue; // ogólny „invalid argument” – następny model
           if (!retryable(e)) throw e;
           if (e.status !== 404) break; // klucz odrzucony przez tę usługę – następna usługa
         }
       }
+      // Wszystkie modele przeciążone (503/500, bez limitu 429 i bez przekroczenia czasu), a czas jeszcze jest –
+      // krótka przerwa i jeszcze jedna runda po całej liście (przeciążenia Google zwykle trwają kilka sekund)
+      if (!rested && busyError instanceof ApiError && [500, 503].includes(busyError.status) && Date.now() < deadline - 20000) {
+        rested = true;
+        await sleep(2500);
+        tried.clear();
+        chain = modelChain();
+        continue;
+      }
       if (!(lastError instanceof ApiError && lastError.status === 404) || backend !== 'studio') break;
       if (Date.now() > deadline - 6000) break;
       chain = (await discoverFlash(client)).filter((m) => !tried.has(m) && !missingModels.has(m)).slice(0, 2); // żaden model nie istnieje – wykryte
       if (!chain.length) break;
     }
-    firstError ||= lastError;
+    firstError ||= busyError || lastError;
   }
   throw firstError;
 }
