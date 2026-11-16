@@ -9,10 +9,10 @@ export const MILESTONES_KEY = 'wealth-app-milestones-v1';
 // Progi gęsto na starcie, coraz rzadziej dalej (ok. ×1,2–1,5 na początku, ×1,3–1,5 wyżej); po ostatnim – podwajanie.
 // „Wartość portfela” zastąpiła „Wartość wpłaconą” (nowe id – zapisane daty starej ścieżki zostają, ale nie są pokazywane). Pasek progów przewija się sam do następnego progu..
 export const MILESTONE_TRACKS = [
-  { id: 'value', label: 'Wartość portfela', hint: 'łączna wartość całego portfela (wszystkie konta)', unit: 'zł', steps: [1000, 2500, 5000, 10000, 15000, 25000, 50000, 75000, 100000, 150000, 250000, 500000, 750000, 1000000, 2000000] },
-  { id: 'gain', label: 'Zysk wygenerowany', hint: 'zysk całkowity od początku (kursy, dywidendy, odsetki)', unit: 'zł', steps: [100, 250, 500, 1000, 2500, 5000, 10000, 15000, 25000, 50000, 100000, 250000, 500000] },
-  { id: 'gainPct', label: 'Procent zysku', hint: 'stopa zwrotu portfela od początku', unit: '%', steps: [1, 2, 5, 10, 15, 25, 50, 75, 100, 200, 300] },
-  { id: 'dividends', label: 'Dywidendy roczne', hint: 'dywidendy netto z ostatnich 12 miesięcy', unit: 'zł/rok', steps: [50, 100, 250, 500, 1000, 2000, 3500, 5000, 10000, 25000, 50000] },
+  { id: 'value', label: 'Wartość portfela', hint: 'łączna wartość całego portfela (wszystkie konta)', unit: 'zł', steps: [5000, 10000, 25000, 50000, 75000, 100000, 150000, 250000, 500000, 750000, 1000000, 2000000] },
+  { id: 'gain', label: 'Zysk wygenerowany', hint: 'zysk całkowity od początku (kursy, dywidendy, odsetki)', unit: 'zł', steps: [500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000] },
+  { id: 'gainPct', label: 'Procent zysku', hint: 'stopa zwrotu portfela od początku', unit: '%', steps: [5, 10, 25, 50, 75, 100, 200, 300] },
+  { id: 'dividends', label: 'Dywidendy roczne', hint: 'dywidendy netto z ostatnich 12 miesięcy', unit: 'zł/rok', steps: [100, 500, 1000, 2500, 5000, 10000, 25000, 50000] },
 ];
 
 // Progi do wyświetlenia: z listy, a powyżej ostatniego – podwajane, aż do pierwszego nieosiągniętego (bez limitu)
