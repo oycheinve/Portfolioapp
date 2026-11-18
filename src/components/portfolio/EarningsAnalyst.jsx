@@ -7,7 +7,7 @@ import { compressImage } from '../../lib/receipts.js';
 import { importChunk } from '../../lib/appUpdate.js';
 import { PREFS_CHANGED_EVENT } from '../../lib/budget.js';
 import { beginJob, endJob, isNetworkDrop } from '../../lib/aiJobs.js';
-import { EARNINGS_KEY, RETENTION_DAYS, analysisMemory, isAnnualPeriod, overallVerdict, companyKey, companyMetricNames, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
+import { EARNINGS_KEY, RETENTION_DAYS, analysisMemory, attachGuidance, isAnnualPeriod, isGuidanceOnly, latestResultsEntry, mergeGuidanceEntries, overallVerdict, companyKey, companyMetricNames, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, profileKpis, readProfiles } from '../../lib/companyProfiles.js';
 import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
@@ -62,6 +62,10 @@ export default function EarningsAnalyst() {
   const [company, setCompany] = useState(() => companyKey(readEarnings()[0]?.analysis || {}) || Object.keys(readHistory())[0] || null);
   const [openKey, setOpenKey] = useState(() => readEarnings()[0]?.key || null);
   const [toggled, setToggled] = useState({}); // ręcznie rozwinięte / zwinięte analizy (domyślnie: tylko najświeższa)
+  // Zapisane wcześniej „okresy” z samych zapowiedzi zarządu (bez liczb) – dołączone do najnowszej analizy spółki
+  useEffect(() => {
+    if (mergeGuidanceEntries()) setList(readEarnings());
+  }, []);
   // Analiza zapisana poza tym widokiem (np. dokończona w tle po zamknięciu aplikacji) – odświeżenie listy i historii
   useEffect(() => {
     const on = (e) => {
@@ -208,6 +212,19 @@ export default function EarningsAnalyst() {
       if (!res.analysis) throw new Error(res.error || 'Brak analizy');
       if (res.fallback?.skipped > 0) actions.notify(`Gemini przeciążony – analizę przygotował model zapasowy (${res.fallback.provider}) bez ${res.fallback.skipped} załącznika(-ów)`, 'warn');
       if (profile) res.analysis.profileUsed = matched.ticker || matched.name;
+      // Same zapowiedzi / cele zarządu bez wyników – dołączenie do najnowszej analizy spółki zamiast nowego okresu
+      const target = isGuidanceOnly(res.analysis) ? latestResultsEntry(companyKey(res.analysis)) : null;
+      if (target) {
+        attachGuidance(target.key, res.analysis);
+        setList(readEarnings());
+        setCompany(companyKey(target.analysis));
+        setOpenKey(target.key);
+        setToggled({});
+        setText('');
+        setFiles([]);
+        actions.notify(`Zapowiedzi zarządu dołączone do analizy ${target.analysis.company} ${target.analysis.quarter} – bez liczb nie tworzą nowego okresu`, 'success');
+        return;
+      }
       const entry = saveEarnings(res);
       setList(readEarnings());
       setHist(readHistory());
@@ -539,6 +556,24 @@ function Analysis({ entry, onInterpret, interpreting, profile }) {
         </p>
       )}
 
+      {a.guidance?.length > 0 && (
+        <section className="rounded-lg border border-violet-200/70 bg-violet-50/50 p-2.5 text-[13px] dark:border-violet-400/20 dark:bg-violet-500/[0.06]" aria-label="Zapowiedzi zarządu">
+          <div className="text-[11px] font-semibold tracking-wide text-violet-700 uppercase dark:text-violet-300">Zapowiedzi zarządu</div>
+          {[...a.guidance].reverse().map((g) => (
+            <div key={g.at} className="mt-1">
+              {g.title && <p className="font-medium">{g.title}</p>}
+              {g.points?.length > 0 && (
+                <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
+                  {g.points.map((x) => (
+                    <li key={x}>{x}</li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-0.5 text-[10px] text-stone-400">Dodano {new Date(g.at).toLocaleDateString('pl-PL')} · AI sprawdzi ich realizację w kolejnych kwartałach</p>
+            </div>
+          ))}
+        </section>
+      )}
       {a.metrics.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-white/10">
           <table className="w-full text-[13px] tabular" aria-label="Wskaźniki vs konsensus">

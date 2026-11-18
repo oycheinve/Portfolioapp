@@ -64,7 +64,7 @@ export function analysisMemory(company, { skipKey = '', beforeQuarter = '', now 
     .filter((e) => companyKey(e.analysis) === company && e.key !== skipKey && periodOrder(e.analysis.quarter) < limit)
     .sort((x, y) => periodOrder(y.analysis.quarter) - periodOrder(x.analysis.quarter))
     .slice(0, 6)
-    .map(({ analysis: a }) => ({ quarter: a.quarter, verdict: a.verdict, headline: a.headline, takeaway: a.interpretation?.takeaway || '', highlights: (a.highlights || []).slice(0, 3), risks: (a.risks || []).slice(0, 3), outlook: a.outlook || '' }));
+    .map(({ analysis: a }) => ({ quarter: a.quarter, verdict: a.verdict, headline: a.headline, takeaway: a.interpretation?.takeaway || '', highlights: (a.highlights || []).slice(0, 3), risks: (a.risks || []).slice(0, 3), outlook: [a.outlook, ...(a.guidance || []).map((g) => [g.title, ...(g.points || [])].filter(Boolean).join('; '))].filter(Boolean).join(' | ').slice(0, 600) }));
 }
 
 // Dopisanie interpretacji AI do zapisanej analizy (bez zmiany daty zapisu i historii liczb)
@@ -75,6 +75,45 @@ export function setInterpretation(key, interpretation, extra = {}) {
   list[i] = { ...list[i], analysis: { ...list[i].analysis, ...extra, interpretation } };
   writeEarnings(list);
   return list[i];
+}
+
+// ── Zapowiedzi zarządu bez wyników (np. komunikat z celami na nowy rok) ──
+// Materiał bez liczb finansowych nie jest nowym okresem: dołączany do najnowszej analizy spółki jako „Zapowiedzi
+// zarządu” (widoczne w karcie, w pamięci analiz dla kolejnych kwartałów i w perspektywach).
+const hasNum = (v) => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+export function isGuidanceOnly(a) {
+  if (!a) return false;
+  return !(a.metrics || []).some((m) => hasNum(m.actual)) && !(a.quarters || []).some((q) => hasNum(q.revenue) || hasNum(q.netIncome) || hasNum(q.ebitda) || hasNum(q.eps));
+}
+// Najnowsza analiza z wynikami tej spółki (cel dołączenia zapowiedzi)
+export function latestResultsEntry(company, list = readEarnings()) {
+  return list
+    .filter((e) => companyKey(e.analysis) === company && !isGuidanceOnly(e.analysis))
+    .sort((x, y) => periodOrder(y.analysis.quarter) - periodOrder(x.analysis.quarter) || String(y.at).localeCompare(String(x.at)))[0] || null;
+}
+export function attachGuidance(targetKey, g, at = new Date().toISOString()) {
+  const list = readEarnings();
+  const i = list.findIndex((e) => e.key === targetKey);
+  if (i < 0) return null;
+  const item = { title: g.tldr || g.headline || '', points: [...(g.highlights || [])].slice(0, 8), outlook: g.outlook || '', takeaway: g.interpretation?.takeaway || '', at };
+  const a = list[i].analysis;
+  const prev = (a.guidance || []).filter((x) => x.title !== item.title);
+  list[i] = { ...list[i], analysis: { ...a, guidance: [...prev, item].slice(-3) } };
+  writeEarnings(list);
+  return list[i];
+}
+// Zapisane wcześniej „okresy” bez wyników (np. FY z samego komunikatu o celach) → dołączenie do najnowszej analizy
+export function mergeGuidanceEntries() {
+  let n = 0;
+  for (const e of readEarnings()) {
+    if (!isGuidanceOnly(e.analysis)) continue;
+    const target = latestResultsEntry(companyKey(e.analysis));
+    if (!target) continue;
+    attachGuidance(target.key, e.analysis, e.at);
+    deleteEarnings(e.key);
+    n += 1;
+  }
+  return n;
 }
 
 // ── Historia spółek (bez rotacji) ──
