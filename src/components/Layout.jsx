@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ClipboardList, Cloud, CloudOff, Coins, FileText, Gem, Flame, Heart, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, Waves, X } from 'lucide-react';
+import { ClipboardList, Cloud, CloudOff, Coins, FileText, Gem, Flame, Heart, FlaskConical, LayoutDashboard, LineChart, ListChecks, Menu, Monitor, Moon, Newspaper, PieChart, RefreshCw, Settings, Shield, ShoppingCart, Sun, Table2, Target, Wallet, Waves, X, BarChart3 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { computeAllocation } from '../lib/allocation.js';
@@ -30,6 +30,7 @@ export const NAV_ITEMS = [
   { id: 'cashflow', label: 'Cash Flow', longLabel: 'Cash Flow Forecast', icon: Waves, beta: true, hidden: true },
   { id: 'alternatives', label: 'Surowce i Krypto', longLabel: 'Surowce i Krypto', icon: Gem, beta: true },
   { id: 'shopping', label: 'Zakupy', longLabel: 'Listy zakupów', icon: ShoppingCart, mobile: true },
+  { id: 'budgetstats', label: 'Statystyki budżetu', longLabel: 'Statystyki budżetu', icon: BarChart3, beta: true }, // moduł odpinany: Statystyki budżetu
   { id: 'settings', label: 'Ustawienia', longLabel: 'Konta i ustawienia', icon: Settings, topbar: true },
 ];
 
@@ -150,6 +151,33 @@ export function Layout({ view, onNavigate, children }) {
         .catch(() => {});
     }, 12000);
     return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Moduł odpinany: Statystyki budżetu – zapis zmian planu w trakcie miesiąca i analiza AI w tle (po starcie i po
+  // zmianach w budżecie, najwyżej co 6 h, tylko gdy dane się zmieniły; src/lib/budgetStats.js)
+  useEffect(() => {
+    if (isModuleHidden(state.settings, 'budget')) return undefined;
+    let debounce = null;
+    const tick = (withAi) =>
+      import('../lib/budgetStats.js')
+        .then(async (m) => {
+          m.trackPlanChanges();
+          if (withAi && aiOn(latestState.current.settings, 'budgetStats')) await m.runStatsAi();
+        })
+        .catch(() => {});
+    const first = setTimeout(() => tick(true), 15000);
+    const onChange = (e) => {
+      const k = e.detail?.key;
+      if (k !== 'wealth-app-budget-v1' && k !== 'wealth-app-budget-log-v1') return;
+      tick(false);
+      clearTimeout(debounce);
+      debounce = setTimeout(() => tick(true), 60000);
+    };
+    window.addEventListener('wealth-app-prefs-changed', onChange);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(debounce);
+      window.removeEventListener('wealth-app-prefs-changed', onChange);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Zadania AI w tle (paragon, analiza wyników) dokończone przez serwer po zamknięciu aplikacji – odbiór przy starcie,
   // po powrocie do aplikacji i co 15 s, dopóki są otwarte zadania (zob. src/lib/aiJobs.js)

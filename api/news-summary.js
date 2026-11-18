@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { ApiError, GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 import { env, supabaseAnyKey, supabaseServiceKey, supabaseUrl } from './_env.js';
+import { BUDGET_STATS_SPEC, budgetStatsInput } from './_budgetStats.js'; // moduł odpinany: Statystyki budżetu
 
 export const config = { maxDuration: 60 };
 
@@ -1432,6 +1433,13 @@ async function handle(req, res, ctx) {
       return send(res, 200, { ...out, cached: false });
     }
     if (body.mode === 'budget') return await budgetSummary(body, res); // await – błędy trafiają do wspólnej obsługi poniżej
+    // Moduł odpinany: Statystyki budżetu (api/_budgetStats.js)
+    if (body.mode === 'budget-stats') {
+      const input = budgetStatsInput(body);
+      if (!input) return send(res, 400, { error: 'Brak statystyk budżetu do analizy' });
+      const r = await summarize(input, BUDGET_STATS_SPEC);
+      return send(res, 200, { analysis: r.analysis, model: r.model });
+    }
     if (body.mode === 'earnings') return await earnings(body, res); // await – błędy trafiają do wspólnej obsługi poniżej
     if (body.mode === 'earnings-interpret') return await earningsInterpret(body, res);
     if (body.mode === 'shopping-prices') return await shoppingPrices(body, res);

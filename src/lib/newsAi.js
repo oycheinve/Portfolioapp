@@ -153,6 +153,8 @@ export async function ackAiJob(id) {
   }
 }
 export const requestBudgetSummary = (data) => callAi({ mode: 'budget', ...data });
+// Moduł odpinany: Statystyki budżetu – analiza AI statystyk (src/lib/budgetStats.js)
+export const requestBudgetStats = (data) => callAi({ mode: 'budget-stats', data });
 // Analityk wyników: wyłącznie materiały użytkownika – files: [{ data: base64, mime, name }], history: liczby z archiwum
 // memory – skróty wcześniejszych analiz tej spółki (najnowsze najpierw): AI odnosi się do trendów i zapowiedzi z poprzednich okresów
 // metricNames – nazwy wskaźników z historii spółki (AI używa tych samych dla tych samych pozycji)

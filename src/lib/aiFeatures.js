@@ -4,6 +4,7 @@ export const AI_FEATURES = [
   { id: 'newsSummary', label: 'Podsumowania newsów', desc: 'Podsumowanie dnia i znaczek „AI” przy artykułach w Newsach' },
   { id: 'weeklyReview', label: 'Tygodniowy przegląd portfela', desc: 'Komentarz AI do minionego tygodnia na Pulpicie – automatycznie w niedzielę / poniedziałek (1 zapytanie na tydzień)' },
   { id: 'receipts', label: 'Skanowanie paragonów', desc: 'Przycisk „Skanuj paragon” w Budżecie (historia paragonów zostaje)' },
+  { id: 'budgetStats', label: 'Statystyki budżetu (AI w tle)', desc: 'Analiza AI statystyk budżetu – odświeżana w tle po zmianach (najwyżej co 6 h); same statystyki działają dalej' }, // moduł odpinany: Statystyki budżetu
   { id: 'budgetSummary', label: 'Miesięczne podsumowania budżetu', desc: 'Podsumowanie AI miesiąca w Budżecie i automatyczne generowanie na początku miesiąca' },
   { id: 'earnings', label: 'Analityk wyników spółek', desc: 'Karta Analityka w Portfelu (historia i analizy zostają zapisane)' },
   { id: 'shoppingAi', label: 'Kategorie zakupów od AI', desc: 'Rozpoznawanie kategorii nowych produktów – grupowanie z pamięci działa dalej' },
