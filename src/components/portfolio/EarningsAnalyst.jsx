@@ -7,7 +7,7 @@ import { compressImage } from '../../lib/receipts.js';
 import { importChunk } from '../../lib/appUpdate.js';
 import { PREFS_CHANGED_EVENT } from '../../lib/budget.js';
 import { beginJob, endJob, isNetworkDrop } from '../../lib/aiJobs.js';
-import { EARNINGS_KEY, RETENTION_DAYS, analysisMemory, companyKey, companyMetricNames, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
+import { EARNINGS_KEY, RETENTION_DAYS, analysisMemory, isAnnualPeriod, overallVerdict, companyKey, companyMetricNames, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, profileKpis, readProfiles } from '../../lib/companyProfiles.js';
 import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
@@ -357,7 +357,7 @@ export default function EarningsAnalyst() {
                 <div className={`flex items-center gap-1 rounded-xl border pr-1 ${isOpen ? 'border-violet-300 bg-violet-50/60 dark:border-violet-400/30 dark:bg-violet-500/[0.06]' : 'border-stone-200 hover:bg-stone-50 dark:border-white/10 dark:hover:bg-white/[0.03]'}`}>
                   <button type="button" onClick={() => setToggled((t) => ({ ...t, [e.key]: !isOpen }))} aria-expanded={isOpen} className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left" aria-label={`${isOpen ? 'Zwiń' : 'Rozwiń'} analizę ${a.company} ${a.quarter}`}>
                     <span className="shrink-0 text-xs font-semibold tabular">{a.quarter}</span>
-                    <Verdict v={a.verdict} />
+                    <Verdict v={overallVerdict(a).verdict} />
                     {!isOpen && <span className="min-w-0 flex-1 truncate text-xs text-stone-500 dark:text-stone-400">{a.tldr || a.headline}</span>}
                     <ChevronDown size={14} className={`ml-auto shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                   </button>
@@ -528,8 +528,16 @@ function Analysis({ entry, onInterpret, interpreting, profile }) {
           </h4>
           <p className="text-sm text-stone-600 dark:text-stone-300">{a.headline}</p>
         </div>
-        <Verdict v={a.verdict} big />
+        <span className="flex flex-col items-end gap-0.5">
+          <Verdict v={overallVerdict(a).verdict} big />
+          {overallVerdict(a).derived && <span className="text-[10px] text-stone-400" title="Bez konsensusu – ocena z przewagi lepszych / gorszych wskaźników względem roku wcześniej">ocena r/r ze wskaźników</span>}
+        </span>
       </div>
+      {isAnnualPeriod(a.quarter) && (
+        <p className="rounded-lg bg-stone-50 px-2.5 py-1.5 text-[11px] text-stone-600 dark:bg-white/[0.04] dark:text-stone-300">
+          {/^(FY|ROK)/i.test(a.quarter) ? 'FY = rok finansowy (cały rok obrotowy, np. u Synektika 1.10–30.09). Wartości roczne; w historii i na wykresach IV kwartał jest wyliczany jako rok − (Q1 + Q2 + Q3), gdy te kwartały są zapisane.' : 'H1 / H2 = półrocze – wartości za pół roku (poza wykresami kwartalnymi).'}
+        </p>
+      )}
 
       {a.metrics.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-white/10">

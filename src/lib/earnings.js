@@ -199,7 +199,7 @@ const BASE_FROM_METRIC = { revenue: 'przychody', netIncome: 'zysk netto', ebitda
 export function companyPeriods(company) {
   const periods = Object.values(company?.periods || {}).sort((a, b) => periodOrder(a.quarter) - periodOrder(b.quarter));
   const alias = metricAliases(periods);
-  return periods.map((p) => {
+  const merged = periods.map((p) => {
     const metrics = {};
     // nazwa kanoniczna ma pierwszeństwo przed wariantem w tym samym okresie
     const names = Object.keys(p.metrics || {}).sort((a, b) => (alias[a] === a ? 1 : 0) - (alias[b] === b ? 1 : 0));
@@ -212,6 +212,65 @@ export function companyPeriods(company) {
     }
     return out;
   });
+  return withDerivedQ4(merged);
+}
+
+// Okres roczny / półroczny („FY 2025/26”, „H1 2026”) – nie jest kwartałem (osobno od wykresów kwartalnych)
+export const isAnnualPeriod = (q) => /\b(FY|ROK|H1|H2)\b|\b[12]H\b/i.test(String(q || '')) && !/\bQ\s*[1-4]|[1-4]\s*Q\b/i.test(String(q || ''));
+const yearSuffix = (q) => (String(q).match(/(?:19|20)\d{2}(?:\/\d{2})?/) || [''])[0];
+// Raport roczny („FY 2025/26”): IV kwartał wyliczony jako rok − (Q1 + Q2 + Q3) z historii – dla przychodów, zysku
+// netto, EBITDA i wskaźników kwotowych obecnych we wszystkich trzech kwartałach; marże IV kwartału z wyliczonych kwot.
+// Zapisany IV kwartał ma pierwszeństwo (uzupełniane tylko brakujące pozycje). Okresy roczne nie trafiają do wykresów.
+function withDerivedQ4(periods) {
+  const byQ = Object.fromEntries(periods.map((p) => [p.quarter, p]));
+  const out = periods.filter((p) => !isAnnualPeriod(p.quarter));
+  for (const fy of periods.filter((p) => /\b(FY|ROK)\b/i.test(p.quarter))) {
+    const y = yearSuffix(fy.quarter);
+    if (!y) continue;
+    const qs = [1, 2, 3].map((n) => byQ[`Q${n} ${y}`]);
+    if (qs.some((q) => !q)) continue;
+    const existing = byQ[`Q4 ${y}`];
+    const q4 = existing ? { ...existing, metrics: { ...(existing.metrics || {}) } } : { quarter: `Q4 ${y}`, metrics: {}, derived: true };
+    const val = (p, f) => (p?.[f] !== null && p?.[f] !== undefined && Number.isFinite(Number(p[f])) ? Number(p[f]) : null);
+    for (const f of ['revenue', 'netIncome', 'ebitda']) {
+      if (val(q4, f) !== null) continue;
+      const parts = qs.map((q) => val(q, f));
+      if (val(fy, f) !== null && parts.every((v) => v !== null)) {
+        q4[f] = Math.round((val(fy, f) - parts.reduce((a, b) => a + b, 0)) * 100) / 100;
+        q4.derived = true;
+      }
+    }
+    for (const [name, m] of Object.entries(fy.metrics || {})) {
+      if (q4.metrics[name] || m?.unit === '%' || /marza|marża|%|wskaznik|wskaźnik|\/|x$/i.test(name)) continue;
+      const parts = qs.map((q) => q.metrics?.[name]?.value);
+      if (!Number.isFinite(Number(m?.value)) || parts.some((v) => !Number.isFinite(Number(v)))) continue;
+      q4.metrics[name] = { ...m, value: Math.round((Number(m.value) - parts.reduce((a, b) => a + Number(b), 0)) * 100) / 100 };
+      q4.derived = true;
+    }
+    // Marże IV kwartału (nazwa jak w historii): EBITDA / przychody, zysk netto / przychody
+    const marginName = (key) => periods.flatMap((p) => Object.keys(p.metrics || {})).find((n) => metricKey(n) === key);
+    for (const [key, f] of [['marza ebitda', 'ebitda'], ['marza netto', 'netIncome']]) {
+      const n = marginName(key);
+      if (n && !q4.metrics[n] && val(q4, f) !== null && val(q4, 'revenue')) {
+        q4.metrics[n] = { value: Math.round((val(q4, f) / val(q4, 'revenue')) * 1000) / 10, unit: '%', lowerIsBetter: false };
+        q4.derived = true;
+      }
+    }
+    if (q4.derived && !existing) out.push(q4);
+    else if (existing) out[out.indexOf(existing)] = q4;
+  }
+  return out.sort((a, b) => periodOrder(a.quarter) - periodOrder(b.quarter));
+}
+
+// Ocena całości: od AI, a gdy brak (bez konsensusu) – z ocen wskaźników r/r (przewaga lepszych / gorszych pozycji)
+export function overallVerdict(a) {
+  if (a?.verdict && a.verdict !== 'unknown') return { verdict: a.verdict, derived: false };
+  const vs = (a?.metrics || []).map((m) => metricRef(m).verdict).filter((v) => v && v !== 'unknown');
+  if (!vs.length) return { verdict: 'unknown', derived: false };
+  const beat = vs.filter((v) => v === 'beat').length;
+  const miss = vs.filter((v) => v === 'miss').length;
+  const verdict = beat === 0 && miss === 0 ? 'inline' : beat >= 2 * miss && beat > 0 ? 'beat' : miss >= 2 * beat && miss > 0 ? 'miss' : 'mixed';
+  return { verdict, derived: true };
 }
 // Nazwy wskaźników z historii spółki (najczęstsze najpierw) – AI używa ich dla tych samych pozycji w kolejnych raportach
 export function companyMetricNames(company, limit = 40) {
