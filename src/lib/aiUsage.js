@@ -82,6 +82,7 @@ export function recordAiUsage(mode, body = {}, ok = true, now = new Date()) {
           if (b.limitHit) {
             l.hitDay = d;
             l.hitKind = b.limitHit.kind;
+            l.hitCertain = !!b.limitHit.certain; // Google podał rodzaj limitu (dzienny / minutowy)
             if (b.limitHit.kind === 'rpd' && b.limitHit.value) l.rpd = b.limitHit.value;
           }
           u.learned[k] = l;
@@ -167,9 +168,10 @@ export function modelStatus(u, now = new Date()) {
       // Groq: pozostało wg nagłówka z dzisiejszej odpowiedzi – dokładniejsze niż własny licznik (inne urządzenia)
       const rpd = l.rpd || known?.rpd || null;
       const usedReal = l.leftAt === d && l.rpd && l.rpdLeft !== null && l.rpdLeft !== undefined ? Math.max(used, l.rpd - l.rpdLeft) : used;
-      const hit = l.hitDay === d && (l.hitKind || 'rpd') === 'rpd';
-      const ratio = hit ? 1 : rpd ? usedReal / rpd : 0;
-      return { key, label: known?.label || key.split(':').slice(1).join(':'), provider: key.split(':')[0], used: usedReal, tokens, rpd, rpm: known?.rpm ?? null, tpm: l.tpm || known?.tpm || null, tpd: known?.tpd || null, ratio, hit, source: l.rpd ? 'od dostawcy' : known ? `zestawienia ${LIMITS_AS_OF}` : 'nieznany' };
+      // „Wyczerpany” tylko, gdy Google wprost wskazał limit dzienny (wcześniejsze niepewne oznaczenia – ignorowane)
+      const hit = l.hitDay === d && l.hitKind === 'rpd' && l.hitCertain === true;
+      const fromProvider = l.rpd && (l.hitCertain || l.leftAt);
+      return { key, label: known?.label || key.split(':').slice(1).join(':'), provider: key.split(':')[0], used: usedReal, tokens, rpd: fromProvider ? l.rpd : known?.rpd ?? l.rpd ?? null, rpm: known?.rpm ?? null, tpm: l.tpm || known?.tpm || null, tpd: known?.tpd || null, ratio: hit ? 1 : (fromProvider ? l.rpd : known?.rpd) ? usedReal / (fromProvider ? l.rpd : known.rpd) : 0, hit, minuteLimit: l.hitDay === d && (l.hitKind === 'rpm' || l.hitKind === 'tpm'), source: fromProvider ? 'od dostawcy' : known ? `zestawienia ${LIMITS_AS_OF}` : 'nieznany' };
     })
     // Ten sam model pod aliasem i nazwą wersji (np. gemini-flash-latest → gemini-3.5-flash) – jeden wiersz
     .reduce((acc, m) => {

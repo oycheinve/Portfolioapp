@@ -485,7 +485,7 @@ const PROVIDERS = {
     url: 'https://api.groq.com/openai/v1/chat/completions',
     key: 'GROQ_API_KEY',
     models: {
-      heavy: ['openai/gpt-oss-120b', 'meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.3-70b-versatile'],
+      heavy: ['meta-llama/llama-4-scout-17b-16e-instruct', 'openai/gpt-oss-120b', 'llama-3.3-70b-versatile'], // Scout – największy darmowy limit tokenów / min (duże raporty)
       medium: ['openai/gpt-oss-120b', 'meta-llama/llama-4-scout-17b-16e-instruct', 'llama-3.3-70b-versatile'],
       light: ['llama-3.1-8b-instant', 'openai/gpt-oss-20b'],
     },
@@ -525,8 +525,25 @@ const jsonOnly = (t) => {
   return i >= 0 && j > i ? s.slice(i, j + 1) : s;
 };
 
-async function providerGenerate(id, model, system, text, images, spec, deadline) {
+// Darmowe limity tokenów na minutę (Groq; zapytanie = tekst wejściowy + max_tokens) – tekst przycinany z góry, żeby
+// zmieścić się w limicie zamiast dostać 413. Wartości z zestawień 10.2026; nadpisanie: GROQ_TPM_<model> nie jest potrzebne.
+const PROVIDER_TPM = { 'groq:openai/gpt-oss-120b': 8000, 'groq:openai/gpt-oss-20b': 8000, 'groq:llama-3.3-70b-versatile': 12000, 'groq:meta-llama/llama-4-scout-17b-16e-instruct': 30000, 'groq:llama-3.1-8b-instant': 6000 };
+const estTokens = (t) => Math.ceil(String(t || '').length / 3.2); // tekst polski ~3–3,5 znaku na token (z zapasem)
+export function fitToTpm(id, model, system, text, maxTokens, images = 0) {
+  const tpm = PROVIDER_TPM[`${id}:${model}`];
+  if (!tpm) return { text, maxTokens };
+  const out = Math.min(maxTokens, Math.max(1024, Math.floor(tpm * 0.35)));
+  const room = Math.floor(tpm * 0.9) - out - estTokens(system) - images * 1600;
+  if (room < 800) return null; // za mały limit na to zadanie – następny model
+  if (estTokens(text) <= room) return { text, maxTokens: out };
+  return { text: `${String(text).slice(0, Math.floor(room * 3.2))}\n(…tekst skrócony ze względu na limit modelu zapasowego)`, maxTokens: out };
+}
+
+async function providerGenerate(id, model, system, text0, images, spec, deadline, { noJson = false } = {}) {
   const p = PROVIDERS[id];
+  const fit = fitToTpm(id, model, system, text0, Math.min(spec?.maxTokens || 4096, 8192), images.length);
+  if (!fit) throw new ApiError({ message: `${id} ${model}: zadanie za duże na darmowy limit tokenów / min`, status: 413 });
+  const text = fit.text;
   const content = images.length ? [{ type: 'text', text }, ...images.map((u) => ({ type: 'image_url', image_url: p.imageUrl(u) }))] : text;
   const body = {
     model,
@@ -535,8 +552,8 @@ async function providerGenerate(id, model, system, text, images, spec, deadline)
       { role: 'user', content },
     ],
     temperature: spec?.temperature ?? 0.2,
-    max_tokens: Math.min(spec?.maxTokens || 4096, 8192),
-    ...(p.jsonMode === false ? {} : { response_format: { type: 'json_object' } }),
+    max_tokens: fit.maxTokens,
+    ...(p.jsonMode === false || noJson ? {} : { response_format: { type: 'json_object' } }),
     ...(id === 'groq' && /gpt-oss/.test(model) ? { reasoning_effort: 'low' } : {}),
   };
   const r = await fetch(p.url, {
@@ -577,7 +594,14 @@ async function fallbackRoute(userContent, spec, deadline) {
       for (let shrink = 0; shrink < 2; shrink += 1) {
         if (Date.now() > deadline - 2500) throw lastErr || new ApiError({ message: 'Brak czasu na dostawców zapasowych', status: 504 });
         try {
-          const response = await providerGenerate(id, model, system, input, sentImages, spec, deadline);
+          let response;
+          try {
+            response = await providerGenerate(id, model, system, input, sentImages, spec, deadline);
+          } catch (e0) {
+            // Tryb JSON nieobsługiwany dla tego modelu / ze zrzutami (400) – ponownie bez response_format (JSON z instrukcji)
+            if (!(e0 instanceof ApiError && e0.status === 400 && /json|response_format|format/i.test(e0.message || ''))) throw e0;
+            response = await providerGenerate(id, model, system, input, sentImages, spec, deadline, { noJson: true });
+          }
           Object.assign(lastRoute, { backend: id, model });
           const out = (spec?.parse || parseResponse)(response, `${id}/${model}`);
           return Object.assign(out, { fallback: { provider: id, model, skipped } });
@@ -654,10 +678,18 @@ async function summarizeGemini(key, userContent, spec, deadline) {
           try {
             response = await generate(client, model, userContent, deadline, spec);
           } catch (e) {
+            // Limit na minutę (429 z „retryDelay” ≤ 20 s, nie dzienny) – odczekanie wskazanego czasu i jedna ponowna próba
+            const wait = e instanceof ApiError && e.status === 429 && !/PerDay/i.test(e.message || '') ? Number((String(e.message).match(/retryDelay"?\s*:\s*"?(\d+(?:\.\d+)?)s/) || [])[1]) : NaN;
+            if (Number.isFinite(wait) && wait <= 20 && Date.now() + wait * 1000 < deadline - 10000) {
+              recordLimitHit('gemini', model, e);
+              await sleep(wait * 1000 + 300);
+              response = await generate(client, model, userContent, deadline, spec);
+            } else {
             if (timedOut(e) || !(overloaded(e) && e.status !== 429 && e.status !== 504)) throw e;
             if (Date.now() > deadline - 8000) throw e;
             await sleep(1500); // chwilowe przeciążenie – jedna ponowna próba tego samego modelu
             response = await generate(client, model, userContent, deadline, spec);
+            }
           }
           Object.assign(lastRoute, { backend, model });
           const um = response?.usageMetadata;
@@ -820,8 +852,10 @@ function recordLimitHit(provider, model, e) {
   const msg = String(e?.message || '');
   const id = (msg.match(/"quotaId"\s*:\s*"([^"]+)"/) || [])[1] || '';
   const value = Number((msg.match(/"quotaValue"\s*:\s*"?(\d+)/) || [])[1]) || null;
-  const kind = /PerDay/i.test(id) ? 'rpd' : /Token/i.test(id) ? 'tpm' : /PerMinute/i.test(id) ? 'rpm' : 'rpd';
-  u.push({ provider, model, in: 0, out: 0, call: false, limitHit: { kind, value } });
+  // Rodzaj limitu tylko z identyfikatora od Google – bez niego nie zakładamy wyczerpania dziennego (mogło to być np.
+  // chwilowe ograniczenie na minutę)
+  const kind = /PerDay/i.test(id) ? 'rpd' : /Token/i.test(id) ? 'tpm' : /PerMinute/i.test(id) ? 'rpm' : 'unknown';
+  u.push({ provider, model, in: 0, out: 0, call: false, limitHit: { kind, value, certain: !!id } });
 }
 
 function send(res, status, body) {
@@ -1589,9 +1623,19 @@ ${items.map((it) => `- [${String(it.topic || '—').slice(0, 40)}] ${String(it.t
   } catch (e) {
     if (e instanceof ApiError) {
       const detail = googleDetail(e);
+      // Co odpowiedział każdy model (np. „gemini-flash-latest 429 · groq:llama-4-scout 413”) – diagnoza w komunikacie
+      const tried = () => {
+        const a = (lastRoute.attempts || []).map((x) => x.replace(/^(studio|vertex):/, '').replace(' → ', ' ')).filter((x, i, arr) => arr.indexOf(x) === i);
+        return a.length ? ` (próby: ${a.slice(0, 8).join(' · ')})` : '';
+      };
       const kind = `usługa: ${keyKind() === 'vertex' ? 'Vertex AI' : keyKind() === 'studio' ? 'Gemini API' : 'Gemini API, potem Vertex AI'}`;
-      if (e.status === 429) return send(res, 429, { error: 'Wyczerpany darmowy limit zapytań Gemini dla tego klucza – spróbuj później (limit odnawia się codziennie) albo sprawdź limity w Google AI Studio', detail });
-      if (e.status === 503 || e.status === 500) return send(res, 503, { error: 'Modele Gemini są chwilowo przeciążone po stronie Google – spróbuj za minutę', detail });
+      if (e.status === 429) {
+        // Limit miał tylko część modeli, pozostałe odrzuciły zapytanie z innego powodu – nie piszemy „wyczerpany limit”
+        const other = (lastRoute.attempts || []).filter((x) => !/ 429$/.test(x));
+        if (other.length) return send(res, 502, { error: `AI nie przygotowało odpowiedzi – część modeli ma limit, pozostałe odrzuciły zapytanie (spróbuj ponownie, np. bez zrzutu ekranu albo z krótszym tekstem)${tried()}`, detail, attempts: lastRoute.attempts });
+        return send(res, 429, { error: `Wyczerpany darmowy limit zapytań Gemini dla tego klucza – spróbuj później (limit odnawia się ok. 9:00) albo sprawdź Ustawienia → Zużycie AI${tried()}`, detail, attempts: lastRoute.attempts });
+      }
+      if (e.status === 503 || e.status === 500) return send(res, 503, { error: `Modele Gemini są chwilowo przeciążone po stronie Google – spróbuj za minutę${tried()}`, detail, attempts: lastRoute.attempts });
       if (e.status === 504) return send(res, 503, { error: 'Google nie zdążył przygotować podsumowania (przeciążenie modeli Gemini) – spróbuj za chwilę', detail });
       if (e.status === 400 && /api key|api_key|credential/i.test(e.message || '')) return send(res, 503, { error: `Nieprawidłowy klucz GEMINI_API_KEY (${kind})`, detail });
       if (e.status === 401 || e.status === 403) return send(res, 503, { error: `Klucz odrzucony przez Google (${kind}) – sprawdź klucz w Google AI Studio`, detail });
