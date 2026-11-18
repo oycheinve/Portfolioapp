@@ -1,6 +1,6 @@
 import { mergePref } from '../../lib/prefsMerge.js';
 import { useEffect, useState } from 'react';
-import { Cloud, KeyRound, Loader2, LogIn, Mail, UserPlus, Wallet } from 'lucide-react';
+import { Cloud, KeyRound, Loader2, LogIn, Mail, UserPlus, UserRound, Wallet } from 'lucide-react';
 import { STORAGE_KEY, createEmptyState } from '../../state/schema.js';
 import {
   OWNER_KEY,
@@ -11,9 +11,11 @@ import {
   cloudError,
   fetchCloud,
   getSession,
+  isLocalMode,
   onAuthChange,
   resetPassword,
   saveCloudConfig,
+  setLocalMode,
   signIn,
   signUp,
   storage,
@@ -45,7 +47,9 @@ export default function AuthGate({ children }) {
   const configured = !!cloudConfig();
   // Wieloużytkowość: przy skonfigurowanym Supabase logowanie jest obowiązkowe (bez trybu „bez konta”);
   // bez konfiguracji – w wersji produkcyjnej ekran konfiguracji, w trybie deweloperskim praca lokalna jak dotąd
-  const [phase, setPhase] = useState(() => (configured ? 'checking' : import.meta.env.PROD ? 'setup' : 'local'));
+  // „Kontynuuj jako gość” (tryb lokalny) – zapamiętany: kolejne uruchomienia startują od razu, bez ekranu logowania;
+  // zalogować się można później w Ustawieniach (dane z urządzenia przechodzą na konto)
+  const [phase, setPhase] = useState(() => (configured ? (isLocalMode() ? 'local' : 'checking') : import.meta.env.PROD ? 'setup' : 'local'));
   const [cloud, setCloud] = useState(null);
   const [error, setError] = useState(null);
 
@@ -101,11 +105,15 @@ export default function AuthGate({ children }) {
     <AuthScreen
       initialError={error}
       onSignedIn={enter}
+      onGuest={() => {
+        setLocalMode(true);
+        setPhase('local');
+      }}
     />
   );
 }
 
-function AuthScreen({ initialError, onSignedIn }) {
+function AuthScreen({ initialError, onSignedIn, onGuest }) {
   const [mode, setMode] = useState('login'); // login | register | reset
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -228,6 +236,13 @@ function AuthScreen({ initialError, onSignedIn }) {
               </button>
             )}
           </div>
+        </div>
+
+        <div className="mt-3">
+          <button type="button" onClick={onGuest} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-stone-700 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-900 dark:text-stone-200 dark:hover:bg-white/5">
+            <UserRound size={16} /> Kontynuuj jako gość
+          </button>
+          <p className="mt-1.5 text-center text-[11px] text-stone-500 dark:text-stone-400">Bez konta: dane tylko na tym urządzeniu, bez synchronizacji. Konto możesz założyć później w Ustawieniach – dane zostaną przeniesione.</p>
         </div>
 
         <p className="mt-4 flex items-start gap-2 text-xs text-stone-500 dark:text-stone-400">
