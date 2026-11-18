@@ -455,7 +455,7 @@ export default function ShoppingView() {
             )}
           </header>
 
-          <form onSubmit={addItem} className="flex gap-2 px-3 pt-3 sm:px-4" aria-label="Nowa pozycja">
+          <form onSubmit={addItem} data-tour="tour-shopping-add" className="flex gap-2 px-3 pt-3 sm:px-4" aria-label="Nowa pozycja">
             <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Dodaj produkt, np. Mleko" aria-label="Nazwa produktu" autoComplete="off" className={`${inputCls} flex-1`} />
             <div className="flex shrink-0 rounded-lg border border-stone-200 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 dark:border-white/10 dark:bg-neutral-800">
               <input value={qty} onChange={(e) => setQty(e.target.value)} maxLength={30} inputMode={qtyUnit === 'szt' ? 'text' : 'decimal'} placeholder="Ilość" aria-label="Ilość" className="h-10 w-14 min-w-0 rounded-l-lg bg-transparent px-2.5 text-sm outline-none sm:w-20" />

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, FileText, Filter, Landmark, Layers, LayoutGrid, LineChart, Palette, Pencil, PiggyBank, Plus, Radio, ScanLine, Scale, Sparkles, Target, Trash2, Wallet, Gauge } from 'lucide-react';
+import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, FileText, Filter, Landmark, Layers, LayoutGrid, LineChart, Palette, Pencil, PiggyBank, Plus, Radio, ScanLine, Scale, Sparkles, Target, Trash2, Wallet, Gauge, GraduationCap } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
@@ -19,6 +19,7 @@ import AltPurchasesCard from '../components/alternatives/AltPurchasesCard.jsx';
 import JulkaIkeCard from '../components/settings/JulkaIkeCard.jsx';
 import AiFeaturesCard from '../components/settings/AiFeaturesCard.jsx';
 import AiUsageCard from '../components/settings/AiUsageCard.jsx';
+import { START_TOUR_EVENT } from '../components/OnboardingTour.jsx';
 import NewsFilterCard from '../components/settings/NewsFilterCard.jsx';
 import CompanyProfilesCard from '../components/settings/CompanyProfilesCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
@@ -43,6 +44,18 @@ const SECTIONS = {
   'other-assets': { title: 'Nieruchomości i inne aktywa', hint: 'Wliczane do Majątku Całkowitego', icon: Building2, render: () => <OtherAssetsSection /> },
   limits: { title: 'Limity wpłat IKE / IKZE', hint: 'Roczne limity i wykorzystanie', icon: CalendarClock, render: () => <LimitsCard /> },
   ai: { title: 'Funkcje AI', hint: 'Włączanie i wyłączanie poszczególnych funkcji AI', icon: Sparkles, render: () => <AiFeaturesCard /> },
+  tour: {
+    title: 'Samouczek',
+    hint: 'Przewodnik po aplikacji – wszystkie moduły krok po kroku',
+    icon: GraduationCap,
+    render: () => (
+      <Card title="Samouczek" subtitle="Ok. 1 minuta – wszystkie moduły aplikacji krok po kroku" icon={GraduationCap}>
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent(START_TOUR_EVENT))} className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-neutral-950">
+          <GraduationCap size={16} /> Uruchom samouczek
+        </button>
+      </Card>
+    ),
+  },
   'ai-usage': { title: 'Zużycie AI', hint: 'Zapytania i tokeny w tym miesiącu, limit dzienny', icon: Gauge, render: () => <AiUsageCard /> },
   modules: { title: 'Widoczne moduły', hint: 'Które zakładki są w menu', icon: LayoutGrid, render: () => <ModulesVisibilityCard /> },
   'budget-options': { title: 'Budżet', hint: 'Kategoria „Z oszczędności”', icon: PiggyBank, render: () => <BudgetOptionsCard /> },
@@ -105,6 +118,7 @@ const GROUPS = [
     sections: [
       { label: 'Wygląd', items: ['appearance', 'modules'] },
       { label: 'Konto i dane', items: ['cloud', 'backup'] },
+      { label: 'Pomoc', items: ['tour'] },
     ],
   },
 ];

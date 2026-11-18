@@ -6,6 +6,7 @@ import { computeAllocation } from '../lib/allocation.js';
 import { useNotificationScheduler } from '../state/useNotificationScheduler.js';
 import { BetaBadge } from './ui.jsx';
 import { aiOn } from '../lib/aiFeatures.js';
+import OnboardingTour from './OnboardingTour.jsx';
 
 // mobile: true = zakładka w dolnym pasku na telefonie; pozostałe w arkuszu „Więcej”
 // hidden: true = tymczasowo ukryta we wszystkich menu (widok i adres #/… nadal działają, kod bez zmian)
@@ -235,6 +236,7 @@ export function Layout({ view, onNavigate, children }) {
               <button
                 key={item.id}
                 type="button"
+                data-tour={`nav-${item.id}`}
                 onClick={() => onNavigate(item.id)}
                 aria-current={active ? 'page' : undefined}
                 className={`flex shrink-0 items-center gap-3 rounded-lg px-3 py-1.5 text-left text-sm font-medium transition-colors ${
@@ -311,6 +313,7 @@ export function Layout({ view, onNavigate, children }) {
             <button
               type="button"
               onClick={() => onNavigate('settings')}
+              data-tour="nav-settings"
               aria-current={view === 'settings' ? 'page' : undefined}
               className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
                 view === 'settings'
@@ -345,6 +348,8 @@ export function Layout({ view, onNavigate, children }) {
       </nav>
 
       {/* Arkusz „Więcej” – mobile: siatka zaokrąglonych kart + przełącznik motywu */}
+      {/* Samouczek: pytanie przy pierwszym wejściu, przewodnik po aplikacji */}
+      <OnboardingTour onNavigate={onNavigate} />
       {moreOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm md:hidden" onClick={() => setMoreOpen(false)}>
           <div
@@ -444,6 +449,7 @@ function BottomTab({ item, active, badge, onClick }) {
   return (
     <button
       type="button"
+      data-tour={`nav-${item.id}`}
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium sm:text-[11px] ${active ? 'text-blue-600 dark:text-blue-400' : 'text-stone-500 dark:text-stone-400'}`}
