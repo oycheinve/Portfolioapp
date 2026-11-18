@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Gauge } from 'lucide-react';
-import { USAGE_EVENT, clearUsage, estimateCostUsd, monthUsage, readUsage, setDailyLimit, todayCalls, usageMonthKey } from '../../lib/aiUsage.js';
+import { LIMITS_AS_OF, USAGE_EVENT, clearUsage, estimateCostUsd, modelStatus, monthUsage, readUsage, todayCalls, usageMonthKey } from '../../lib/aiUsage.js';
 import { Card } from '../ui.jsx';
 
 const MONTHS = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'];
 const fmt = (n) => Number(n || 0).toLocaleString('pl-PL');
 const tok = (n) => (n >= 1e6 ? `${(n / 1e6).toLocaleString('pl-PL', { maximumFractionDigits: 2 })} mln` : n >= 1000 ? `${(n / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} tys.` : fmt(n));
 const usd = (v) => `${v < 0.01 && v > 0 ? '< 0,01' : v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
-const DEFAULT_LIMIT = 250;
 
 function Bar({ value, tone = 'bg-stone-400 dark:bg-stone-500' }) {
   return (
@@ -38,13 +37,14 @@ export default function AiUsageCard() {
   }, []);
   const now = new Date();
   const month = usageMonthKey(now);
-  const { total, byCat, models } = monthUsage(u, month);
+  const { total, byCat, models: monthModels } = monthUsage(u, month);
   const prev = monthUsage(u, usageMonthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1))).total;
-  const limit = u.limit || DEFAULT_LIMIT;
   const today = todayCalls(u, now);
+  const models = modelStatus(u, now);
+  const warn = models.filter((m) => m.hit || m.ratio >= 0.8);
   const tokens = total.in + total.out;
   const maxTok = Math.max(1, ...byCat.map((c) => c.in + c.out));
-  const topModels = Object.entries(models)
+  const topModels = Object.entries(monthModels)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([m, n]) => `${m.split(':').slice(1).join(':') || m} (${n})`);
@@ -57,23 +57,41 @@ export default function AiUsageCard() {
         <Tile label="Koszt" value="0 zł" sub={`płatnie ok. ${usd(estimateCostUsd(total))}`} />
       </div>
 
-      <div className="mt-4 space-y-1">
-        <div className="flex items-baseline justify-between gap-2 text-xs">
-          <span className="font-medium text-stone-600 dark:text-stone-300">Dziś: {fmt(today)} z {fmt(limit)} wywołań modelu</span>
-          <label className="flex items-center gap-1 text-[11px] text-stone-400">
-            limit dzienny
-            <input
-              type="number"
-              min="1"
-              inputMode="numeric"
-              defaultValue={limit}
-              onBlur={(e) => setDailyLimit(e.target.value)}
-              aria-label="Dzienny limit zapytań darmowego klucza"
-              className="h-6 w-16 rounded-md border border-stone-200 bg-white px-1.5 text-right text-[11px] dark:border-white/10 dark:bg-neutral-800"
-            />
-          </label>
+      {warn.length > 0 && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200" role="alert">
+          ⚠️ {warn.map((m) => (m.hit ? `${m.label}: dzienny limit wyczerpany – działają kolejne modele` : `${m.label}: ${Math.round(m.ratio * 100)}% dziennego limitu`)).join(' · ')}
+        </p>
+      )}
+
+      <div className="mt-4">
+        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+          <span className="text-[11px] font-semibold tracking-wide text-stone-500 uppercase dark:text-stone-400">Darmowe limity modeli – dziś</span>
+          <span className="text-[11px] text-stone-400">{fmt(today)} wywołań · doba od ok. 9:00</span>
         </div>
-        <Bar value={today / limit} tone={today / limit > 0.9 ? 'bg-amber-500' : 'bg-emerald-500/70'} />
+        {models.length ? (
+          <ul className="space-y-2" aria-label="Limity modeli">
+            {models.map((m) => (
+              <li key={m.key}>
+                <div className="flex items-baseline justify-between gap-2 text-sm">
+                  <span className="min-w-0 truncate font-medium" title={m.key}>
+                    {m.label}
+                  </span>
+                  <span className={`shrink-0 text-xs tabular ${m.hit || m.ratio >= 0.95 ? 'font-semibold text-red-600 dark:text-red-400' : m.ratio >= 0.8 ? 'font-semibold text-amber-700 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'}`}>
+                    {m.hit ? 'limit wyczerpany' : m.rpd ? `${fmt(m.used)} / ${fmt(m.rpd)} dziennie` : `${fmt(m.used)} dziś`}
+                  </span>
+                </div>
+                <div className="mt-1">
+                  <Bar value={m.rpd ? m.ratio : 0} tone={m.hit || m.ratio >= 0.95 ? 'bg-red-500' : m.ratio >= 0.8 ? 'bg-amber-500' : 'bg-emerald-500/70'} />
+                </div>
+                <div className="mt-0.5 text-[10px] text-stone-400">
+                  {[m.rpm ? `${fmt(m.rpm)} / min` : '', m.tpm ? `${tok(m.tpm)} tok. / min` : '', m.tpd ? `${tok(m.tpd)} tok. / dobę (dziś ${tok(m.tokens)})` : '', `limit: ${m.source}`].filter(Boolean).join(' · ')}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-stone-500 dark:text-stone-400">Limity pojawią się po pierwszych zapytaniach AI.</p>
+        )}
       </div>
 
       <ul className="mt-4 space-y-2.5" aria-label="Zużycie według funkcji">
@@ -96,7 +114,7 @@ export default function AiUsageCard() {
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3 text-[11px] text-stone-500 dark:border-white/5 dark:text-stone-400">
         <span>
-          Tokeny z odpowiedzi modeli{tokens ? '' : ' (pojawią się po kolejnych zapytaniach)'}. Darmowy klucz – koszt 0 zł; „płatnie” – orientacyjnie wg stawek Gemini 2.5 Flash (0,30 $ / 2,50 $ za 1 mln tokenów wej. / wyj.). Limit dzienny ustaw wg Google AI Studio.
+          Tokeny z odpowiedzi modeli{tokens ? '' : ' (pojawią się po kolejnych zapytaniach)'}. Darmowy klucz – koszt 0 zł; „płatnie” – orientacyjnie wg stawek Gemini 2.5 Flash (0,30 $ / 2,50 $ za 1 mln tokenów wej. / wyj.). Limity darmowe: wg zestawień z {LIMITS_AS_OF} – Google i Groq zmieniają je bez zapowiedzi; gdy dostawca poda rzeczywisty limit (nagłówki Groq, komunikat Google przy przekroczeniu), panel używa jego wartości. Ostrzeżenie w aplikacji przy 80% i 95% dziennego limitu.
           {topModels.length ? ` Modele: ${topModels.join(', ')}.` : ''}
         </span>
         <button type="button" onClick={() => window.confirm('Wyczyścić statystyki zużycia AI na tym urządzeniu?') && clearUsage()} className="shrink-0 font-semibold text-stone-500 hover:text-red-600 dark:text-stone-400">

@@ -549,7 +549,10 @@ async function providerGenerate(id, model, system, text, images, spec, deadline)
   if (!r.ok) throw new ApiError({ message: `${id} ${model}: ${j?.error?.message || j?.message || `HTTP ${r.status}`}`, status: r.status });
   const choice = j.choices?.[0] || {};
   // Odpowiedź w kształcie odpowiedzi Gemini – dla wspólnych funkcji parse
-  recordUsage(id, j.model || model, j.usage?.prompt_tokens, j.usage?.completion_tokens);
+  // Groq: x-ratelimit-*-requests = zapytania na dobę, *-tokens = tokeny na minutę (rzeczywiste limity klucza)
+  const h = (n) => (r.headers?.get?.(n) ? Number(r.headers.get(n)) : null);
+  const lim = id === 'groq' ? { rpd: h('x-ratelimit-limit-requests'), rpdLeft: h('x-ratelimit-remaining-requests'), tpm: h('x-ratelimit-limit-tokens'), tpmLeft: h('x-ratelimit-remaining-tokens') } : null;
+  recordUsage(id, j.model || model, j.usage?.prompt_tokens, j.usage?.completion_tokens, lim && lim.rpd !== null ? lim : null);
   return { text: jsonOnly(choice.message?.content), modelVersion: `${id}/${j.model || model}`, candidates: [{ finishReason: choice.finish_reason === 'length' ? 'MAX_TOKENS' : 'STOP' }] };
 }
 
@@ -582,6 +585,7 @@ async function fallbackRoute(userContent, spec, deadline) {
           lastErr = e;
           lastRoute.attempts.push(`${id}:${model} → ${timedOut(e) ? 'limit czasu' : e.status ?? 'błąd'}`);
           if (e instanceof ApiError && e.status === 404) skipModel.add(`${id}/${model}`);
+          if (e instanceof ApiError && e.status === 429) recordLimitHit(id, model, e);
           // Za duże zapytanie na limit tokenów/min darmowego planu (413 albo 429 z „Limit X, Requested Y”): najpierw inny
           // model; na ostatnim modelu dostawcy – tekst przycięty proporcjonalnie i jedna ponowna próba
           const m = /limit\D*(\d+)\D+requested\D*(\d+)/i.exec(e.message || '');
@@ -663,6 +667,7 @@ async function summarizeGemini(key, userContent, spec, deadline) {
           // ostatni „ważny” błąd: przeciążenie/limit nie przykrywa wcześniejszego braku modelu i odwrotnie
           lastError = e;
           lastRoute.attempts.push(`${backend}:${model} → ${timedOut(e) ? 'limit czasu' : e.status ?? 'błąd'}`);
+          if (e instanceof ApiError && e.status === 429) recordLimitHit('gemini', model, e);
           if (e instanceof ApiError && e.status === 404) missingModels.add(model);
           if (overloaded(e) || timedOut(e)) {
             busyError = e;
@@ -804,16 +809,38 @@ function googleDetail(e) {
 // Zużycie AI w zapytaniu (tokeny z odpowiedzi modeli) – dołączane do odpowiedzi jako `aiUsage` (licznik w aplikacji,
 // Ustawienia → Zużycie AI). Osobno dla każdego zapytania (AsyncLocalStorage), bez wpływu na resztę odpowiedzi.
 const usageStore = new AsyncLocalStorage();
-function recordUsage(provider, model, inTok, outTok) {
+function recordUsage(provider, model, inTok, outTok, limits = null) {
   const u = usageStore.getStore();
-  if (u) u.push({ provider, model, in: Number(inTok) || 0, out: Number(outTok) || 0 });
+  if (u) u.push({ provider, model, in: Number(inTok) || 0, out: Number(outTok) || 0, ...(limits ? { limits } : {}) });
+}
+// Limit od dostawcy bez zużycia tokenów (np. Gemini 429 z „quotaValue” – rzeczywisty limit darmowego klucza)
+function recordLimitHit(provider, model, e) {
+  const u = usageStore.getStore();
+  if (!u) return;
+  const msg = String(e?.message || '');
+  const id = (msg.match(/"quotaId"\s*:\s*"([^"]+)"/) || [])[1] || '';
+  const value = Number((msg.match(/"quotaValue"\s*:\s*"?(\d+)/) || [])[1]) || null;
+  const kind = /PerDay/i.test(id) ? 'rpd' : /Token/i.test(id) ? 'tpm' : /PerMinute/i.test(id) ? 'rpm' : 'rpd';
+  u.push({ provider, model, in: 0, out: 0, call: false, limitHit: { kind, value } });
 }
 
 function send(res, status, body) {
   const u = usageStore.getStore();
   if (u?.length && body && typeof body === 'object' && !Array.isArray(body)) {
-    const last = u[u.length - 1];
-    body = { ...body, aiUsage: { calls: u.length, in: u.reduce((s, x) => s + x.in, 0), out: u.reduce((s, x) => s + x.out, 0), provider: last.provider, model: last.model } };
+    const calls = u.filter((x) => x.call !== false);
+    const last = calls[calls.length - 1] || u[u.length - 1];
+    // byModel – wywołania i tokeny per model (dzienne limity), limits – limity z nagłówków / komunikatów dostawcy
+    const byModel = {};
+    for (const x of u) {
+      const k = `${x.provider}:${x.model}`;
+      const b = (byModel[k] ||= { provider: x.provider, model: x.model, calls: 0, in: 0, out: 0 });
+      if (x.call !== false) b.calls += 1;
+      b.in += x.in;
+      b.out += x.out;
+      if (x.limits) b.limits = x.limits;
+      if (x.limitHit) b.limitHit = x.limitHit;
+    }
+    body = { ...body, aiUsage: { calls: calls.length, in: u.reduce((s, x) => s + x.in, 0), out: u.reduce((s, x) => s + x.out, 0), provider: last.provider, model: last.model, byModel: Object.values(byModel) } };
   }
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');

@@ -152,6 +152,12 @@ export function Layout({ view, onNavigate, children }) {
     }, 12000);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Zużycie AI: ostrzeżenia o zbliżaniu się do dziennych limitów darmowych modeli (src/lib/aiUsage.js)
+  useEffect(() => {
+    import('../lib/aiUsage.js')
+      .then((m) => m.setUsageNotifier(actions.notify))
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Moduł odpinany: Statystyki budżetu – zapis zmian planu w trakcie miesiąca i analiza AI w tle (po starcie i po
   // zmianach w budżecie, najwyżej co 6 h, tylko gdy dane się zmieniły; src/lib/budgetStats.js)
   useEffect(() => {
