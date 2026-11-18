@@ -13,6 +13,7 @@ const STEPS = [
   {
     view: 'dashboard',
     emoji: '👋',
+    anim: 'wave',
     title: 'Witaj w FinTrack!',
     text: 'Portfel inwestycyjny, budżet, zakupy, zadania i newsy w jednym miejscu. W minutę pokażę Ci, gdzie co jest i jak z tego korzystać.',
   },
@@ -20,6 +21,7 @@ const STEPS = [
     view: 'dashboard',
     target: ['nav-dashboard'],
     emoji: '📊',
+    anim: 'grow',
     title: 'Pulpit – Twój majątek w skrócie',
     text: 'Wartość całego majątku, zmiana dnia i zysk, struktura portfela na wykresie, najbliższe dywidendy i cele. To ekran startowy – zawsze tu wrócisz jednym dotknięciem.',
   },
@@ -27,6 +29,7 @@ const STEPS = [
     view: 'portfolio',
     target: ['nav-portfolio'],
     emoji: '💼',
+    anim: 'bob',
     title: 'Portfel',
     text: 'Wszystkie walory z zyskiem, stopą zwrotu i zmianą dnia. „Filtruj portfel” wybiera kategorie i konta (zapamiętuje wybór). Na dole: Przegląd tygodnia od AI i Analityk wyników spółek – wklejasz wyniki albo raport PDF, a AI porównuje je z konsensusem i historią.',
   },
@@ -34,6 +37,7 @@ const STEPS = [
     view: 'shopping',
     target: ['tour-shopping-add', 'nav-shopping'],
     emoji: '🛒',
+    anim: 'roll',
     title: 'Zakupy',
     text: 'Dopisz produkt i ilość – w sztukach albo w kg / g. Produkty same układają się w kategorie sklepowe, a przy każdym widać szacowaną cenę z Twoich paragonów (albo od AI) i sumę całej listy.',
   },
@@ -41,6 +45,7 @@ const STEPS = [
     view: 'budget',
     target: ['nav-budget'],
     emoji: '🧾',
+    anim: 'print',
     title: 'Budżet',
     text: 'Plan na miesiąc w kategoriach i to, ile już wydano. „Dodaj zakup” dopisuje wydatek, „Skanuj paragon” odczytuje paragon ze zdjęcia i rozkłada go na kategorie. Kafelek „Na co dzień” podpowiada, ile możesz wydawać dziennie, a na początku miesiąca AI podsumuje poprzedni.',
   },
@@ -48,6 +53,7 @@ const STEPS = [
     view: 'tasks',
     target: ['nav-tasks'],
     emoji: '✅',
+    anim: 'pop',
     title: 'Zadania',
     text: 'Zadania na dziś, tydzień i miesiąc oraz nawyki z passą (jeden opuszczony dzień jej nie zeruje). Wieczorem możesz dostać przypomnienie o tym, co zostało.',
   },
@@ -55,6 +61,7 @@ const STEPS = [
     view: 'news',
     target: ['nav-news'],
     emoji: '📰',
+    anim: 'flip',
     title: 'Newsy',
     text: 'Wiadomości o spółkach z Twojego portfela – bez szumu (promocje, gazetki są odfiltrowane). AI streści najważniejsze artykuły i cały dzień.',
   },
@@ -62,6 +69,7 @@ const STEPS = [
     view: 'dashboard',
     target: ['nav-more', 'nav-charts'],
     emoji: '🧭',
+    anim: 'spin-sway',
     title: 'Więcej – pozostałe zakładki',
     text: 'Na telefonie pod „Więcej” (na komputerze w menu po lewej) są kolejne moduły. Przejdźmy szybko po każdym z nich.',
   },
@@ -69,6 +77,7 @@ const STEPS = [
     view: 'charts',
     target: ['nav-charts', 'page-title'],
     emoji: '📈',
+    anim: 'grow',
     title: 'Wykresy i notowania',
     text: 'Wartość portfela w czasie na tle wpłat, zysk, porównanie z indeksami, wpłaty i wypłaty na wykresie oraz notowania Twoich spółek.',
   },
@@ -76,6 +85,7 @@ const STEPS = [
     view: 'dividends',
     target: ['nav-dividends', 'page-title'],
     emoji: '💰',
+    anim: 'jingle',
     title: 'Dywidendy',
     text: 'Kalendarz wypłat spółek z portfela, otrzymane dywidendy netto, prognoza na kolejne miesiące i stopa dywidendy od ceny zakupu.',
   },
@@ -83,6 +93,7 @@ const STEPS = [
     view: 'goals',
     target: ['nav-goals', 'page-title'],
     emoji: '🎯',
+    anim: 'pulse',
     title: 'Cele',
     text: 'Cele roczne (np. kwota wpłat czy wartość portfela) z postępem oraz kamienie milowe, które odhaczają się same – wartość portfela, zysk, stopa zwrotu i dywidendy.',
   },
@@ -90,6 +101,7 @@ const STEPS = [
     view: 'safe',
     target: ['nav-safe', 'page-title'],
     emoji: '🛡️',
+    anim: 'pulse',
     title: 'Poduszka finansowa',
     text: 'Bezpieczne pieniądze osobno od inwestycji: obligacje skarbowe (z odsetkami liczonymi automatycznie), konta oszczędnościowe i PPK.',
   },
@@ -97,6 +109,7 @@ const STEPS = [
     view: 'alternatives',
     target: ['nav-alternatives', 'page-title'],
     emoji: '💎',
+    anim: 'shine',
     title: 'Surowce i krypto',
     text: 'Złoto, srebro i kryptowaluty z aktualnymi notowaniami – wliczane do całego majątku na Pulpicie.',
   },
@@ -104,6 +117,7 @@ const STEPS = [
     view: 'simulations',
     target: ['nav-simulations', 'page-title'],
     emoji: '🧮',
+    anim: 'tap',
     title: 'Symulacje i kalkulatory',
     text: 'Procent składany, kalkulator obligacji, IKE / IKZE, PPK i koszty ETF-ów oraz testy warunków skrajnych portfela.',
   },
@@ -111,6 +125,7 @@ const STEPS = [
     view: 'settings',
     target: ['nav-settings'],
     emoji: '⚙️',
+    anim: 'spin',
     title: 'Ustawienia',
     text: 'Konta i import historii (np. z XTB), profile spółek dla Analityka, wygląd, konto w chmurze i kopia zapasowa. Pokażę trzy najważniejsze miejsca.',
   },
@@ -118,6 +133,7 @@ const STEPS = [
     view: 'settings/notifications',
     target: ['notify-device', 'settings-notifications'],
     emoji: '🔔',
+    anim: 'ring',
     title: 'Włącz powiadomienia',
     text: 'Tu włączysz powiadomienia w telefonie (zgoda systemu + przełącznik). Potem wybierasz, o czym chcesz wiedzieć: przypomnienie o zadaniach, duże zmiany kursów, nowe artykuły, podsumowanie tygodnia i miesiąca. „Powiadomienia z serwera” działają także przy zamkniętej aplikacji.',
   },
@@ -125,6 +141,7 @@ const STEPS = [
     view: 'settings/modules',
     target: ['settings-modules'],
     emoji: '🧹',
+    anim: 'sweep',
     title: 'Ukryj to, czego nie używasz',
     text: 'Wyłącz moduły, których nie potrzebujesz (np. Zakupy, Zadania czy Newsy) – znikną z menu, a aplikacja zrobi się prostsza. Dane zostają i wrócą po ponownym włączeniu.',
   },
@@ -132,12 +149,14 @@ const STEPS = [
     view: 'settings/ai',
     target: ['settings-ai'],
     emoji: '✨',
+    anim: 'twinkle',
     title: 'Funkcje AI',
     text: 'Każdą funkcję AI (podsumowania newsów, paragony, ceny zakupów, analityk…) możesz osobno wyłączyć. Obok, w „Zużycie AI”, widać liczbę zapytań i dzienne limity darmowych modeli.',
   },
   {
     view: 'dashboard',
     emoji: '🎉',
+    anim: 'party',
     title: 'Gotowe!',
     text: 'Zacznij od dodania kont i transakcji (albo importu w Ustawieniach) i planu budżetu. Samouczek uruchomisz ponownie w Ustawieniach → Aplikacja i dane → Pomoc → Samouczek.',
   },
@@ -270,7 +289,7 @@ export default function OnboardingTour({ onNavigate }) {
     return (
       <div className={`fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px] transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`} role="dialog" aria-modal="true" aria-labelledby="tour-ask-title">
         <div className={`w-full max-w-sm rounded-2xl bg-white p-5 text-center shadow-2xl dark:bg-neutral-900 ${fade}`}>
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
+          <div className="tour-emoji tour-anim-bob mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
             <GraduationCap size={24} />
           </div>
           <h2 id="tour-ask-title" className="mt-3 text-lg font-semibold">
@@ -334,7 +353,8 @@ export default function OnboardingTour({ onNavigate }) {
       <div ref={cardRef} className={`fixed rounded-2xl bg-white p-4 shadow-2xl dark:bg-neutral-900 ${fade}`} style={cardStyle}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="text-2xl leading-none" aria-hidden="true">
+            {/* Emotka kroku z animacją (dzwonek dzwoni, miotła zamiata, ręka macha…); key – animacja od nowa w każdym kroku */}
+            <span key={step} className={`tour-emoji tour-anim-${s.anim || 'pop'} text-2xl leading-none`} aria-hidden="true">
               {s.emoji}
             </span>
             <h2 className="text-base font-semibold">{s.title}</h2>
