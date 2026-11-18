@@ -132,11 +132,12 @@ export function defaultFoodRow(rows) {
   const named = rows.filter((r) => String(r.name || '').trim());
   return named.find((r) => FOOD_RE.test(r.name)) || named.find((r) => r.type === 'Życie') || named[0] || null;
 }
-export function dailyAllowance(row, month, now = new Date()) {
+// closedToday – dzisiejsze wydatki spisane (zadanie odhaczone): pozostałe dni liczone od jutra
+export function dailyAllowance(row, month, now = new Date(), { closedToday = false } = {}) {
   const [y, m] = month.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
   const current = monthKey(now);
-  const daysLeft = month === current ? daysInMonth - now.getDate() + 1 : month > current ? daysInMonth : 0;
+  const daysLeft = month === current ? daysInMonth - now.getDate() + (closedToday ? 0 : 1) : month > current ? daysInMonth : 0;
   const planned = row ? num(row.planned) : 0;
   const left = row ? rowLeft(row) : 0;
   return { daysInMonth, daysLeft, planned, left, perDay: daysLeft > 0 ? Math.max(0, left) / daysLeft : 0, planPerDay: planned / daysInMonth, past: month < current };

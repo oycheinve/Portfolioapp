@@ -746,8 +746,31 @@ function DailyTile({ rows, month, savingsSpent = 0, entries = [] }) {
   const todayRow = row ? Math.round(todayEntries.filter((e) => e.rowId === row.id).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) * 100) / 100 : 0;
   const investRows = named.filter(isInvestRow);
   const result = Math.round((investRows.reduce((sum, r) => sum + toNum(r.spent), 0) - savingsSpent) * 100) / 100;
+  // Dzień zamknięty: dzisiejsze zadanie „Spisać wydatki” (tytuł z „wydatk…”) odhaczone w Zadaniach – średnia od jutra
+  const { cloud } = useApp();
+  const [dayClose, setDayClose] = useState(null);
+  useEffect(() => {
+    if (month !== monthKey()) return undefined;
+    let alive = true;
+    const check = () =>
+      import('../lib/budgetDayClose.js')
+        .then((m) => m.expensesClosedToday(cloud?.enabled ? cloud.user?.id : null))
+        .then((r) => alive && setDayClose(r))
+        .catch(() => {});
+    check();
+    const onVis = () => document.visibilityState === 'visible' && check();
+    const onPrefs = (e) => String(e.detail?.key || '').includes('daily') && check();
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('wealth-app-prefs-changed', onPrefs);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('wealth-app-prefs-changed', onPrefs);
+    };
+  }, [month, cloud?.enabled, cloud?.user?.id]);
   if (!row) return null;
-  const d = dailyAllowance(row, month);
+  const closedToday = !!dayClose?.closed;
+  const d = dailyAllowance(row, month, new Date(), { closedToday });
   const over = d.left < -0.004;
   return (
     <div className="mt-3 rounded-lg border border-stone-200 p-3 dark:border-white/10" role="region" aria-label="Statystyka dzienna">
@@ -773,6 +796,8 @@ function DailyTile({ rows, month, savingsSpent = 0, entries = [] }) {
           Miesiąc zakończony – w kategorii <strong>{row.name}</strong> {over ? 'przekroczono plan o ' : 'zostało '}
           <strong className={over ? 'text-red-600 dark:text-red-400' : ''}>{zl(Math.abs(d.left))}</strong>.
         </p>
+      ) : closedToday && d.daysLeft === 0 ? (
+        <p className="text-sm">Dzień zamknięty – to był ostatni dzień miesiąca. W kategorii „{row.name}” {over ? 'przekroczono plan o ' : 'zostało '}<strong className={over ? 'text-red-600 dark:text-red-400' : ''}>{zl(Math.abs(d.left))}</strong>.</p>
       ) : over ? (
         <p className="text-sm">
           Do końca miesiąca {d.daysLeft === 1 ? 'pozostał' : 'pozostało'} <strong>{d.daysLeft} {plDays(d.daysLeft)}</strong>. Budżet na „{row.name}” jest już przekroczony o{' '}
@@ -781,7 +806,12 @@ function DailyTile({ rows, month, savingsSpent = 0, entries = [] }) {
       ) : (
         <p className="text-sm leading-relaxed">
           Do końca miesiąca {d.daysLeft === 1 ? 'pozostał' : 'pozostało'} <strong>{d.daysLeft} {plDays(d.daysLeft)}</strong>. Na „{row.name}” możesz wydawać średnio{' '}
-          <strong className="text-lg text-[#1f3864] tabular dark:text-blue-300">{zl(d.perDay)}</strong> dziennie.
+          <strong className="text-lg text-[#1f3864] tabular dark:text-blue-300">{zl(d.perDay)}</strong> dziennie{closedToday ? ' od jutra' : ''}.
+        </p>
+      )}
+      {closedToday && (
+        <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300" aria-label="Dzień zamknięty">
+          ✓ Dzień zamknięty – „{dayClose.title}” odhaczone, liczę od jutra
         </p>
       )}
       {month === monthKey() && (
