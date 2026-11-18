@@ -42,6 +42,30 @@ export const CHART_OPTIONS = [
 
 const KIND_LABELS = { STOCK: 'Akcje', ETF: 'ETF', BONDS: 'Obligacje', CASH: 'Gotówka' };
 const CHART_KEY = 'wealth-app-chart-type';
+// Zapamiętany zakres majątku na wykresach (konta, rodzaje aktywów, wybrane walory) – per użytkownik (urządzenie + chmura)
+const SELECTION_KEY = 'wealth-app-charts-selection-v1';
+const changed = (key) => window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key } }));
+function readSelection(state) {
+  try {
+    const v = JSON.parse(localStorage.getItem(SELECTION_KEY) || 'null');
+    if (!v || typeof v !== 'object') return defaultSelection();
+    const base = defaultSelection();
+    const accIds = new Set(state.accounts.map((a) => a.id));
+    const instIds = new Set(state.instruments.map((i) => i.id));
+    // Konta / walory usunięte w międzyczasie – pomijane; nic nie zostało – cały majątek
+    const accounts = Array.isArray(v.accounts) ? v.accounts.filter((id) => accIds.has(id)) : typeof v.accounts === 'string' ? v.accounts : 'ALL';
+    const instruments = Array.isArray(v.instruments) ? v.instruments.filter((id) => instIds.has(id)) : [];
+    return {
+      ...base,
+      accounts: Array.isArray(accounts) && !accounts.length ? 'ALL' : accounts,
+      kinds: { ...base.kinds, ...(v.kinds && typeof v.kinds === 'object' ? v.kinds : {}) },
+      instruments,
+      compare: !!v.compare && instruments.length > 1,
+    };
+  } catch {
+    return defaultSelection();
+  }
+}
 
 function CheckItem({ checked, onChange, label, color, disabled }) {
   return (
@@ -136,7 +160,19 @@ export default function ChartsCenter({ param }) {
   const { state, actions, isDark, historyLoading } = useApp();
   const [chart, setChartState] = useState(() => readChart(param));
   const [range, setRange] = useState('1Y');
-  const [selection, setSelection] = useState(defaultSelection);
+  const [selection, setSelectionState] = useState(() => readSelection(state));
+  // Każda zmiana zakresu majątku zapamiętana (także po zamknięciu aplikacji i na innych urządzeniach)
+  const setSelection = (next) =>
+    setSelectionState((prev) => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      try {
+        localStorage.setItem(SELECTION_KEY, JSON.stringify(v));
+        changed(SELECTION_KEY);
+      } catch {
+        // brak localStorage – wybór nie zostanie zapamiętany
+      }
+      return v;
+    });
   const [benchmarkIds, setBenchmarks] = useState(['SP500', 'CPI']);
   const defs = useMemo(() => benchmarkDefs(state.settings), [state.settings]);
   // Usunięte własne benchmarki znikają z wyboru
@@ -151,6 +187,7 @@ export default function ChartsCenter({ param }) {
     setChartState(id);
     try {
       localStorage.setItem(CHART_KEY, id);
+      changed(CHART_KEY);
     } catch {
       // brak localStorage – wybór nie zostanie zapamiętany
     }
