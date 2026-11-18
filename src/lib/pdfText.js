@@ -1,9 +1,11 @@
+import { importChunk } from './appUpdate.js';
+
 // Tekst z PDF w przeglądarce (pdf.js, ładowany dopiero przy pierwszym użyciu) – duże raporty okresowe wysyłamy do AI
 // jako tekst (limit treści zapytania na Vercelu to 4,5 MB). Strony przetwarzane po kolei i zwalniane (pamięć iOS).
 let lib = null;
 async function pdfjs() {
   if (!lib) {
-    const [mod, worker] = await Promise.all([import('pdfjs-dist/legacy/build/pdf.mjs'), import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')]);
+    const [mod, worker] = await importChunk(() => Promise.all([import('pdfjs-dist/legacy/build/pdf.mjs'), import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')]));
     mod.GlobalWorkerOptions.workerSrc = worker.default;
     lib = mod;
   }

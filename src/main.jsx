@@ -2,6 +2,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import './index.css';
+import { reloadForUpdate } from './lib/appUpdate.js';
+
+// Nowe wdrożenie przy otwartej starej wersji: brak doładowywanego pliku → jednorazowe przeładowanie (zob. appUpdate.js)
+window.addEventListener('vite:preloadError', (e) => {
+  if (reloadForUpdate()) e.preventDefault();
+});
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

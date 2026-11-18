@@ -4,6 +4,7 @@ import { ChevronDown, FileText, History, Image as ImageIcon, Loader2, Paperclip,
 import { useApp } from '../../state/AppContext.jsx';
 import { requestEarnings, requestEarningsInterpretation } from '../../lib/newsAi.js';
 import { compressImage } from '../../lib/receipts.js';
+import { importChunk } from '../../lib/appUpdate.js';
 import { RETENTION_DAYS, analysisMemory, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, profileKpis, readProfiles } from '../../lib/companyProfiles.js';
@@ -121,8 +122,8 @@ export default function EarningsAnalyst() {
           // komentarz zarządu) – bez spisu treści, oświadczeń, danych audytora itp. Mały payload = mniej przeciążeń AI.
           // Skan bez warstwy tekstowej – jak dotąd cały plik (gdy mieści się w limicie zapytania).
           setBusy(`Odczyt tekstu z PDF: ${file.name}…`);
-          const { pdfToText } = await import('../../lib/pdfText.js');
-          const { reportDigest } = await import('../../lib/reportDigest.js');
+          const { pdfToText } = await importChunk(() => import('../../lib/pdfText.js'));
+          const { reportDigest } = await importChunk(() => import('../../lib/reportDigest.js'));
           const r = await pdfToText(file, { pages: true, onProgress: (i, n) => setBusy(`Odczyt PDF ${file.name}: strona ${i}/${n}…`) });
           if (r.pageTexts.some((t) => t.trim())) {
             const budget = Math.max(12000, Math.min(PDF_DIGEST_CHARS, MAX_TEXT - textUsed));
