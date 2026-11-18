@@ -135,12 +135,28 @@ async function callAi(payload) {
   if (!res.ok) throw new Error(body.error || (res.status === 404 ? 'AI dostępne po wdrożeniu na serwerze (Vercel)' : `HTTP ${res.status}`));
   return body;
 }
-export const requestReceipt = (image, mime = 'image/jpeg', budgetCategories = []) => callAi({ mode: 'receipt', image, mime, ...(budgetCategories.length ? { budgetCategories } : {}) });
+// jobId – zadanie w tle (wynik zapisany na serwerze, gdy aplikację zamknięto przed odpowiedzią; zob. aiJobs.js)
+export const requestReceipt = (image, mime = 'image/jpeg', budgetCategories = [], jobId = '') => callAi({ mode: 'receipt', image, mime, ...(budgetCategories.length ? { budgetCategories } : {}), ...(jobId ? { jobId } : {}) });
+// Zadania w tle: stan / wynik (GET) i potwierdzenie odbioru (usunięcie z serwera)
+export async function fetchAiJob(id) {
+  const token = await sessionToken();
+  const res = await fetch(`/api/news-summary?job=${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const body = await res.json().catch(() => ({}));
+  return res.ok ? body : { status: res.status === 401 ? 'auth' : 'unknown' };
+}
+export async function ackAiJob(id) {
+  try {
+    const token = await sessionToken();
+    await fetch('/api/news-summary', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ mode: 'job-ack', jobId: id }) });
+  } catch {
+    // nieodebrane potwierdzenie – serwer usunie zadanie po 7 dniach
+  }
+}
 export const requestBudgetSummary = (data) => callAi({ mode: 'budget', ...data });
 // Analityk wyników: wyłącznie materiały użytkownika – files: [{ data: base64, mime, name }], history: liczby z archiwum
 // memory – skróty wcześniejszych analiz tej spółki (najnowsze najpierw): AI odnosi się do trendów i zapowiedzi z poprzednich okresów
 // metricNames – nazwy wskaźników z historii spółki (AI używa tych samych dla tych samych pozycji)
-export const requestEarnings = ({ query = '', text = '', files = [], history = [], profile = '', memory = [], metricNames = [] }) => callAi({ mode: 'earnings', query, text, ...(files.length ? { files } : {}), ...(history.length ? { history } : {}), ...(profile ? { profile } : {}), ...(memory.length ? { memory } : {}), ...(metricNames.length ? { metricNames } : {}) });
+export const requestEarnings = ({ query = '', text = '', files = [], history = [], profile = '', memory = [], metricNames = [], jobId = '' }) => callAi({ mode: 'earnings', query, text, ...(files.length ? { files } : {}), ...(history.length ? { history } : {}), ...(profile ? { profile } : {}), ...(memory.length ? { memory } : {}), ...(metricNames.length ? { metricNames } : {}), ...(jobId ? { jobId } : {}) });
 // Interpretacja zapisanej analizy (np. danych startowych): liczby z analizy + historia spółki + profil z Ustawień
 export const requestEarningsInterpretation = ({ analysis, history = [], profile = '', memory = [] }) => callAi({ mode: 'earnings-interpret', analysis, ...(history.length ? { history } : {}), ...(profile ? { profile } : {}), ...(memory.length ? { memory } : {}) });
 export async function requestTaskCategories(titles) {

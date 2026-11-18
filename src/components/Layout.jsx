@@ -151,6 +151,38 @@ export function Layout({ view, onNavigate, children }) {
     }, 12000);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Zadania AI w tle (paragon, analiza wyników) dokończone przez serwer po zamknięciu aplikacji – odbiór przy starcie,
+  // po powrocie do aplikacji i co 15 s, dopóki są otwarte zadania (zob. src/lib/aiJobs.js)
+  useEffect(() => {
+    let timer = null;
+    const run = () =>
+      import('../lib/aiJobs.js')
+        .then(async (m) => {
+          if (!m.readJobs().length) return;
+          await m.resumeAiJobs({
+            notify: actions.notify,
+            openBudget: () => {
+              if (!String(window.location.hash).startsWith('#/budget')) window.location.hash = '#/budget';
+            },
+            earnings: async (result) => {
+              const e = await import('../lib/earnings.js');
+              const entry = e.saveEarnings(result);
+              actions.notify(`📊 Analiza ${entry.analysis.company} ${entry.analysis.quarter} dokończona w tle – Portfel → Analityk wyników`, 'success');
+            },
+          });
+          clearTimeout(timer);
+          if (m.hasOpenJobs()) timer = setTimeout(run, 15000);
+        })
+        .catch(() => {});
+    const first = setTimeout(run, 2500);
+    const onVis = () => document.visibilityState === 'visible' && run();
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Brak sieci (np. aplikacja na telefonie offline) – widoczny znaczek; dane działają z pamięci urządzenia
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
   useEffect(() => {

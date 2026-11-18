@@ -5,7 +5,9 @@ import { useApp } from '../../state/AppContext.jsx';
 import { requestEarnings, requestEarningsInterpretation } from '../../lib/newsAi.js';
 import { compressImage } from '../../lib/receipts.js';
 import { importChunk } from '../../lib/appUpdate.js';
-import { RETENTION_DAYS, analysisMemory, companyKey, companyMetricNames, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
+import { PREFS_CHANGED_EVENT } from '../../lib/budget.js';
+import { beginJob, endJob, isNetworkDrop } from '../../lib/aiJobs.js';
+import { EARNINGS_KEY, RETENTION_DAYS, analysisMemory, companyKey, companyMetricNames, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, profileKpis, readProfiles } from '../../lib/companyProfiles.js';
 import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
@@ -60,6 +62,16 @@ export default function EarningsAnalyst() {
   const [company, setCompany] = useState(() => companyKey(readEarnings()[0]?.analysis || {}) || Object.keys(readHistory())[0] || null);
   const [openKey, setOpenKey] = useState(() => readEarnings()[0]?.key || null);
   const [toggled, setToggled] = useState({}); // ręcznie rozwinięte / zwinięte analizy (domyślnie: tylko najświeższa)
+  // Analiza zapisana poza tym widokiem (np. dokończona w tle po zamknięciu aplikacji) – odświeżenie listy i historii
+  useEffect(() => {
+    const on = (e) => {
+      if (e.detail?.key !== EARNINGS_KEY) return;
+      setList(readEarnings());
+      setHist(readHistory());
+    };
+    window.addEventListener(PREFS_CHANGED_EVENT, on);
+    return () => window.removeEventListener(PREFS_CHANGED_EVENT, on);
+  }, []);
   const fileRef = useRef(null);
   // Dane startowe XTB (Q1–Q3 2026 vs konsensus): wczytywane automatycznie, gdy XTB jest w portfelu, inaczej – przyciskiem
   // Dane startowe spółek (XTB, LPP…): automatycznie, gdy spółka jest w portfelu, inaczej – przyciskiem
@@ -172,13 +184,20 @@ export default function EarningsAnalyst() {
       const memory = analysisMemory(query.trim() ? companyKey({ ticker: query.trim() }) : company);
       const payload = { query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile, memory, metricNames: known ? companyMetricNames(known) : [] };
       // Przeciążenie modeli Google (503) – do 2 automatycznych ponowień po 15 i 30 s, z odliczaniem w przycisku
+      // Zadanie w tle: po zamknięciu aplikacji serwer dokończy analizę – zapisze się przy kolejnym otwarciu
+      const jobId = beginJob('earnings');
+      payload.jobId = jobId;
       let res;
       for (let attempt = 0; ; attempt += 1) {
         try {
           res = await requestEarnings(payload);
+          endJob(jobId);
           break;
         } catch (err) {
-          if (attempt >= 2 || !/przeciąż|nie zdążył/i.test(err.message || '')) throw err;
+          if (attempt >= 2 || !/przeciąż|nie zdążył/i.test(err.message || '')) {
+            endJob(jobId, { keep: isNetworkDrop(err) });
+            throw err;
+          }
           for (let s = attempt ? 30 : 15; s > 0; s -= 1) {
             setBusy(`Modele AI przeciążone – ponawiam za ${s} s (próba ${attempt + 2}/3)…`);
             await new Promise((r) => setTimeout(r, 1000));

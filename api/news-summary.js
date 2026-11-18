@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto';
 import { ApiError, GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
-import { env, supabaseAnyKey, supabaseUrl } from './_env.js';
+import { env, supabaseAnyKey, supabaseServiceKey, supabaseUrl } from './_env.js';
 
 export const config = { maxDuration: 60 };
 
@@ -294,16 +294,112 @@ async function articleText(link, title = '') {
 }
 
 // ── Autoryzacja ──
+// { ok, userId } – userId z tokenu sesji (także przy AI_ALLOW_ANON=1, gdy token jest – potrzebny do zadań w tle)
 async function authorize(req) {
-  if (env('AI_ALLOW_ANON') === '1') return { ok: true };
+  const anon = env('AI_ALLOW_ANON') === '1';
   const url = supabaseUrl();
   const key = supabaseAnyKey();
-  if (!url || !key) return { ok: false, status: 503, error: 'Podsumowania AI wymagają logowania – brak konfiguracji Supabase na serwerze (SUPABASE_URL i klucz) albo ustaw AI_ALLOW_ANON=1' };
   const token = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
-  if (!token) return { ok: false, status: 401, error: 'Zaloguj się, aby korzystać z podsumowań AI' };
-  const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await sb.auth.getUser(token);
-  return error || !data?.user ? { ok: false, status: 401, error: 'Sesja wygasła – zaloguj się ponownie' } : { ok: true };
+  if (!url || !key) return anon ? { ok: true, userId: null } : { ok: false, status: 503, error: 'Podsumowania AI wymagają logowania – brak konfiguracji Supabase na serwerze (SUPABASE_URL i klucz) albo ustaw AI_ALLOW_ANON=1' };
+  if (!token) return anon ? { ok: true, userId: null } : { ok: false, status: 401, error: 'Zaloguj się, aby korzystać z podsumowań AI' };
+  try {
+    const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error } = await sb.auth.getUser(token);
+    if (!error && data?.user) return { ok: true, userId: data.user.id };
+  } catch {
+    // sieć / Supabase – jak brak sesji
+  }
+  return anon ? { ok: true, userId: null } : { ok: false, status: 401, error: 'Sesja wygasła – zaloguj się ponownie' };
+}
+
+// ── Zadania AI w tle (tabela public.ai_jobs, zob. supabase/ai_jobs.sql) ──
+// Paragon i analiza wyników z `jobId` od aplikacji: przed pracą wpis 'pending', po pracy – odpowiedź ('done' / 'error').
+// Funkcja Vercel kończy pracę także po zamknięciu aplikacji (rozłączenie klienta nie przerywa funkcji), więc wynik
+// czeka w bazie; aplikacja odbiera go przy następnym otwarciu (GET ?job=…) i potwierdza (mode 'job-ack' – usunięcie).
+// Gdy klient rozłączył się przed odpowiedzią – dodatkowo powiadomienie push (jeśli skonfigurowane). Brak tabeli /
+// klucza service_role – zadania po cichu wyłączone (działanie jak dotąd).
+const JOB_MODES = new Set(['receipt', 'earnings']);
+const JOB_ID = /^[a-zA-Z0-9-]{8,64}$/;
+const jobsClient = () => (supabaseUrl() && supabaseServiceKey() ? createClient(supabaseUrl(), supabaseServiceKey(), { auth: { persistSession: false, autoRefreshToken: false } }) : null);
+
+async function startJob(res, { id, userId, mode }) {
+  const sb = jobsClient();
+  if (!sb) return null;
+  try {
+    const now = new Date().toISOString();
+    const { error } = await sb.from('ai_jobs').upsert({ id, user_id: userId, mode, status: 'pending', result: null, http_status: null, created_at: now, updated_at: now });
+    if (error) return null; // np. brak tabeli
+    // sprzątanie: zadania starsze niż 7 dni (nieodebrane)
+    sb.from('ai_jobs').delete().eq('user_id', userId).lt('created_at', new Date(Date.now() - 7 * 86400000).toISOString()).then(() => {}, () => {});
+  } catch {
+    return null;
+  }
+  let gone = false;
+  res.on?.('close', () => {
+    if (!res.writableFinished) gone = true;
+  });
+  const job = { saved: Promise.resolve() };
+  // Odpowiedź przechwycona przez send(): zapis wyniku zadania (i push, gdy aplikacji już nie ma)
+  job.res = {
+    get statusCode() {
+      return res.statusCode;
+    },
+    set statusCode(v) {
+      res.statusCode = v;
+    },
+    setHeader: (k, v) => res.setHeader(k, v),
+    end: (data) => {
+      try {
+        res.end(data);
+      } catch {
+        gone = true;
+      }
+      const status = res.statusCode || 200;
+      let result = null;
+      try {
+        result = JSON.parse(data);
+      } catch {
+        result = { error: 'Nieczytelna odpowiedź' };
+      }
+      job.saved = (async () => {
+        try {
+          await sb.from('ai_jobs').update({ status: status < 300 ? 'done' : 'error', http_status: status, result, updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId);
+          if (gone && status < 300) await jobPush(sb, userId, mode, result);
+        } catch {
+          // zapis nieudany – aplikacja po ponownym otwarciu zgłosi brak wyniku
+        }
+      })();
+    },
+  };
+  return job;
+}
+
+async function jobPush(sb, userId, mode, result) {
+  const m = await import('./_push.js');
+  const cfg = m.pushConfig();
+  if (cfg.missing?.length || !cfg.vapidPublic || !cfg.vapidPrivate) return;
+  const { data: subs } = await sb.from('push_subscriptions').select('id, endpoint, p256dh, auth, prefs').eq('user_id', userId);
+  const r = result?.receipt;
+  const a = result?.analysis;
+  const msg =
+    mode === 'receipt'
+      ? { title: 'FinTrack 📊', body: `🧾 Paragon odczytany${r?.shop ? ` (${r.shop}${Number(r.total) > 0 ? `, ${Number(r.total).toFixed(2).replace('.', ',')} zł` : ''})` : ''} – otwórz aplikację, aby go zatwierdzić.`, url: '/#/budget', tag: 'ai-job-receipt' }
+      : { title: 'FinTrack 📊', body: `📊 Analiza wyników gotowa${a?.company ? `: ${a.company} ${a.quarter || ''}` : ''} – otwórz aplikację, aby ją zobaczyć.`, url: '/#/portfolio', tag: 'ai-job-earnings' };
+  for (const sub of subs || []) {
+    if (sub.prefs && sub.prefs.enabled === false) continue;
+    await m.sendPush(cfg, sub, msg).catch(() => {});
+  }
+}
+
+// GET ?job=<id> – stan / wynik zadania; POST { mode: 'job-ack', jobId } – usunięcie odebranego zadania
+async function jobStatus(req, res, id) {
+  const auth = await authorize(req);
+  if (!auth.ok || !auth.userId) return send(res, 401, { error: auth.error || 'Zaloguj się' });
+  const sb = jobsClient();
+  if (!sb || !JOB_ID.test(id)) return send(res, 404, { status: 'unknown' });
+  const { data, error } = await sb.from('ai_jobs').select('id, mode, status, http_status, result, created_at, updated_at').eq('id', id).eq('user_id', auth.userId).maybeSingle();
+  if (error || !data) return send(res, 404, { status: 'unknown' });
+  return send(res, 200, data);
 }
 
 // ── Wywołanie modelu (Gemini: instrukcja systemowa + odpowiedź JSON zgodna ze schematem) ──
@@ -1293,14 +1389,32 @@ function scopePortfolio(out, list) {
 }
 
 export default async function handler(req, res) {
+  const ctx = {};
+  await handle(req, res, ctx);
+  if (ctx.job) await ctx.job.saved; // zapis wyniku zadania w tle przed zakończeniem funkcji
+}
+
+async function handle(req, res, ctx) {
   // GET /api/news-summary?check=1 – test konfiguracji (rodzaj klucza, model) krótkim zapytaniem do Gemini
-  if (req.method === 'GET' && new URL(req.url || '/', 'http://x').searchParams.get('check') === '1') return checkConfig(req, res);
+  const params = new URL(req.url || '/', 'http://x').searchParams;
+  if (req.method === 'GET' && params.get('check') === '1') return checkConfig(req, res);
+  if (req.method === 'GET' && params.get('job')) return jobStatus(req, res, params.get('job'));
   if (req.method !== 'POST') return send(res, 405, { error: 'Użyj POST' });
   if (!apiKey()) return send(res, 503, { error: 'Podsumowania AI nie są skonfigurowane (brak GEMINI_API_KEY na serwerze)' });
   try {
     const auth = await authorize(req);
     if (!auth.ok) return send(res, auth.status, { error: auth.error });
     const body = await readBody(req);
+    if (body.mode === 'job-ack') {
+      const sb = jobsClient();
+      if (sb && auth.userId && JOB_ID.test(String(body.jobId || ''))) await sb.from('ai_jobs').delete().eq('id', body.jobId).eq('user_id', auth.userId);
+      return send(res, 200, { ok: true });
+    }
+    // Zadanie w tle: wynik zapisany na serwerze także wtedy, gdy aplikację zamknięto przed odpowiedzią
+    if (JOB_MODES.has(body.mode) && auth.userId && JOB_ID.test(String(body.jobId || ''))) {
+      ctx.job = await startJob(res, { id: body.jobId, userId: auth.userId, mode: body.mode });
+      if (ctx.job) res = ctx.job.res;
+    }
     if (body.mode === 'receipt') {
       // Paragon: { image: base64 (JPEG po kompresji w aplikacji), mime } → { receipt: { shop, date, time, total, items } }
       const image = String(body.image || '').replace(/^data:[^,]+,/, '');

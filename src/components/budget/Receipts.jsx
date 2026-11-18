@@ -3,6 +3,7 @@ import { Camera, Check, ChevronDown, Image as ImageIcon, Loader2, Pencil, Plus, 
 import { useApp } from '../../state/AppContext.jsx';
 import { applyDeposits, applyMemory, assignBudgetRows, itemShare, cacheReceipt, cachedReceipt, compressImage, imageHash, learnBudget, learnFromReceipt, readReceipts, receiptParts, receiptRows, receiptTotals, writeReceipts } from '../../lib/receipts.js';
 import { requestReceipt } from '../../lib/newsAi.js';
+import { PENDING_RECEIPT_EVENT, beginJob, endJob, isNetworkDrop, takePendingReceipt } from '../../lib/aiJobs.js';
 import { formatDate, formatPLN, todayISO } from '../../lib/format.js';
 import { BetaBadge } from '../ui.jsx';
 
@@ -44,6 +45,34 @@ export function ReceiptScanner({ rows, onSave, month }) {
     e.target.value = '';
     if (file) processImage(file);
   };
+  // Wynik AI → pamięć paragonu, kategorie budżetu (pamięć poprawek → AI → reguły; nic spoza listy), kaucja 0,50 zł
+  // do napojów (Ustawienia → paragony) → ekran weryfikacji albo zapis automatyczny
+  const finishReceipt = (receipt, hash) => {
+    if (!receipt?.items?.length) throw new Error('Nie rozpoznano pozycji – zrób wyraźniejsze zdjęcie całego paragonu');
+    if (hash) cacheReceipt(hash, receipt);
+    const id = hash ? `rc${hash.slice(0, 12)}` : `rc${Date.now().toString(36)}`;
+    const ready = assignBudgetRows(applyDeposits({ ...applyMemory(receipt), id, date: receipt.date || todayISO() }, state.settings.receiptDeposit !== false), rows);
+    if (review) setDraft(ready);
+    else persist(ready, { auto: true });
+  };
+  // Paragon odczytany w tle (aplikację zamknięto przed odpowiedzią) – przy otwarciu Budżetu ekran weryfikacji / zapis
+  const rowsReady = receiptRows(rows).length > 0;
+  useEffect(() => {
+    if (!rowsReady) return undefined;
+    const pick = () => {
+      if (draft) return;
+      const p = takePendingReceipt();
+      if (!p) return;
+      try {
+        finishReceipt(p.receipt, p.hash);
+      } catch (err) {
+        actions.notify(`Paragon: ${err.message}`, 'warn');
+      }
+    };
+    pick();
+    window.addEventListener(PENDING_RECEIPT_EVENT, pick);
+    return () => window.removeEventListener(PENDING_RECEIPT_EVENT, pick);
+  }, [rowsReady, draft]); // eslint-disable-line react-hooks/exhaustive-deps
   const processImage = async (file) => {
     setBusy('Przygotowanie zdjęcia…');
     try {
@@ -53,15 +82,17 @@ export function ReceiptScanner({ rows, onSave, month }) {
       let receipt = cachedReceipt(hash);
       if (!receipt) {
         setBusy('AI odczytuje paragon…');
-        receipt = (await requestReceipt(img.base64, img.mime, receiptRows(rows).map((r) => r.name.trim()))).receipt;
-        if (receipt?.items?.length) cacheReceipt(hash, receipt);
+        // Zadanie w tle: po zamknięciu aplikacji serwer i tak dokończy odczyt – wynik pokaże się przy kolejnym otwarciu
+        const jobId = beginJob('receipt', { hash });
+        try {
+          receipt = (await requestReceipt(img.base64, img.mime, receiptRows(rows).map((r) => r.name.trim()), jobId)).receipt;
+          endJob(jobId);
+        } catch (e) {
+          endJob(jobId, { keep: isNetworkDrop(e) });
+          throw e;
+        }
       }
-      if (!receipt?.items?.length) throw new Error('Nie rozpoznano pozycji – zrób wyraźniejsze zdjęcie całego paragonu');
-      // Krok 2: kategorie budżetu użytkownika – pamięć (poprawki) → AI → reguły; nic spoza jego listy
-      // Kaucja 0,50 zł do napojów (Ustawienia → paragony, domyślnie włączone) – po kategoriach z pamięci / AI
-      const ready = assignBudgetRows(applyDeposits({ ...applyMemory(receipt), id: `rc${hash.slice(0, 12)}`, date: receipt.date || todayISO() }, state.settings.receiptDeposit !== false), rows);
-      if (review) setDraft(ready);
-      else persist(ready, { auto: true });
+      finishReceipt(receipt, hash);
     } catch (err) {
       actions.notify(`Paragon: ${err.message}`, 'warn');
     } finally {
