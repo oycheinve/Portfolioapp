@@ -1,3 +1,4 @@
+import { mergePref } from '../lib/prefsMerge.js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { reducer } from './reducer.js';
 import { COLLECTIONS, STATE_VERSION, STORAGE_KEY, migrateState } from './schema.js';
@@ -34,7 +35,8 @@ function restoreUiPrefs(uiPrefs) {
   if (!uiPrefs || typeof uiPrefs !== 'object') return;
   try {
     for (const [k, v] of Object.entries(uiPrefs)) {
-      if (k.startsWith('wealth-app-') && k !== STORAGE_KEY && typeof v === 'string') localStorage.setItem(k, v);
+      // Listy analiz / historia spółek – scalane z wersją na urządzeniu (nie nadpisywane starszą kopią z innego urządzenia)
+      if (k.startsWith('wealth-app-') && k !== STORAGE_KEY && typeof v === 'string') localStorage.setItem(k, mergePref(k, localStorage.getItem(k), v, uiPrefs));
     }
   } catch {
     // brak localStorage – ustawienia widoków pozostaną domyślne

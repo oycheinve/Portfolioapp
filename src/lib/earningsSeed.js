@@ -426,7 +426,12 @@ const flagSet = (flag) => {
 // Spółki z danymi startowymi do zaproponowania: nie wczytane wcześniej i bez historii w bazie użytkownika
 // Spółki z danymi startowymi do wczytania: wystarczy, że nie były wczytane wcześniej – własna historia spółki nie blokuje
 // (dane startowe są dołączane do niej, a Twoje analizy i liczby mają pierwszeństwo – mergeSeed)
-export const availableSeeds = () => COMPANY_SEEDS.filter((c) => !flagSet(c.flag)).map(({ key, label }) => ({ key, label }));
+// Dane startowe: do dodania, gdy jeszcze nie dodane – albo dodane, ale spółka nie ma już żadnej analizy (np. lista
+// analiz utracona przy synchronizacji) – wtedy przycisk wraca i przywraca kwartały z konsensusem
+export const availableSeeds = () => {
+  const have = new Set(readEarnings().map((e) => companyKey(e.analysis)));
+  return COMPANY_SEEDS.filter((c) => !flagSet(c.flag) || !have.has(c.key)).map(({ key, label }) => ({ key, label }));
+};
 
 // Nałożenie Twoich danych na dane startowe: zapisana wartość (nie-null) i Twoje wskaźniki mają pierwszeństwo
 function overlay(seedP = {}, ownP = {}) {

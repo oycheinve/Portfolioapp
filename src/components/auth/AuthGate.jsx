@@ -1,3 +1,4 @@
+import { mergePref } from '../../lib/prefsMerge.js';
 import { useEffect, useState } from 'react';
 import { Cloud, KeyRound, Loader2, LogIn, Mail, UserPlus, Wallet } from 'lucide-react';
 import { STORAGE_KEY, createEmptyState } from '../../state/schema.js';
@@ -33,7 +34,7 @@ async function prepareUser(user) {
   storage(SCOPE_OWNER_KEY, user.id);
   if (pick.syncedAt) storage(SYNCED_AT_KEY, pick.syncedAt);
   if (pick.uiPrefs) {
-    for (const [k, v] of Object.entries(pick.uiPrefs)) if (k.startsWith('wealth-app-') && k !== STORAGE_KEY && typeof v === 'string') storage(k, v);
+    for (const [k, v] of Object.entries(pick.uiPrefs)) if (k.startsWith('wealth-app-') && k !== STORAGE_KEY && typeof v === 'string') storage(k, mergePref(k, storage(k), v, pick.uiPrefs));
   }
   return { user: { id: user.id, email: user.email }, needsPush: pick.needsPush, notice: pick.notice || null };
 }

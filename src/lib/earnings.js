@@ -325,8 +325,18 @@ export function deleteCompanyHistory(key) {
   delete all[key];
   writeHistory(all);
 }
-export function deleteEarnings(key) {
+export function deleteEarnings(key, { tombstone = true } = {}) {
   writeEarnings(readEarnings().filter((e) => e.key !== key));
+  // Świadome usunięcie zapamiętane – scalanie z chmurą (prefsMerge.js) nie przywróci tej analizy
+  if (!tombstone) return;
+  try {
+    const k = 'wealth-app-earnings-deleted-v1';
+    const all = JSON.parse(localStorage.getItem(k) || '{}') || {};
+    all[key] = new Date().toISOString();
+    localStorage.setItem(k, JSON.stringify(Object.fromEntries(Object.entries(all).slice(-300))));
+  } catch {
+    // brak localStorage
+  }
 }
 // Punkt odniesienia wiersza: konsensus, a gdy go brak – ten sam okres rok wcześniej (ocena r/r: > 2%, dla % > 0,5 p.p.;
 // „mniej = lepiej” odwrotnie). Dzięki temu pozycje bez konsensusu (np. przychody, marże) nie zostają „bez oceny”.
