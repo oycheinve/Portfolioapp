@@ -8,7 +8,7 @@ export const USAGE_EVENT = 'fintrack-ai-usage';
 export const USAGE_CATEGORIES = [
   { id: 'earnings', label: 'Analityk spółek', hint: 'analizy wyników, esencje PDF, interpretacje', modes: ['earnings', 'earnings-interpret'] },
   { id: 'shopping', label: 'Zakupy', hint: 'inteligentne ceny i kategorie produktów', modes: ['shopping-prices', 'shopping'] },
-  { id: 'budget', label: 'Budżet i paragony', hint: 'paragony, podsumowania, statystyki budżetu', modes: ['receipt', 'budget', 'budget-stats'] },
+  { id: 'budget', label: 'Budżet i paragony', hint: 'paragony, podsumowania budżetu', modes: ['receipt', 'budget'] },
   { id: 'news', label: 'Newsy', hint: 'podsumowania artykułów i dnia', modes: ['article', 'digest'] },
   { id: 'other', label: 'Zadania i przegląd tygodnia', hint: 'kategorie zadań, tygodniowy przegląd portfela', modes: ['tasks', 'weekly-review'] },
 ];

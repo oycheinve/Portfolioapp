@@ -20,7 +20,6 @@ import WeeklyTasksView from './views/WeeklyTasks.jsx';
 import ShoppingView from './views/Shopping.jsx';
 import CashFlowView from './views/CashFlow.jsx';
 import AlternativesView from './views/Alternatives.jsx';
-import BudgetStatsView from './views/BudgetStats.jsx'; // moduł odpinany: Statystyki budżetu
 
 const VIEWS = {
   dashboard: Dashboard,
@@ -40,7 +39,6 @@ const VIEWS = {
   shopping: ShoppingView,
   cashflow: CashFlowView,
   alternatives: AlternativesView,
-  budgetstats: BudgetStatsView, // moduł odpinany: Statystyki budżetu
 };
 
 // Stare adresy (sprzed przebudowy) prowadzą do nowych miejsc
