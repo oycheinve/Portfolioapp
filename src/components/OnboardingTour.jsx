@@ -62,21 +62,84 @@ const STEPS = [
     view: 'dashboard',
     target: ['nav-more', 'nav-charts'],
     emoji: '🧭',
-    title: 'Więcej',
-    text: 'Tu są pozostałe moduły: Wykresy, Dywidendy (kalendarz i prognoza), Cele i kamienie milowe, Poduszka finansowa (obligacje, oszczędności, PPK), Surowce i krypto oraz Symulacje i kalkulatory.',
+    title: 'Więcej – pozostałe zakładki',
+    text: 'Na telefonie pod „Więcej” (na komputerze w menu po lewej) są kolejne moduły. Przejdźmy szybko po każdym z nich.',
+  },
+  {
+    view: 'charts',
+    target: ['nav-charts', 'page-title'],
+    emoji: '📈',
+    title: 'Wykresy i notowania',
+    text: 'Wartość portfela w czasie na tle wpłat, zysk, porównanie z indeksami, wpłaty i wypłaty na wykresie oraz notowania Twoich spółek.',
+  },
+  {
+    view: 'dividends',
+    target: ['nav-dividends', 'page-title'],
+    emoji: '💰',
+    title: 'Dywidendy',
+    text: 'Kalendarz wypłat spółek z portfela, otrzymane dywidendy netto, prognoza na kolejne miesiące i stopa dywidendy od ceny zakupu.',
+  },
+  {
+    view: 'goals',
+    target: ['nav-goals', 'page-title'],
+    emoji: '🎯',
+    title: 'Cele',
+    text: 'Cele roczne (np. kwota wpłat czy wartość portfela) z postępem oraz kamienie milowe, które odhaczają się same – wartość portfela, zysk, stopa zwrotu i dywidendy.',
+  },
+  {
+    view: 'safe',
+    target: ['nav-safe', 'page-title'],
+    emoji: '🛡️',
+    title: 'Poduszka finansowa',
+    text: 'Bezpieczne pieniądze osobno od inwestycji: obligacje skarbowe (z odsetkami liczonymi automatycznie), konta oszczędnościowe i PPK.',
+  },
+  {
+    view: 'alternatives',
+    target: ['nav-alternatives', 'page-title'],
+    emoji: '💎',
+    title: 'Surowce i krypto',
+    text: 'Złoto, srebro i kryptowaluty z aktualnymi notowaniami – wliczane do całego majątku na Pulpicie.',
+  },
+  {
+    view: 'simulations',
+    target: ['nav-simulations', 'page-title'],
+    emoji: '🧮',
+    title: 'Symulacje i kalkulatory',
+    text: 'Procent składany, kalkulator obligacji, IKE / IKZE, PPK i koszty ETF-ów oraz testy warunków skrajnych portfela.',
   },
   {
     view: 'settings',
     target: ['nav-settings'],
     emoji: '⚙️',
     title: 'Ustawienia',
-    text: 'Konta i import historii (np. z XTB), profile spółek dla Analityka, powiadomienia, włączanie funkcji AI i Zużycie AI z limitami, wygląd, konto w chmurze i kopia zapasowa.',
+    text: 'Konta i import historii (np. z XTB), profile spółek dla Analityka, wygląd, konto w chmurze i kopia zapasowa. Pokażę trzy najważniejsze miejsca.',
+  },
+  {
+    view: 'settings/notifications',
+    target: ['notify-device', 'settings-notifications'],
+    emoji: '🔔',
+    title: 'Włącz powiadomienia',
+    text: 'Tu włączysz powiadomienia w telefonie (zgoda systemu + przełącznik). Potem wybierasz, o czym chcesz wiedzieć: przypomnienie o zadaniach, duże zmiany kursów, nowe artykuły, podsumowanie tygodnia i miesiąca. „Powiadomienia z serwera” działają także przy zamkniętej aplikacji.',
+  },
+  {
+    view: 'settings/modules',
+    target: ['settings-modules'],
+    emoji: '🧹',
+    title: 'Ukryj to, czego nie używasz',
+    text: 'Wyłącz moduły, których nie potrzebujesz (np. Zakupy, Zadania czy Newsy) – znikną z menu, a aplikacja zrobi się prostsza. Dane zostają i wrócą po ponownym włączeniu.',
+  },
+  {
+    view: 'settings/ai',
+    target: ['settings-ai'],
+    emoji: '✨',
+    title: 'Funkcje AI',
+    text: 'Każdą funkcję AI (podsumowania newsów, paragony, ceny zakupów, analityk…) możesz osobno wyłączyć. Obok, w „Zużycie AI”, widać liczbę zapytań i dzienne limity darmowych modeli.',
   },
   {
     view: 'dashboard',
     emoji: '🎉',
     title: 'Gotowe!',
-    text: 'Zacznij od dodania kont i transakcji (albo importu w Ustawieniach) i planu budżetu. Samouczek uruchomisz ponownie w Ustawieniach → Aplikacja i dane → Samouczek.',
+    text: 'Zacznij od dodania kont i transakcji (albo importu w Ustawieniach) i planu budżetu. Samouczek uruchomisz ponownie w Ustawieniach → Aplikacja i dane → Pomoc → Samouczek.',
   },
 ];
 
@@ -124,7 +187,7 @@ export default function OnboardingTour({ onNavigate }) {
     return () => window.removeEventListener(START_TOUR_EVENT, start);
   }, []);
   useEffect(() => {
-    if (phase === 'off') return undefined;
+    if (phase !== 'ask') return undefined;
     const t = setTimeout(() => setVisible(true), 30);
     return () => clearTimeout(t);
   }, [phase]);
@@ -145,8 +208,16 @@ export default function OnboardingTour({ onNavigate }) {
     const seek = () => {
       const el = s.target ? findTarget(s.target) : null;
       if (el || tries > 40) {
-        if (el && el.getBoundingClientRect().bottom > window.innerHeight) el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
-        setTimeout(measure, el ? 250 : 0);
+        const r0 = el?.getBoundingClientRect();
+        if (el && (r0.top < 56 || r0.bottom > window.innerHeight - 70) && r0.height < window.innerHeight * 0.6) el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+        // Kolejność: nowy ekran wjeżdża → podświetlenie przesuwa się na miejsce → dopiero wtedy karta się pojawia
+        setTimeout(
+          () => {
+            measure();
+            setTimeout(() => setVisible(true), reducedMotion() ? 0 : 260);
+          },
+          reducedMotion() ? 0 : el ? 320 : 120,
+        );
         return;
       }
       tries += 1;
@@ -186,11 +257,8 @@ export default function OnboardingTour({ onNavigate }) {
     }, reducedMotion() ? 0 : 220);
   };
   const go = (n) => {
-    setVisible(false); // karta znika, „latarka” przesuwa się, karta wraca na nowym miejscu
-    setTimeout(() => {
-      setStep(n);
-      setVisible(true);
-    }, reducedMotion() ? 0 : 180);
+    setVisible(false); // karta znika → zmiana ekranu → „latarka” przesuwa się → karta wraca na nowym miejscu
+    setTimeout(() => setStep(n), reducedMotion() ? 0 : 220);
   };
   const next = () => (step < STEPS.length - 1 ? go(step + 1) : finish('done'));
   const back = () => step > 0 && go(step - 1);
@@ -239,7 +307,11 @@ export default function OnboardingTour({ onNavigate }) {
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
   const cardW = Math.min(360, vw - 32);
   let cardStyle = { width: cardW, left: (vw - cardW) / 2, top: Math.max(16, vh / 2 - 150) };
-  if (rect) {
+  // Wysoki element (np. cała karta ustawień): podświetlenie przycięte do ekranu, karta przy dolnej krawędzi
+  const tall = rect && rect.height > vh * 0.5;
+  const shown = rect && tall ? { ...rect, top: Math.max(rect.top, 64), height: Math.min(rect.top + rect.height, vh - 16) - Math.max(rect.top, 64) } : rect;
+  if (tall) cardStyle = { width: cardW, left: (vw - cardW) / 2, bottom: 16 };
+  else if (rect) {
     const below = rect.top + rect.height + pad + 12;
     const placeBelow = below + 230 < vh;
     const left = Math.min(Math.max(16, rect.left + rect.width / 2 - cardW / 2), vw - cardW - 16);
@@ -251,10 +323,10 @@ export default function OnboardingTour({ onNavigate }) {
   return (
     <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label={`Samouczek: ${s.title}`}>
       {/* Przyciemnienie z „latarką” – płynne przejście pozycji między krokami */}
-      {rect ? (
+      {shown ? (
         <div
           className="pointer-events-none fixed rounded-xl ring-2 ring-blue-400/80 transition-all duration-500 ease-in-out motion-reduce:transition-none"
-          style={{ top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2, boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)' }}
+          style={{ top: shown.top - pad, left: shown.left - pad, width: shown.width + pad * 2, height: shown.height + pad * 2, boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)' }}
         />
       ) : (
         <div className="fixed inset-0 bg-black/55 transition-opacity duration-500" />

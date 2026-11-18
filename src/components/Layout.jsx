@@ -278,7 +278,7 @@ export function Layout({ view, onNavigate, children }) {
               <Wallet size={16} />
             </span>
           </div>
-          <h1 className="truncate text-base font-semibold">
+          <h1 data-tour="page-title" className="truncate text-base font-semibold">
             {navLabel(current, state.settings)}
             {current?.beta && <BetaBadge />}
           </h1>

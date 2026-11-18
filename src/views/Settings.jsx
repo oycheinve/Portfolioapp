@@ -142,7 +142,7 @@ export default function SettingsView({ param, onNavigate }) {
         <button type="button" onClick={() => go(group?.id)} className={backCls}>
           <ChevronLeft size={18} /> {group ? group.title : 'Konta i ustawienia'}
         </button>
-        {section.render()}
+        <div data-tour={`settings-${param}`}>{section.render()}</div>
       </div>
     );
   }

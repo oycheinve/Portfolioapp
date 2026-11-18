@@ -88,7 +88,10 @@ export default function App() {
       {(cloud) => (
         <AppProvider key={cloud?.user.id || 'local'} cloud={cloud}>
           <Layout view={view} onNavigate={navigate}>
-            <View key={view} onNavigate={navigate} param={route.param} />
+            {/* Płynne przejście między zakładkami (zanikanie + lekki ruch w górę; bez animacji przy „ograniczeniu ruchu”) */}
+            <div key={`${view}/${route.param || ''}`} className="view-enter">
+              <View onNavigate={navigate} param={route.param} />
+            </div>
           </Layout>
           <GoalsRolloverHost onNavigate={navigate} />
           <Toast />

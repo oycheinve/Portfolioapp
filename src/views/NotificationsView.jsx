@@ -175,6 +175,7 @@ export default function NotificationsView() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
+<div data-tour="notify-device">
       <Card title="Powiadomienia na tym urządzeniu" subtitle="Zgoda systemu i włącznik wszystkich powiadomień FinTrack" icon={Smartphone}>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <button
@@ -193,6 +194,7 @@ export default function NotificationsView() {
           </span>
         </div>
       </Card>
+</div>
 
       <Card title="Wieczorne przypomnienie o zadaniach" subtitle="Gdy dzisiejsze zadania dzienne nie są jeszcze wykonane" icon={CalendarCheck2}>
         <div className="space-y-3 text-sm">
