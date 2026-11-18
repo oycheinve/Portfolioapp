@@ -108,6 +108,19 @@ export function parseQuantity(q) {
   const n = t.match(/^(\d+)\s*(szt\.?|x|×|op\.?|opak\.?)?$/);
   return n && Number(n[1]) >= 1 && Number(n[1]) <= 99 ? { kind: 'szt', n: Number(n[1]) } : null;
 }
+// Suma ilości tego samego produktu (ponowne dodanie): sztuki + sztuki, waga + waga; brak ilości = 1 szt.
+// Różne jednostki (np. „2” i „500 g”) albo nieczytelny zapis – null (osobna pozycja)
+export function mergeQuantity(a, b) {
+  const pa = String(a || '').trim() ? parseQuantity(a) : { kind: 'szt', n: 1, implicit: true };
+  const pb = String(b || '').trim() ? parseQuantity(b) : { kind: 'szt', n: 1, implicit: true };
+  if (!pa || !pb || pa.kind !== pb.kind) return null;
+  if (pa.kind === 'szt') {
+    const n = pa.n + pb.n;
+    return n <= 999 ? (/szt/i.test(`${a} ${b}`) ? `${n} szt` : String(n)) : null;
+  }
+  const kg = Math.round((pa.kg + pb.kg) * 1000) / 1000;
+  return kg < 1 ? `${Math.round(kg * 1000)} g` : `${String(kg).replace('.', ',')} kg`;
+}
 export const formatKg = (kg) => (kg < 1 ? `${Math.round(kg * 1000)} g` : `${String(Math.round(kg * 1000) / 1000).replace('.', ',')} kg`);
 
 export function readAiPrices() {

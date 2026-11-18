@@ -5,7 +5,7 @@ import { MissingTablesError, cloudStore, localStore, makeItem, makeList, sortIte
 import { SHOPPING_CATEGORIES, categoryOf, groupByCategory, normProduct, readCats, remember, resolveLocal, suggestProducts, writeCats } from '../lib/shoppingCategories.js';
 import { requestShoppingCategories, requestShoppingPrices } from '../lib/newsAi.js';
 import { aiOn } from '../lib/aiFeatures.js';
-import { AI_PRICES_KEY, PRICES_KEY, buildPriceIndex, estimatePrice, formatKg, formatZl, parseQuantity, knownProducts, needsAiPrice, readAiPrices, readPriceOverrides, writeAiPrices, writePriceOverride } from '../lib/shoppingPrices.js';
+import { AI_PRICES_KEY, PRICES_KEY, buildPriceIndex, estimatePrice, formatKg, formatZl, mergeQuantity, parseQuantity, knownProducts, needsAiPrice, readAiPrices, readPriceOverrides, writeAiPrices, writePriceOverride } from '../lib/shoppingPrices.js';
 import { DEPOSIT, RECEIPTS_KEY, isDepositDrink } from '../lib/receipts.js';
 import { PREFS_CHANGED_EVENT } from '../lib/budget.js';
 
@@ -137,11 +137,20 @@ export default function ShoppingView() {
   const titleRef = useRef(null);
   // Dodanie produktu (z pola albo z podpowiedzi): zapis w uczącej się pamięci – użycie i kategoria rozpoznana
   // lokalnie (pamięć / słowo kluczowe / słownik); produkt nowy dostanie kategorię od AI (efekt poniżej)
-  const addProduct = (name) => {
+  const addProduct = (name, quantity = qtyText()) => {
     const t = String(name || '').trim();
     if (!current || !t) return;
-    const item = makeItem(current.id, t, qtyText());
-    run((d) => ({ ...d, items: [...d.items, item] }), () => store.addItem(item));
+    // Ten sam produkt już jest na liście (do kupienia) – ilości się sumują zamiast nowej pozycji
+    const same = items.find((i) => !i.done && normProduct(i.title) === normProduct(t));
+    const merged = same ? mergeQuantity(same.quantity, quantity) : null;
+    if (same && merged) {
+      const id = same.id;
+      run((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? { ...i, quantity: merged } : i)) }), () => store.setQuantity(id, merged));
+      actions.notify(`${same.title}: ilość ${merged} (dodano ${quantity || '1'})`, 'success');
+    } else {
+      const item = makeItem(current.id, t, quantity);
+      run((d) => ({ ...d, items: [...d.items, item] }), () => store.addItem(item));
+    }
     setAiCats((prev) => {
       const r = resolveLocal(t, prev);
       const next = remember(prev, t, { category: r?.category, source: r?.source === 'memory' ? undefined : r?.source, used: true });
@@ -150,6 +159,7 @@ export default function ShoppingView() {
     });
     setTitle('');
     setQty('');
+    setPicked('');
     titleRef.current?.focus();
   };
   const addItem = (e) => {
@@ -216,7 +226,16 @@ export default function ShoppingView() {
   const doneItems = items.filter((i) => i.done);
   const groups = useMemo(() => (grouped ? groupByCategory(openItems, aiCats) : []), [grouped, openItems, aiCats]); // eslint-disable-line react-hooks/exhaustive-deps
   // Podpowiedzi od 3 znaków: produkty z pamięci (bez tych, które już czekają na tej liście)
-  const suggestions = useMemo(() => suggestProducts(aiCats, title, { exclude: new Set(openItems.map((i) => normProduct(i.title))) }), [aiCats, title, openItems]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [picked, setPicked] = useState(''); // wybrana podpowiedź – czeka na ilość (pole „Ilość”)
+  const suggestions = useMemo(() => (picked && picked === title ? [] : suggestProducts(aiCats, title, {})), [aiCats, title, picked]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onList = (name) => items.find((i) => !i.done && normProduct(i.title) === normProduct(name));
+  const qtyRef = useRef(null);
+  // Podpowiedź: nazwa w polu i kursor w „Ilość” (ilość + Enter / „+”); przycisk „+” przy podpowiedzi – od razu 1 szt.
+  const pickSuggestion = (name) => {
+    setTitle(name);
+    setPicked(name);
+    setTimeout(() => qtyRef.current?.focus(), 0);
+  };
   const emojiOf = (c) => SHOPPING_CATEGORIES.find((x) => x.id === c)?.emoji || '🏠';
   const pill = (on) =>
     `inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border px-3 text-sm font-semibold transition-colors ${
@@ -479,7 +498,7 @@ export default function ShoppingView() {
           <form onSubmit={addItem} data-tour="tour-shopping-add" className="flex gap-2 px-3 pt-3 sm:px-4" aria-label="Nowa pozycja">
             <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Dodaj produkt, np. Mleko" aria-label="Nazwa produktu" autoComplete="off" className={`${inputCls} flex-1`} />
             <div className="flex shrink-0 rounded-lg border border-stone-200 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/30 dark:border-white/10 dark:bg-neutral-800">
-              <input value={qty} onChange={(e) => setQty(e.target.value)} maxLength={30} inputMode={qtyUnit === 'szt' ? 'text' : 'decimal'} placeholder="Ilość" aria-label="Ilość" className="h-10 w-14 min-w-0 rounded-l-lg bg-transparent px-2.5 text-sm outline-none sm:w-20" />
+              <input ref={qtyRef} value={qty} onChange={(e) => setQty(e.target.value)} maxLength={30} inputMode={qtyUnit === 'szt' ? 'text' : 'decimal'} placeholder="Ilość" aria-label="Ilość" className="h-10 w-14 min-w-0 rounded-l-lg bg-transparent px-2.5 text-sm outline-none sm:w-20" />
               <select value={qtyUnit} onChange={(e) => setQtyUnit(e.target.value)} aria-label="Jednostka ilości" className="h-10 rounded-r-lg border-l border-stone-200 bg-transparent pr-1 pl-1.5 text-xs font-medium text-stone-600 outline-none dark:border-white/10 dark:text-stone-300">
                 <option value="szt">szt.</option>
                 <option value="kg">kg</option>
@@ -494,15 +513,21 @@ export default function ShoppingView() {
           {suggestions.length > 0 && (
             <ul className="mx-3 mt-1.5 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm sm:mx-4 dark:border-white/10 dark:bg-neutral-800" aria-label="Podpowiedzi produktów">
               {suggestions.map((sg) => (
-                <li key={sg.key}>
-                  <button type="button" onClick={() => addProduct(sg.name)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-stone-50 dark:hover:bg-white/5" aria-label={`Dodaj ${sg.name}`}>
-                    <Plus size={14} className="shrink-0 text-blue-600 dark:text-blue-400" />
-                    <span className="min-w-0 flex-1 truncate font-medium">{sg.name}</span>
+                <li key={sg.key} className="flex items-center">
+                  <button type="button" onClick={() => pickSuggestion(sg.name)} className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm hover:bg-stone-50 dark:hover:bg-white/5" aria-label={`Wybierz ${sg.name} i podaj ilość`}>
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                      {sg.name}
+                      {onList(sg.name) && <span className="ml-1 text-[11px] font-normal text-stone-400">· na liście{onList(sg.name).quantity ? `: ${onList(sg.name).quantity}` : ''}</span>}
+                    </span>
                     {sg.category && (
-                      <span className="shrink-0 rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 dark:bg-white/[0.06] dark:text-stone-300">
+                      <span className="hidden shrink-0 rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-600 sm:inline dark:bg-white/[0.06] dark:text-stone-300">
                         {emojiOf(sg.category)} {sg.category}
                       </span>
                     )}
+                    <span className="shrink-0 text-[11px] text-stone-400">ilość ›</span>
+                  </button>
+                  <button type="button" onClick={() => addProduct(sg.name, '')} className="mr-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10" aria-label={`Dodaj od razu ${sg.name}`} title="Dodaj od razu (1 szt.)">
+                    <Plus size={16} />
                   </button>
                 </li>
               ))}

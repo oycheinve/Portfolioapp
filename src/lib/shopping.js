@@ -74,6 +74,9 @@ export const localStore = {
   async deleteItem(id) {
     updateLocal((d) => ({ ...d, items: d.items.filter((i) => i.id !== id) }));
   },
+  async setQuantity(id, quantity) {
+    updateLocal((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? { ...i, quantity } : i)) }));
+  },
   async deleteDone(listId) {
     updateLocal((d) => ({ ...d, items: d.items.filter((i) => !(i.listId === listId && i.done)) }));
   },
@@ -127,6 +130,10 @@ export function cloudStore(userId) {
     async deleteItem(id) {
       const sb = await getClient();
       check((await sb.from('shopping_items').delete().eq('id', id).eq('user_id', userId)).error);
+    },
+    async setQuantity(id, quantity) {
+      const sb = await getClient();
+      check((await sb.from('shopping_items').update({ quantity, updated_at: now() }).eq('id', id).eq('user_id', userId)).error);
     },
     async deleteDone(listId) {
       const sb = await getClient();
