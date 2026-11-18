@@ -139,7 +139,8 @@ export const requestReceipt = (image, mime = 'image/jpeg', budgetCategories = []
 export const requestBudgetSummary = (data) => callAi({ mode: 'budget', ...data });
 // Analityk wyników: wyłącznie materiały użytkownika – files: [{ data: base64, mime, name }], history: liczby z archiwum
 // memory – skróty wcześniejszych analiz tej spółki (najnowsze najpierw): AI odnosi się do trendów i zapowiedzi z poprzednich okresów
-export const requestEarnings = ({ query = '', text = '', files = [], history = [], profile = '', memory = [] }) => callAi({ mode: 'earnings', query, text, ...(files.length ? { files } : {}), ...(history.length ? { history } : {}), ...(profile ? { profile } : {}), ...(memory.length ? { memory } : {}) });
+// metricNames – nazwy wskaźników z historii spółki (AI używa tych samych dla tych samych pozycji)
+export const requestEarnings = ({ query = '', text = '', files = [], history = [], profile = '', memory = [], metricNames = [] }) => callAi({ mode: 'earnings', query, text, ...(files.length ? { files } : {}), ...(history.length ? { history } : {}), ...(profile ? { profile } : {}), ...(memory.length ? { memory } : {}), ...(metricNames.length ? { metricNames } : {}) });
 // Interpretacja zapisanej analizy (np. danych startowych): liczby z analizy + historia spółki + profil z Ustawień
 export const requestEarningsInterpretation = ({ analysis, history = [], profile = '', memory = [] }) => callAi({ mode: 'earnings-interpret', analysis, ...(history.length ? { history } : {}), ...(profile ? { profile } : {}), ...(memory.length ? { memory } : {}) });
 export async function requestTaskCategories(titles) {

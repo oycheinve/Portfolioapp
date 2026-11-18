@@ -5,7 +5,7 @@ import { useApp } from '../../state/AppContext.jsx';
 import { requestEarnings, requestEarningsInterpretation } from '../../lib/newsAi.js';
 import { compressImage } from '../../lib/receipts.js';
 import { importChunk } from '../../lib/appUpdate.js';
-import { RETENTION_DAYS, analysisMemory, companyKey, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
+import { RETENTION_DAYS, analysisMemory, companyKey, companyMetricNames, companyPeriods, deleteCompanyHistory, deleteEarnings, periodOrder, metricRef, readEarnings, readHistory, saveEarnings, setInterpretation, surprise } from '../../lib/earnings.js';
 import { chartChrome, seriesColor } from '../../lib/colors.js';
 import { findProfile, hasContent, profileContext, profileKpis, readProfiles } from '../../lib/companyProfiles.js';
 import { applyExtras, applySeed, availableSeeds, upgradeSeed } from '../../lib/earningsSeed.js';
@@ -170,7 +170,7 @@ export default function EarningsAnalyst() {
       const profile = profileContext(matched);
       // Pamięć analiz: skróty wcześniejszych analiz tej spółki – AI sprawdza, czy trendy / zapowiedzi się materializują
       const memory = analysisMemory(query.trim() ? companyKey({ ticker: query.trim() }) : company);
-      const payload = { query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile, memory };
+      const payload = { query: query.trim() || known?.ticker || known?.company || '', text: allText, files: bin, history, profile, memory, metricNames: known ? companyMetricNames(known) : [] };
       // Przeciążenie modeli Google (503) – do 2 automatycznych ponowień po 15 i 30 s, z odliczaniem w przycisku
       let res;
       for (let attempt = 0; ; attempt += 1) {

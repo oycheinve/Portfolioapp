@@ -136,7 +136,12 @@ export function recordHistory(analysis, now = Date.now()) {
   for (const q of analysis.quarters || []) put(q.quarter, { revenue: q.revenue ?? null, netIncome: q.netIncome ?? null, ebitda: q.ebitda ?? null, eps: q.eps ?? null });
   const cur = {};
   const prev = {};
-  for (const m of analysis.metrics || []) {
+  // Ta sama pozycja co we wcześniejszych raportach (inna drobna różnica w nazwie) – zapis pod dotychczasową nazwą
+  const known = new Map();
+  for (const p of Object.values(c.periods || {})) for (const n of Object.keys(p.metrics || {})) if (!known.has(metricKey(n))) known.set(metricKey(n), n);
+  const canon = (n) => known.get(metricKey(n)) || n;
+  for (const m0 of analysis.metrics || []) {
+    const m = { ...m0, name: canon(m0.name) };
     if (m.actual !== null && m.actual !== undefined) cur[m.name] = { value: m.actual, unit: m.unit || '', lowerIsBetter: !!m.lowerIsBetter };
     if (m.previous !== null && m.previous !== undefined) prev[m.name] = { value: m.previous, unit: m.unit || '', lowerIsBetter: !!m.lowerIsBetter };
   }
@@ -156,9 +161,66 @@ export function readHistory() {
   for (const e of [...readEarnings()].reverse()) recordHistory(e.analysis, new Date(e.at).getTime());
   return readHistoryRaw() || {};
 }
-// Okresy spółki od najstarszego
+// Klucz wskaźnika niezależny od drobnych różnic w nazwie, które AI daje w kolejnych raportach: „Przychody ze sprzedaży”
+// = „Przychody” = „Przychody netto ze sprzedaży”, „Marża EBITDA (%)” = „Marża EBITDA”, „EBITDA raportowana” = „EBITDA”
+// (bez łączenia różnych pojęć: „EBITDA skorygowana”, „Zysk netto” i „Zysk operacyjny” zostają osobno)
+export function metricKey(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/ł/g, 'l')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/%/g, ' ')
+    .replace(/\b(ze sprzedazy|skonsolidowan\w*|raportowan\w*|ogolem|lacznie|razem|grupy|gk|w mln \w+|mln \w+|tys \w+)\b/g, ' ')
+    .replace(/^(\s*przychody)\s+netto\b/, '$1')
+    .replace(/[^a-z0-9/]+/g, ' ')
+    .trim();
+}
+// Nazwy wskaźników spółki scalone po kluczu: dla każdego klucza – nazwa najczęstsza w historii
+function metricAliases(periods) {
+  const byKey = new Map();
+  for (const p of periods) for (const n of Object.keys(p.metrics || {})) {
+    const k = metricKey(n) || n;
+    if (!byKey.has(k)) byKey.set(k, new Map());
+    const m = byKey.get(k);
+    m.set(n, (m.get(n) || 0) + 1);
+  }
+  const alias = {};
+  for (const m of byKey.values()) {
+    const best = [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0][0];
+    for (const n of m.keys()) alias[n] = best;
+  }
+  return alias;
+}
+const BASE_FROM_METRIC = { revenue: 'przychody', netIncome: 'zysk netto', ebitda: 'ebitda' };
+// Okresy spółki od najstarszego; wskaźniki o tym samym znaczeniu pod jedną nazwą (wykresy KPI ciągłe także dla starszych
+// zapisów), a brakujące przychody / zysk netto / EBITDA okresu uzupełnione z jego wskaźników
 export function companyPeriods(company) {
-  return Object.values(company?.periods || {}).sort((a, b) => periodOrder(a.quarter) - periodOrder(b.quarter));
+  const periods = Object.values(company?.periods || {}).sort((a, b) => periodOrder(a.quarter) - periodOrder(b.quarter));
+  const alias = metricAliases(periods);
+  return periods.map((p) => {
+    const metrics = {};
+    // nazwa kanoniczna ma pierwszeństwo przed wariantem w tym samym okresie
+    const names = Object.keys(p.metrics || {}).sort((a, b) => (alias[a] === a ? 1 : 0) - (alias[b] === b ? 1 : 0));
+    for (const n of names) metrics[alias[n] || n] = p.metrics[n];
+    const out = { ...p, metrics };
+    for (const [f, key] of Object.entries(BASE_FROM_METRIC)) {
+      if (out[f] !== null && out[f] !== undefined) continue;
+      const hit = Object.entries(metrics).find(([n, m]) => metricKey(n) === key && m?.unit !== '%' && Number.isFinite(Number(m?.value)));
+      if (hit) out[f] = Number(hit[1].value);
+    }
+    return out;
+  });
+}
+// Nazwy wskaźników z historii spółki (najczęstsze najpierw) – AI używa ich dla tych samych pozycji w kolejnych raportach
+export function companyMetricNames(company, limit = 40) {
+  const count = {};
+  for (const p of companyPeriods(company)) for (const n of Object.keys(p.metrics || {})) count[n] = (count[n] || 0) + 1;
+  return Object.entries(count)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([n]) => n);
 }
 export function deleteCompanyHistory(key) {
   const all = readHistory();
