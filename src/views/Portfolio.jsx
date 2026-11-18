@@ -146,6 +146,7 @@ export default function PortfolioView({ onNavigate }) {
     setMobileViewState(v);
     try {
       localStorage.setItem(VIEW_KEY, v);
+      window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key: VIEW_KEY } }));
     } catch {
       // brak localStorage – wybór widoku nie zostanie zapamiętany
     }
@@ -176,6 +177,8 @@ export default function PortfolioView({ onNavigate }) {
   const persist = (patch) => {
     try {
       localStorage.setItem(PREFS_KEY, JSON.stringify({ categories, hiddenAccounts, collapsed, freeCashV2: true, altV1: true, ...patch }));
+      // Zgłoszenie zmiany do synchronizacji z chmurą – bez tego przy kolejnym uruchomieniu wracało stare ustawienie z chmury
+      window.dispatchEvent(new CustomEvent('wealth-app-prefs-changed', { detail: { key: PREFS_KEY } }));
     } catch {
       // brak localStorage – filtr nie zostanie zapamiętany
     }

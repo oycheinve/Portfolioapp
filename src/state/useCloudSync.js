@@ -178,8 +178,9 @@ export function useCloudSync(state, cloud, { dispatch, notify, restoreUiPrefs })
     if (!userId) return undefined;
     const onVisible = () => {
       if (document.visibilityState === 'visible') pull();
-      // Karta chowana (zamknięcie aplikacji na telefonie) – wyślij od razu zaległe zmiany
-      else if (timer.current) push();
+      // Karta chowana (zamknięcie aplikacji na telefonie) – wyślij od razu zaległe zmiany, także ustawienia widoków
+      // zapisane bez zdarzenia zmiany (inaczej przy następnym starcie wróciłaby starsza wersja z chmury)
+      else if (timer.current || !clean()) push();
     };
     const onOnline = () => pull();
     document.addEventListener('visibilitychange', onVisible);
