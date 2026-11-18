@@ -419,7 +419,7 @@ Yahoo podaje dzień dywidendy i stawkę, ale nie dzień wypłaty (aplikacja szac
 
 ## Listy zakupów
 
-Zakładka „Listy zakupów” (`#/shopping`, „Zakupy” na dolnym pasku i pozycja w menu bocznym; `src/views/Shopping.jsx`, `src/lib/shopping.js`): wiele list (pigułki z liczbą pozycji do kupienia, „Nowa lista”, zmiana nazwy, usunięcie listy z pozycjami), dodawanie produktów z opcjonalną ilością, odhaczanie (przekreślenie, sekcja „Kupione”), usuwanie pozycji i „Usuń kupione”. Wybrana lista zapamiętana w przeglądarce.
+Zakładka „Listy zakupów” (`#/shopping`, „Zakupy” na dolnym pasku i pozycja w menu bocznym; `src/views/Shopping.jsx`, `src/lib/shopping.js`): domyślnie jedna lista, a „+ Nowa lista” (nad listą) dodaje kolejną – od razu wybraną, z polem nazwy (domyślnie „Lista 2”…); przy kilku listach zakładki-pigułki z liczbą pozycji do kupienia; zmiana nazwy i usunięcie listy (z pozycjami) – w trybie „Edytuj”, dodawanie produktów z opcjonalną ilością, odhaczanie (przekreślenie, sekcja „Kupione”), usuwanie pozycji i „Usuń kupione”. Wybrana lista zapamiętana w przeglądarce.
 - **Zapis**: po zalogowaniu – tabele Supabase `shopping_lists` i `shopping_items` (`supabase/shopping_lists.sql` – uruchom raz w SQL Editor; RLS: tylko własne dane; usunięcie listy usuwa pozycje), synchronizacja między urządzeniami. W trybie lokalnym albo do czasu utworzenia tabel – localStorage `wealth-app-shopping-v1` (z komunikatem o brakujących tabelach). Zmiany optymistyczne (od razu na ekranie, zapis w tle). Moduł nie wpływa na portfel, budżet ani zadania.
 
 ## Podsumowania AI w Newsach (Google Gemini)

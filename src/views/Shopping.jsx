@@ -113,6 +113,17 @@ export default function ShoppingView() {
     run((d) => ({ lists: d.lists.filter((l) => l.id !== id), items: d.items.filter((i) => i.listId !== id) }), () => store.deleteList(id));
   };
 
+  // Nowa lista: dodana na końcu, od razu wybrana i z otwartym polem nazwy (domyślna nazwa do zmiany)
+  const addList = () => {
+    const taken = new Set(lists.map((l) => l.name));
+    let n = lists.length + 1;
+    while (taken.has(`Lista ${n}`)) n += 1;
+    const list = makeList(`Lista ${n}`);
+    run((d) => ({ ...d, lists: [...d.lists, list] }), () => store.addList(list));
+    setSelected(list.id);
+    setRenaming(list.name);
+  };
+
   // ── Pozycje ──
   const [title, setTitle] = useState('');
   const [qty, setQty] = useState('');
@@ -396,6 +407,28 @@ export default function ShoppingView() {
       {/* Jedna stała lista zakupów (tworzona automatycznie); dodatkowe listy z wcześniejszych wersji – wybór w nagłówku */}
       {(loading || !current) && <div className="h-40 animate-pulse rounded-2xl bg-stone-100 dark:bg-white/[0.04]" />}
 
+      {/* Listy: domyślnie jedna; „Nowa lista” dodaje kolejną (z nazwą), przy kilku – zakładki do przełączania */}
+      {current && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5" role="tablist" aria-label="Listy zakupów">
+          {lists.length > 1 &&
+            lists.map((l) => (
+              <button
+                key={l.id}
+                type="button"
+                role="tab"
+                aria-selected={l.id === current.id}
+                onClick={() => setSelected(l.id)}
+                className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${l.id === current.id ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500 dark:text-neutral-950' : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 dark:border-white/10 dark:bg-neutral-900 dark:text-stone-200 dark:hover:bg-white/5'}`}
+              >
+                <span className="max-w-[9rem] truncate">{l.name}</span>
+                {counts[l.id]?.open ? <span className={`rounded-full px-1.5 text-[10px] ${l.id === current.id ? 'bg-white/25' : 'bg-stone-100 dark:bg-white/10'}`}>{counts[l.id].open}</span> : null}
+              </button>
+            ))}
+          <button type="button" onClick={addList} className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-dashed border-stone-300 px-3 text-xs font-semibold text-stone-600 hover:bg-stone-50 dark:border-white/15 dark:text-stone-300 dark:hover:bg-white/5">
+            <Plus size={14} /> Nowa lista
+          </button>
+        </div>
+      )}
       {current && (
         <section className={card} aria-label={`Lista ${current.name}`}>
           <header className="flex items-center gap-2 border-b border-stone-100 px-4 py-3 dark:border-white/5">
@@ -411,19 +444,7 @@ export default function ShoppingView() {
               </form>
             ) : (
               <div className="min-w-0 flex-1">
-                {lists.length > 1 ? (
-                  // Listy z wcześniejszych wersji – dostęp do nich bez przycisków tworzenia nowych
-                  <select value={current.id} onChange={(e) => setSelected(e.target.value)} aria-label="Wybór listy" className="max-w-full truncate bg-transparent text-sm font-semibold outline-none">
-                    {lists.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name}
-                        {counts[l.id]?.open ? ` (${counts[l.id].open})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <h2 className="truncate text-sm font-semibold">{current.name}</h2>
-                )}
+                <h2 className="truncate text-sm font-semibold">{current.name}</h2>
                 <p className="text-xs text-stone-500 tabular dark:text-stone-400">
                   {openCount ? `Do kupienia: ${openCount}` : items.length ? 'Wszystko kupione ✓' : 'Lista jest pusta'}
                   {doneCount ? ` · kupione: ${doneCount}` : ''}
