@@ -4,6 +4,7 @@
 // gdy aplikację zamknięto wcześniej – przy następnym otwarciu `resumeAiJobs` odbiera wynik i przekazuje go dalej:
 // paragon → kolejka `fintrack-pending-receipts` (Budżet otwiera ekran weryfikacji), analiza → zapis w Analityku.
 import { ackAiJob, fetchAiJob } from './newsAi.js';
+import { recordAiUsage } from './aiUsage.js';
 
 const JOBS_KEY = 'fintrack-ai-jobs';
 export const PENDING_RECEIPTS_KEY = 'fintrack-pending-receipts';
@@ -77,6 +78,7 @@ export async function resumeAiJobs(handlers = {}) {
       if (r.status === 'pending' && age < STALE_MS) continue; // serwer jeszcze pracuje
       if (r.status === 'auth' || (r.status === 'unknown' && age < 30000)) continue;
       write(JOBS_KEY, readJobs().filter((j) => j.id !== job.id));
+      if (r.result && (r.status === 'done' || r.status === 'error')) recordAiUsage(job.mode, r.result, r.status === 'done'); // zużycie AI zadania dokończonego w tle
       if (r.status === 'done' && r.result) {
         if (job.mode === 'receipt' && r.result.receipt?.items?.length) {
           write(PENDING_RECEIPTS_KEY, [...readPendingReceipts(), { receipt: r.result.receipt, hash: job.meta?.hash || '', at: job.at }]);

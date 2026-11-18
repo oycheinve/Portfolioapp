@@ -1,6 +1,7 @@
 // Podsumowania AI w Newsach: zapytanie do /api/news-summary (z tokenem sesji Supabase, gdy użytkownik jest
 // zalogowany) i pamięć ostatnich podsumowań w przeglądarce. Klucz bez prefiksu „wealth-app-” – pamięć podręczna
 // nie trafia do kopii zapasowej ani synchronizacji ustawień.
+import { recordAiUsage } from './aiUsage.js';
 import { getClient } from './cloud.js';
 
 const CACHE_KEY = 'fintrack-news-ai-v1';
@@ -97,6 +98,7 @@ async function fetchSummary(key, payload) {
     await new Promise((r) => setTimeout(r, 3000));
     ({ res, body } = await slot(() => post(payload, token)));
   }
+  recordAiUsage(payload.mode === 'digest' ? 'digest' : 'article', body, res.ok && !!body.summary); // licznik zużycia AI
   if (!res.ok || !body.summary) throw new Error(body.error ? `${body.error}${body.detail ? ` – Google: ${body.detail}` : ''}` : (res.status === 404 ? 'Podsumowania AI są dostępne po wdrożeniu na serwerze (Vercel)' : res.status === 504 ? 'Serwer AI nie odpowiedział na czas – spróbuj ponownie za chwilę' : `HTTP ${res.status}`));
   const value = { summary: body.summary, basis: body.basis, ...(body.period ? { period: body.period } : {}), ...(body.note ? { note: body.note } : {}), ...(body.via ? { via: body.via } : {}) };
   writeCache(key, value);
@@ -132,6 +134,7 @@ async function callAi(payload) {
     await new Promise((r) => setTimeout(r, 3000));
     ({ res, body } = await slot(() => post(payload, token)));
   }
+  if (payload.mode !== 'job-ack') recordAiUsage(payload.mode, body, res.ok); // licznik zużycia AI (Ustawienia)
   if (!res.ok) throw new Error(body.error || (res.status === 404 ? 'AI dostępne po wdrożeniu na serwerze (Vercel)' : `HTTP ${res.status}`));
   return body;
 }

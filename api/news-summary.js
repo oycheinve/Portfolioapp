@@ -8,6 +8,7 @@
 //   SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (albo VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY) – weryfikacja sesji:
 //   z podsumowań korzystają tylko zalogowani użytkownicy (koszt API); AI_ALLOW_ANON=1 – bez logowania (np. lokalnie).
 import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { ApiError, GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 import { env, supabaseAnyKey, supabaseServiceKey, supabaseUrl } from './_env.js';
@@ -548,6 +549,7 @@ async function providerGenerate(id, model, system, text, images, spec, deadline)
   if (!r.ok) throw new ApiError({ message: `${id} ${model}: ${j?.error?.message || j?.message || `HTTP ${r.status}`}`, status: r.status });
   const choice = j.choices?.[0] || {};
   // Odpowiedź w kształcie odpowiedzi Gemini – dla wspólnych funkcji parse
+  recordUsage(id, j.model || model, j.usage?.prompt_tokens, j.usage?.completion_tokens);
   return { text: jsonOnly(choice.message?.content), modelVersion: `${id}/${j.model || model}`, candidates: [{ finishReason: choice.finish_reason === 'length' ? 'MAX_TOKENS' : 'STOP' }] };
 }
 
@@ -654,6 +656,8 @@ async function summarizeGemini(key, userContent, spec, deadline) {
             response = await generate(client, model, userContent, deadline, spec);
           }
           Object.assign(lastRoute, { backend, model });
+          const um = response?.usageMetadata;
+          recordUsage('gemini', response?.modelVersion || model, um?.promptTokenCount, (um?.candidatesTokenCount || 0) + (um?.thoughtsTokenCount || 0));
           return (spec?.parse || parseResponse)(response, model);
         } catch (e) {
           // ostatni „ważny” błąd: przeciążenie/limit nie przykrywa wcześniejszego braku modelu i odwrotnie
@@ -797,7 +801,20 @@ function googleDetail(e) {
   return msg.replace(/key=[^&\s]+/gi, 'key=…').replace(/(AIza|AQ\.)[\w.-]+/g, '$1…').slice(0, 240);
 }
 
+// Zużycie AI w zapytaniu (tokeny z odpowiedzi modeli) – dołączane do odpowiedzi jako `aiUsage` (licznik w aplikacji,
+// Ustawienia → Zużycie AI). Osobno dla każdego zapytania (AsyncLocalStorage), bez wpływu na resztę odpowiedzi.
+const usageStore = new AsyncLocalStorage();
+function recordUsage(provider, model, inTok, outTok) {
+  const u = usageStore.getStore();
+  if (u) u.push({ provider, model, in: Number(inTok) || 0, out: Number(outTok) || 0 });
+}
+
 function send(res, status, body) {
+  const u = usageStore.getStore();
+  if (u?.length && body && typeof body === 'object' && !Array.isArray(body)) {
+    const last = u[u.length - 1];
+    body = { ...body, aiUsage: { calls: u.length, in: u.reduce((s, x) => s + x.in, 0), out: u.reduce((s, x) => s + x.out, 0), provider: last.provider, model: last.model } };
+  }
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -1391,7 +1408,7 @@ function scopePortfolio(out, list) {
 
 export default async function handler(req, res) {
   const ctx = {};
-  await handle(req, res, ctx);
+  await usageStore.run([], () => handle(req, res, ctx));
   if (ctx.job) await ctx.job.saved; // zapis wyniku zadania w tle przed zakończeniem funkcji
 }
 

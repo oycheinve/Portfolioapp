@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, FileText, Filter, Landmark, Layers, LayoutGrid, LineChart, Palette, Pencil, PiggyBank, Plus, Radio, ScanLine, Scale, Sparkles, Target, Trash2, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Baby, Bell, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudDownload, Database, FileText, Filter, Landmark, Layers, LayoutGrid, LineChart, Palette, Pencil, PiggyBank, Plus, Radio, ScanLine, Scale, Sparkles, Target, Trash2, Wallet, Gauge } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { ACCOUNT_TYPES, OTHER_ASSET_CATEGORIES, TAX_BRACKETS, XTB_FX_FEE_PCT } from '../lib/constants.js';
 import { accountFxPct } from '../lib/engine.js';
@@ -18,6 +18,7 @@ import CashRegister from './CashRegister.jsx';
 import AltPurchasesCard from '../components/alternatives/AltPurchasesCard.jsx';
 import JulkaIkeCard from '../components/settings/JulkaIkeCard.jsx';
 import AiFeaturesCard from '../components/settings/AiFeaturesCard.jsx';
+import AiUsageCard from '../components/settings/AiUsageCard.jsx';
 import NewsFilterCard from '../components/settings/NewsFilterCard.jsx';
 import CompanyProfilesCard from '../components/settings/CompanyProfilesCard.jsx';
 import { AccountFormModal, BelkaBadge, DeleteAccountModal, INVEST_ACCOUNT_TYPES } from '../components/settings/AccountForm.jsx';
@@ -42,6 +43,7 @@ const SECTIONS = {
   'other-assets': { title: 'Nieruchomości i inne aktywa', hint: 'Wliczane do Majątku Całkowitego', icon: Building2, render: () => <OtherAssetsSection /> },
   limits: { title: 'Limity wpłat IKE / IKZE', hint: 'Roczne limity i wykorzystanie', icon: CalendarClock, render: () => <LimitsCard /> },
   ai: { title: 'Funkcje AI', hint: 'Włączanie i wyłączanie poszczególnych funkcji AI', icon: Sparkles, render: () => <AiFeaturesCard /> },
+  'ai-usage': { title: 'Zużycie AI', hint: 'Zapytania i tokeny w tym miesiącu, limit dzienny', icon: Gauge, render: () => <AiUsageCard /> },
   modules: { title: 'Widoczne moduły', hint: 'Które zakładki są w menu', icon: LayoutGrid, render: () => <ModulesVisibilityCard /> },
   'budget-options': { title: 'Budżet', hint: 'Kategoria „Z oszczędności”', icon: PiggyBank, render: () => <BudgetOptionsCard /> },
   receipts: { title: 'Paragony', hint: 'Podgląd przed zapisem, kaucja za napoje, podział 50/50', icon: ScanLine, render: () => <ReceiptsOptionsCard /> },
@@ -93,7 +95,7 @@ const GROUPS = [
     emoji: '🔔',
     title: 'Powiadomienia i AI',
     subtitle: 'Powiadomienia w telefonie, funkcje AI',
-    sections: [{ label: '', items: ['notifications', 'ai'] }],
+    sections: [{ label: '', items: ['notifications', 'ai', 'ai-usage'] }],
   },
   {
     id: 'app',
