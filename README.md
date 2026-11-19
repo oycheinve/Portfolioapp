@@ -609,7 +609,7 @@ Karta „Analityk wyników spółek” na dole Portfela: ticker / nazwa spółki
 
 ### Skanowanie paragonów – aparat w aplikacji
 
-- „Skanuj paragon” otwiera aparat wewnątrz aplikacji (`getUserMedia`, tylna kamera, podgląd na żywo, zdjęcie klatki ≤ 1920 px) – przeglądarka nie przechodzi w tło, więc Android nie zamyka jej z braku pamięci (komunikat „Zbyt mało pamięci, by ukończyć poprzednią operację” przy zewnętrznej aplikacji aparatu). Przycisk „Z galerii” – wybór gotowego zdjęcia; bez zgody na aparat / bez kamery – komunikat i przycisk „Aparat telefonu” (dotychczasowy tryb). Strumień kamery zatrzymywany od razu po zdjęciu lub zamknięciu.
+- „Skanuj paragon” otwiera aparat wewnątrz aplikacji (`getUserMedia`, tylna kamera, podgląd na żywo, zdjęcie klatki ≤ 1920 px) – przeglądarka nie przechodzi w tło, więc Android nie zamyka jej z braku pamięci (komunikat „Zbyt mało pamięci, by ukończyć poprzednią operację” przy zewnętrznej aplikacji aparatu). Przycisk „Z galerii” – wybór gotowego zdjęcia; bez zgody na aparat / bez kamery – komunikat i przycisk „Aparat telefonu” (dotychczasowy tryb). Strumień kamery zatrzymywany od razu po zdjęciu lub zamknięciu. **Obiektyw 1×**: przeglądarka przy „tylny aparat” często wybiera szerokokątny (0,5×) – kamera z zoomem dostaje zoom 1×, a przy osobnych kamerach wybierana jest główna („Back Camera”, „camera2 0”, bez „ultra wide” / „dual wide” / „triple”); przycisk „Obiektyw n/m” przełącza tylne kamery, wybór zapamiętany na urządzeniu (`fintrack-camera-device`).
 
 ### Ustawienia → Funkcje AI
 

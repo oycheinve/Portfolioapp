@@ -163,25 +163,89 @@ function CameraCapture({ onCapture, onGallery, onSystemCamera, onClose }) {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
   };
+  // Obiektyw: domyślnie główny (1×). Przeglądarka przy „tylny aparat” często wybiera szerokokątny (0,5×) – wtedy:
+  // jedna kamera z kilkoma soczewkami → zoom 1×; osobne kamery → główna (bez „ultra wide” / „dual wide” / „triple”,
+  // na Androidzie zwykle „camera2 0, facing back”). Wybór zapamiętany (`fintrack-camera-device`); przycisk zmiany obiektywu.
+  const [lenses, setLenses] = useState([]); // tylne kamery: [{ deviceId, label }]
+  const [lens, setLens] = useState('');
+  const RES = { width: { ideal: 1920 }, height: { ideal: 1440 } };
+  const open = async (deviceId) => {
+    stop();
+    setReady(false);
+    const video = deviceId ? { deviceId: { exact: deviceId }, ...RES } : { facingMode: { ideal: 'environment' }, ...RES };
+    const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+    streamRef.current = stream;
+    const track = stream.getVideoTracks()[0];
+    // Kamera logiczna z zoomem od 0,5× – ustaw 1×
+    try {
+      const caps = track.getCapabilities?.() || {};
+      if (caps.zoom && caps.zoom.min < 1 && caps.zoom.max >= 1) await track.applyConstraints({ advanced: [{ zoom: 1 }] });
+    } catch {
+      // zoom nieobsługiwany – zostaje obiektyw domyślny
+    }
+    const v = videoRef.current;
+    if (v) {
+      v.srcObject = stream;
+      v.play().catch(() => {});
+    }
+    return track;
+  };
   useEffect(() => {
     let alive = true;
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false })
-      .then((stream) => {
-        if (!alive) return stream.getTracks().forEach((t) => t.stop());
-        streamRef.current = stream;
-        const v = videoRef.current;
-        if (v) {
-          v.srcObject = stream;
-          v.play().catch(() => {});
+    const ULTRA = /ultra|0[.,]5|szerokok|dual wide|triple|telephoto|tele\b/i;
+    (async () => {
+      let saved = '';
+      try {
+        saved = localStorage.getItem('fintrack-camera-device') || '';
+      } catch {
+        saved = '';
+      }
+      let track;
+      try {
+        track = await open(saved || undefined);
+      } catch {
+        track = await open(); // zapamiętany obiektyw niedostępny – domyślny tylny
+      }
+      if (!alive) return stop();
+      // Lista tylnych kamer (nazwy dostępne po zgodzie) i wybór głównej, gdy przeglądarka dała szerokokątną
+      const devices = (await navigator.mediaDevices.enumerateDevices?.().catch(() => [])) || [];
+      const back = devices.filter((d) => d.kind === 'videoinput' && /back|rear|environment|tył|tylna|tylny/i.test(d.label));
+      if (!alive) return stop();
+      setLenses(back.map((d) => ({ deviceId: d.deviceId, label: d.label })));
+      const currentId = track?.getSettings?.().deviceId || '';
+      setLens(currentId);
+      const zoomable = !!track?.getCapabilities?.().zoom;
+      if (!saved && !zoomable && back.length > 1 && ULTRA.test(track?.label || '')) {
+        const main = back.find((d) => /^back camera$|^tylny aparat$/i.test(d.label.trim())) || back.find((d) => !ULTRA.test(d.label) && /camera2 0\b/.test(d.label)) || back.find((d) => !ULTRA.test(d.label));
+        if (main && main.deviceId !== currentId) {
+          try {
+            await open(main.deviceId);
+            if (alive) setLens(main.deviceId);
+          } catch {
+            // zostaje pierwszy obiektyw
+          }
         }
-      })
-      .catch((err) => alive && setError(err?.name === 'NotAllowedError' ? 'Brak zgody na użycie aparatu w aplikacji (możesz ją włączyć w ustawieniach strony w przeglądarce).' : 'Nie udało się uruchomić aparatu w aplikacji.'));
+      }
+      return undefined;
+    })().catch((err) => alive && setError(err?.name === 'NotAllowedError' ? 'Brak zgody na użycie aparatu w aplikacji (możesz ją włączyć w ustawieniach strony w przeglądarce).' : 'Nie udało się uruchomić aparatu w aplikacji.'));
     return () => {
       alive = false;
       stop();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Ręczna zmiana obiektywu (kolejna tylna kamera) – zapamiętana
+  const nextLens = async () => {
+    if (lenses.length < 2) return;
+    const i = lenses.findIndex((l) => l.deviceId === lens);
+    const next = lenses[(i + 1) % lenses.length];
+    try {
+      await open(next.deviceId);
+      setLens(next.deviceId);
+      localStorage.setItem('fintrack-camera-device', next.deviceId);
+    } catch {
+      setError('Nie udało się przełączyć obiektywu.');
+    }
+  };
   const shoot = () => {
     const v = videoRef.current;
     if (!v || !v.videoWidth) return;
@@ -254,7 +318,14 @@ function CameraCapture({ onCapture, onGallery, onSystemCamera, onClose }) {
           Z galerii
         </button>
         <button type="button" onClick={shoot} disabled={!ready || shooting} aria-label="Zrób zdjęcie" className="h-16 w-16 rounded-full border-4 border-white bg-white/90 disabled:opacity-50" />
-        <span className="w-11" aria-hidden="true" />
+        {lenses.length > 1 ? (
+          <button type="button" onClick={nextLens} disabled={shooting} className="inline-flex flex-col items-center gap-1 text-xs text-white/90" aria-label="Zmień obiektyw">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-[13px] font-semibold">{lenses.findIndex((l) => l.deviceId === lens) + 1 || 1}/{lenses.length}</span>
+            Obiektyw
+          </button>
+        ) : (
+          <span className="w-11" aria-hidden="true" />
+        )}
       </div>
     </div>
   );
