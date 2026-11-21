@@ -1,5 +1,5 @@
 // Filtr newsów na słowach kluczowych (bez AI, natychmiast): ukrywa szum konsumencki o spółkach z portfela –
-// promocje, rabaty, gazetki, kolekcje, godziny otwarcia, konkursy, oferty pracy itp. Tytuł ze słowem inwestycyjnym
+// promocje, rabaty, gazetki, kolekcje, godziny otwarcia, konkursy, oferty pracy, sport i sponsoring (np. KSW) itp. Tytuł ze słowem inwestycyjnym
 // (wyniki, zysk, akcje, dywidenda, prognoza…) zostaje zawsze. Własne słowa do ukrywania – per użytkownik
 // (`wealth-app-news-blocked`, urządzenie + chmura); włącznik filtra – `wealth-app-news-filter` (domyślnie włączony).
 // Porównanie bez wielkości liter i polskich znaków; słowa jako początki wyrazów („promocj” łapie promocja / promocji).
@@ -31,6 +31,13 @@ export const NOISE_WORDS = [
   'konkurs', 'loteri', 'horoskop', 'pogoda', 'oferta pracy', 'oferty pracy', 'praca w ', 'zatrudni', 'rekrutacj', 'szuka pracownik', 'wynagrodzenie kasjer', 'kasjer',
 ];
 
+// Szum „twardy” – sport i sponsoring (np. gale KSW, których sponsorem tytularnym jest XTB): ukrywa tytuł nawet ze
+// słowem inwestycyjnym („wyniki walk”, „XTB KSW 110”)
+export const HARD_NOISE_WORDS = [
+  'ksw', 'mma', 'ufc', 'oktagon', 'gala', 'gali ', 'galę', 'gale ', 'karta walk', 'walka wieczoru', 'walk ', 'walki', 'walce', 'zawodnik', 'zawodnicz', 'zawodow boks', 'boks', 'piesciar', 'nokaut',
+  'mistrzostw', 'mistrz swiata', 'pas mistrz', 'turniej', 'mecz', 'kibic', 'stadion', 'ekstraklas', 'liga mistrzow', 'pilkarz', 'pilka nozna', 'skoczk', 'zuzel', 'sponsor', 'sponsorem', 'sponsoring',
+];
+
 // Słowa inwestycyjne – tytuł z nimi zostaje mimo słów szumu (np. „Black Friday podbił sprzedaż i wyniki LPP”)
 export const KEEP_WORDS = [
   // „akcja” bywa promocyjna („akcja rabatowa”) – liczą się tylko akcje spółki
@@ -46,6 +53,7 @@ export function isNoiseTitle(title, extra = []) {
   const t = fold(title);
   const own = extra.map((w) => fold(w).trim()).filter((w) => w.length >= 2);
   if (own.some((w) => t.includes(` ${w}`))) return true; // własne słowo – zawsze ukrywa
+  if (has(t, HARD_NOISE_WORDS.map((w) => fold(w).trim() + (w.endsWith(' ') ? ' ' : '')))) return true; // sport / sponsoring – zawsze
   if (has(t, KEEP_WORDS)) return false;
   return has(t, NOISE_WORDS);
 }

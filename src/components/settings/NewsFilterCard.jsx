@@ -27,7 +27,7 @@ export default function NewsFilterCard() {
           setOn(v);
           writeFilterOn(v);
         }}
-        label="Ukrywaj promocje, oferty sklepów, kolekcje i oferty pracy"
+        label="Ukrywaj promocje, oferty sklepów, kolekcje, oferty pracy oraz sport i sponsoring (np. gale KSW)"
         description="Tytuły ze słowami inwestycyjnymi (wyniki, zysk, akcje, dywidenda, prognoza, rekomendacja…) zostają zawsze. Ukryte artykuły można podejrzeć w Newsach („Pokaż”). Dotyczy też powiadomień o nowych artykułach."
       />
       <div className={`mt-4 border-t border-stone-100 pt-3 dark:border-white/5 ${on ? '' : 'pointer-events-none opacity-50'}`}>
